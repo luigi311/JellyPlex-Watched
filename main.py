@@ -1,4 +1,4 @@
-import copy, os
+import copy, os, traceback
 from dotenv import load_dotenv
 from time import sleep
 
@@ -188,9 +188,11 @@ def main():
 
 if __name__ == "__main__":
     sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
+    
     while(True):
         try:
             main()
+            logger(f"Looping in {sleep_timer}")
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
@@ -202,4 +204,5 @@ if __name__ == "__main__":
             logger(traceback.format_exc(), 2)
             logger("Retrying in {sleep_timer}", log_type=0)
 
+        
         sleep(sleep_timer)
