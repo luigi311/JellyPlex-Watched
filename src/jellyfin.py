@@ -130,18 +130,19 @@ class Jellyfin():
                             
         return users_watched
 
-    def update_watched(self, watched_list, user_mapping, dryrun=False):
+    def update_watched(self, watched_list, user_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
-            other = None
-            if user in user_mapping.keys():
-                other = user_mapping[user]
+            if user_mapping:
+                other = None
+
+                if user in user_mapping.keys():
+                    other = user_mapping[user]
+                elif user in user_mapping.values():
+                    other = search_mapping(user_mapping, user)
                 
-            elif user in user_mapping.values():
-                other = search_mapping(user_mapping, user)
-            
-            if other:
-                logger(f"Swapping user {user} with {other}", 1)
-                user = other
+                if other:
+                    logger(f"Swapping user {user} with {other}", 1)
+                    user = other
 
             user_id = None
             for key, value in self.users.items():
@@ -175,7 +176,7 @@ class Jellyfin():
                                 for video in videos:
                                     for key, value in jellyfin_video["ProviderIds"].items():
                                         if key.lower() in video.keys() and value.lower() == video[key.lower()].lower():
-                                            msg = f"{jellyfin_video['Name']} as watched for {user}"
+                                            msg = f"{jellyfin_video['Name']} as watched for {user} in Jellyfin"
                                             if not dryrun:
                                                 logger(f"Marking {msg}", 0)
                                                 self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")

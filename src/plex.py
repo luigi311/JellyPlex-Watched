@@ -119,25 +119,25 @@ class Plex:
                         
         return users_watched
     
-    def update_watched(self, watched_list, user_mapping, dryrun=False):
+    def update_watched(self, watched_list, user_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
-            other = None
-            if user in user_mapping.keys():
-                other = user_mapping[user]
+            if user_mapping:
+                other = None
+
+                if user in user_mapping.keys():
+                    other = user_mapping[user]
+                elif user in user_mapping.values():
+                    other = search_mapping(user_mapping, user)
                 
-            elif user in user_mapping.values():
-                other = search_mapping(user_mapping, user)
-            
-            if other:
-                logger(f"Swapping user {user} with {other}", 1)
-                user = other
+                if other:
+                    logger(f"Swapping user {user} with {other}", 1)
+                    user = other
 
             for index, value in enumerate(self.users):
                 if user.lower() == value.title.lower():
                     user = self.users[index]
                     break
 
-            print(user)
             if self.admin_user == user:
                 user_plex = self.plex
             else:
@@ -156,7 +156,7 @@ class Plex:
                                 for video_keys, video_id in video.items():
                                     if video_keys == guid_source and video_id == guid_id:
                                         if movies_search.viewCount == 0:
-                                            msg = f"{movies_search.title} watched"
+                                            msg = f"{movies_search.title} as watched for {user.title} in Plex"
                                             if not dryrun:
                                                 logger(f"Marked {msg}", 0)
                                                 movies_search.markWatched()

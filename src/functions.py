@@ -5,11 +5,12 @@ load_dotenv(override=True)
 logfile = os.getenv("LOGFILE","log.log")
 
 def logger(message, log_type=0):
-    
+    debug = str_to_bool(os.getenv("DEBUG", "True"))
+
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1:
+    elif log_type == 1 and debug:
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"

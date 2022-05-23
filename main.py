@@ -24,7 +24,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping):
                             elif user_2 in watched_list_2:
                                 user = user_2
                             else:
-                                print(f"User {user_1} and {user_2} not found in watched list 2")
+                                logger(f"User {user_1} and {user_2} not found in watched list 2", 1)
                                 user = None
                             
                             if user:
@@ -119,7 +119,6 @@ def setup_black_white_lists():
     logger(f"Blacklist Users: {blacklist_users}", 1)
     
     whitelist_users = os.getenv("WHITELIST_USERS")
-    # print whitelist_users object type
     if whitelist_users:
         if len(whitelist_users) > 0:
             whitelist_users = whitelist_users.split(",")
