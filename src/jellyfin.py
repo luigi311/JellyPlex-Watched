@@ -1,5 +1,6 @@
 import requests, os
 from dotenv import load_dotenv
+from src.functions import logger
 
 load_dotenv(override=True)
 
@@ -39,8 +40,8 @@ class Jellyfin():
 
             return response.json()
         except Exception as e:
-            print(e)
-            print(response)
+            logger(e, 2)
+            logger(response, 2)
             
     def get_users(self):
         users = {}
@@ -66,7 +67,7 @@ class Jellyfin():
             
             for library in libraries:
                 library_title = library["Name"]
-                print(f"Jellyfin: Generating watched for {user_name} in library {library_title}")
+                logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
 
                 library_id = library["Id"]
                 # if whitelist is not empty and library is not in whitelist
@@ -128,7 +129,7 @@ class Jellyfin():
                             
         return users_watched
 
-    def update_watched(self, watched_list):
+    def update_watched(self, watched_list, dryrun=False):
         for user, libraries in watched_list.items():
 
             user_id = None
@@ -138,7 +139,7 @@ class Jellyfin():
                     break
             
             if not user_id:
-                print(f"{user} not found in Jellyfin")
+                logger(f"{user} not found in Jellyfin", 2)
                 break
             
             jellyfin_libraries = self.query(f"/Users/{user_id}/Views", "get")["Items"]
@@ -162,8 +163,12 @@ class Jellyfin():
                                 for video in videos:
                                     for key, value in jellyfin_video["ProviderIds"].items():
                                         if key.lower() in video.keys() and value.lower() == video[key.lower()].lower():
-                                            print(f"Marking {jellyfin_video['Name']} as watched for {user}")
-                                            self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")
+                                            msg = f"{jellyfin_video['Name']} as watched for {user}"
+                                            if not dryrun:
+                                                logger(f"Marking {msg}", 0)
+                                                self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")
+                                            else:
+                                                logger(f"Dryrun {msg}", 0)
                                             break
                     
                     # TV Shows
@@ -183,7 +188,11 @@ class Jellyfin():
                                                 for episode in videos[show][season]:
                                                     for key, value in jellyfin_episode["ProviderIds"].items():
                                                         if key.lower() in episode.keys() and value.lower() == episode[key.lower()].lower():
-                                                            print(f"Marked {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} {jellyfin_episode['Name']} as watched for {user} in Jellyfin")
-                                                            self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}", "post")
+                                                            msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} {jellyfin_episode['Name']} as watched for {user} in Jellyfin"
+                                                            if not dryrun:
+                                                                logger(f"Marked {msg}", 0)
+                                                                self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}", "post")
+                                                            else:
+                                                                logger(f"Dryrun {msg}", 0)
                                                             break
                               

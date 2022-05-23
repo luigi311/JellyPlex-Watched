@@ -1,6 +1,7 @@
 import re, os
 from dotenv import load_dotenv
-from time import sleep
+
+from src.functions import logger
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
@@ -24,14 +25,13 @@ class Plex:
 
     def plex_login(self):
         if self.baseurl:
-            # if self.username and self.password are not None or empty strings
-            if self.username and self.password:
+            if self.token:
+                # Login via token
+                plex = PlexServer(self.baseurl, self.token)
+            elif self.username and self.password:
                 # Login via plex account
                 account = MyPlexAccount(self.username, self.password)
                 plex = account.resource(self.baseurl).connect()
-            elif self.token:
-                # Login via token
-                plex = PlexServer(self.baseurl, self.token)
             else:
                 raise Exception("No plex credentials provided")
         else:
@@ -107,7 +107,7 @@ class Plex:
             else:
                 if library_title.lower() not in [x.lower() for x in blacklist_library] and library.type not in [x.lower() for x in blacklist_library_type]:
                     for user in users:
-                        print(f"Plex: Generating watched for {user.title} in library {library_title}")
+                        logger(f"Plex: Generating watched for {user.title} in library {library_title}", 0)
                         user_name = user.title.lower()
                         watched = self.get_plex_user_watched(user, library)
                         if watched:
@@ -119,7 +119,7 @@ class Plex:
                         
         return users_watched
     
-    def update_watched(self, watched_list):
+    def update_watched(self, watched_list, dryrun=False):
         for user, libraries in watched_list.items():
             for index, value in enumerate(self.users):
                 if user.lower() == value.title.lower():
@@ -131,7 +131,7 @@ class Plex:
             else:
                 user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
 
-            print(f"Updating watched for {user.title}")
+            logger(f"Updating watched for {user.title}", 1)
             for library, videos in libraries.items():
                 library_videos = user_plex.library.section(library)
             
@@ -144,8 +144,12 @@ class Plex:
                                 for video_keys, video_id in video.items():
                                     if video_keys == guid_source and video_id == guid_id:
                                         if movies_search.viewCount == 0:
-                                            movies_search.markWatched()
-                                            print(f"Marked {movies_search.title} watched")
+                                            msg = f"{movies_search.title} watched"
+                                            if not dryrun:
+                                                logger(f"Marked {msg}", 0)
+                                                movies_search.markWatched()
+                                            else:
+                                                logger(f"Dyrun {msg}", 0)
                                             break
                 
                 elif library_videos.type == "show":
@@ -162,6 +166,10 @@ class Plex:
                                                     for episode_keys, episode_id in episode.items():
                                                         if episode_keys == guid_source and episode_id == guid_id:
                                                             if episode_search.viewCount == 0:
-                                                                episode_search.markWatched()
-                                                                print(f"Marked {show_search.title} {season_search.title} {episode_search.title} as watched for {user.title} in Plex")
+                                                                msg = f"{show_search.title} {season_search.title} {episode_search.title} as watched for {user.title} in Plex"
+                                                                if not dryrun:
+                                                                    logger(f"Marked {msg}", 0)
+                                                                    episode_search.markWatched()
+                                                                else:
+                                                                    logger(f"Dryrun {msg}", 0)
                                                                 break

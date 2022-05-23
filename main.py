@@ -1,7 +1,7 @@
 import copy, os
-from time import sleep
 from dotenv import load_dotenv
 
+from src.functions import logger, str_to_bool
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
@@ -61,7 +61,14 @@ def cleanup_watched(watched_list_1, watched_list_2):
 
     return modified_watched_list_1
 
-if __name__ == "__main__":
+def main():
+    logfile = os.getenv("LOGFILE","log.log")
+    # Delete logfile if it exists
+    if os.path.exists(logfile):
+        os.remove(logfile)
+
+    dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
+    logger(f"Dryrun: {dryrun}", 1)
     plex = Plex()
     jellyfin = Jellyfin()
 
@@ -72,6 +79,7 @@ if __name__ == "__main__":
             blacklist_library = [x.lower().trim() for x in blacklist_library]
     else:
         blacklist_library = []
+    logger(f"Blacklist Library: {blacklist_library}", 1)
 
     whitelist_library = os.getenv("WHITELIST_LIBRARY")
     if whitelist_library:
@@ -80,7 +88,7 @@ if __name__ == "__main__":
             whitelist_library = [x.lower().strip() for x in whitelist_library]
     else:
         whitelist_library = []
-    
+    logger(f"Whitelist Library: {whitelist_library}", 1)
 
     blacklist_library_type = os.getenv("BLACKLIST_LIBRARY_TYPE")
     if blacklist_library_type:
@@ -89,6 +97,7 @@ if __name__ == "__main__":
             blacklist_library_type = [x.lower().strip() for x in blacklist_library_type]
     else:
         blacklist_library_type = []
+    logger(f"Blacklist Library Type: {blacklist_library_type}", 1)
 
     whitelist_library_type = os.getenv("WHITELIST_LIBRARY_TYPE")
     if whitelist_library_type:
@@ -97,15 +106,16 @@ if __name__ == "__main__":
             whitelist_library_type = [x.lower().strip() for x in whitelist_library_type]
     else:
         whitelist_library_type = []
+    logger(f"Whitelist Library Type: {whitelist_library_type}", 1)
 
     blacklist_users = os.getenv("BLACKLIST_USERS")
     if blacklist_users:
         if len(blacklist_users) > 0:
             blacklist_users = blacklist_users.split(",")
-            blacklist_users = [x.lower().strip() for x in blacklist_users]
-            
+            blacklist_users = [x.lower().strip() for x in blacklist_users]        
     else:
         blacklist_users = []
+    logger(f"Blacklist Users: {blacklist_users}", 1)
     
     whitelist_users = os.getenv("WHITELIST_USERS")
     # print whitelist_users object type
@@ -117,20 +127,21 @@ if __name__ == "__main__":
             whitelist_users = []
     else:
         whitelist_users = []
+    logger(f"Whitelist Users: {whitelist_users}", 1)
 
-    users_filtered = []
-    
     # generate list of users from plex.users
     plex_users = [ x.title.lower() for x in plex.users ]
     jellyfin_users = [ key.lower() for key in jellyfin.users.keys() ]
     
     # combined list of overlapping users from plex and jellyfin
     users = [x for x in plex_users if x in jellyfin_users]
-
+    logger(f"User list that exist on both servers {users}", 1)
+ 
+    users_filtered = []
     for user in users:
         # whitelist_user is not empty and user lowercase is not in whitelist lowercase
         if len(whitelist_users) > 0 and user.lower() not in whitelist_users:
-            print(f"{user} is not in whitelist")
+            logger(f"{user} is not in whitelist", 1)
         else:
             if user.lower() not in blacklist_users:
                 users_filtered.append(user)
@@ -145,10 +156,15 @@ if __name__ == "__main__":
         if jellyfin_user.lower() in users_filtered:
             jellyfin_users[jellyfin_user] = jellyfin_id
 
+    logger(f"plex_users: {plex_users}", 1)
+    logger(f"jellyfin_users: {jellyfin_users}", 1)
+
     if len(plex_users) == 0:
+        logger("No users found", 2)
         raise Exception("No users found")
 
     if len(jellyfin_users) == 0:
+        logger("No users found", 2)
         raise Exception("No users found")
 
     plex_watched = plex.get_plex_watched(plex_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type)
@@ -159,14 +175,18 @@ if __name__ == "__main__":
     jellyfin_watched_filtered = copy.deepcopy(jellyfin_watched)
 
     plex_watched = cleanup_watched(plex_watched_filtered, jellyfin_watched_filtered)
-    print(f"Plex Watched: {plex_watched}")
+    logger(f"plex_watched that needs to be synced to jellyfin:\n{plex_watched}", 1)
 
     jellyfin_watched = cleanup_watched(jellyfin_watched_filtered, plex_watched_filtered)
-    print(f"Jellyfin Watched: {jellyfin_watched}")
+    logger(f"jellyfin_watched that needs to be synced to plex:\n{jellyfin_watched}", 1)
 
     # Update watched status
-    plex.update_watched(jellyfin_watched)
-    print("Plex watched updated")
+    plex.update_watched(jellyfin_watched, dryrun)
+    jellyfin.update_watched(plex_watched, dryrun)
     
-    jellyfin.update_watched(plex_watched)
-    print("Jellyfin watched updated")
+
+if __name__ == "__main__":
+    sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
+    while(True):
+        main()
+        sleep(sleep_timer)
