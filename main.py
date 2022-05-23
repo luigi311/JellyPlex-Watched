@@ -1,5 +1,4 @@
 import copy, os
-from time import sleep
 from dotenv import load_dotenv
 
 from src.plex import Plex

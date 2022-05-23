@@ -1,6 +1,5 @@
 import re, os
 from dotenv import load_dotenv
-from time import sleep
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
