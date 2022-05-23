@@ -1,5 +1,6 @@
 import copy, os
 from dotenv import load_dotenv
+from time import sleep
 
 from src.functions import logger, str_to_bool
 from src.plex import Plex
@@ -188,5 +189,17 @@ def main():
 if __name__ == "__main__":
     sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
     while(True):
-        main()
+        try:
+            main()
+        except Exception as error:
+            if isinstance(error, list):
+                for message in error:
+                    logger(message, log_type=2)
+            else:
+                logger(error, log_type=2)
+
+
+            logger(traceback.format_exc(), 2)
+            logger("Retrying in {sleep_timer}", log_type=0)
+
         sleep(sleep_timer)
