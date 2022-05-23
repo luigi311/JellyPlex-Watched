@@ -5,11 +5,12 @@ load_dotenv(override=True)
 logfile = os.getenv("LOGFILE","log.log")
 
 def logger(message, log_type=0):
-    
+    debug = str_to_bool(os.getenv("DEBUG", "True"))
+
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1:
+    elif log_type == 1 and debug:
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"
@@ -27,3 +28,12 @@ def str_to_bool(value: any) -> bool:
     if not value:
         return False
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
+
+# Get mapped value
+def search_mapping(dictionary: dict, key_value: str):
+    if key_value in dictionary.keys():
+        return dictionary[key_value]
+    elif key_value in dictionary.values():
+        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
+    else:
+        return None
