@@ -21,9 +21,11 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         if: "${{ env.DOCKER_USERNAME != '' }}"
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched # list of Docker images to use as base name for tags
+          flavor: |
+            latest=auto
           tags: |
             type=ref,event=branch
             type=ref,event=pr
