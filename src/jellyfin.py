@@ -1,6 +1,6 @@
 import requests, os
 from dotenv import load_dotenv
-from src.functions import logger
+from src.functions import logger, search_mapping
 
 load_dotenv(override=True)
 
@@ -67,14 +67,15 @@ class Jellyfin():
             
             for library in libraries:
                 library_title = library["Name"]
-                logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
 
                 library_id = library["Id"]
                 # if whitelist is not empty and library is not in whitelist
-                if len(whitelist_library) > 0 and library_title.lower() not in [x.lower() for x in whitelist_library]:
+                if len(whitelist_library) > 0 and library_title.lower() not in whitelist_library:
                     pass
                 else:
-                    if library_title.lower() not in [x.lower() for x in blacklist_library]:
+                    logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
+
+                    if library_title.lower() not in blacklist_library:
                         watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get")
                         
                         if len(watched["Items"]) == 0:
@@ -129,8 +130,18 @@ class Jellyfin():
                             
         return users_watched
 
-    def update_watched(self, watched_list, dryrun=False):
+    def update_watched(self, watched_list, user_mapping, dryrun=False):
         for user, libraries in watched_list.items():
+            other = None
+            if user in user_mapping.keys():
+                other = user_mapping[user]
+                
+            elif user in user_mapping.values():
+                other = search_mapping(user_mapping, user)
+            
+            if other:
+                logger(f"Swapping user {user} with {other}", 1)
+                user = other
 
             user_id = None
             for key, value in self.users.items():

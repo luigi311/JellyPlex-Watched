@@ -27,3 +27,12 @@ def str_to_bool(value: any) -> bool:
     if not value:
         return False
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
+
+# Get mapped value
+def search_mapping(dictionary: dict, key_value: str):
+    if key_value in dictionary.keys():
+        return dictionary[key_value]
+    elif key_value in dictionary.values():
+        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
+    else:
+        return None

@@ -1,7 +1,7 @@
 import re, os
 from dotenv import load_dotenv
 
-from src.functions import logger
+from src.functions import logger, search_mapping
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
@@ -119,13 +119,25 @@ class Plex:
                         
         return users_watched
     
-    def update_watched(self, watched_list, dryrun=False):
+    def update_watched(self, watched_list, user_mapping, dryrun=False):
         for user, libraries in watched_list.items():
+            other = None
+            if user in user_mapping.keys():
+                other = user_mapping[user]
+                
+            elif user in user_mapping.values():
+                other = search_mapping(user_mapping, user)
+            
+            if other:
+                logger(f"Swapping user {user} with {other}", 1)
+                user = other
+
             for index, value in enumerate(self.users):
                 if user.lower() == value.title.lower():
                     user = self.users[index]
                     break
 
+            print(user)
             if self.admin_user == user:
                 user_plex = self.plex
             else:
