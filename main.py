@@ -204,5 +204,8 @@ if __name__ == "__main__":
             logger(traceback.format_exc(), 2)
             logger("Retrying in {sleep_timer}", log_type=0)
 
-        
+        except KeyboardInterrupt:
+            logger("Exiting", log_type=0)
+            os._exit(0)
+
         sleep(sleep_timer)

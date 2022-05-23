@@ -150,6 +150,7 @@ class Jellyfin():
                     if jellyfin_library["Name"] == library:
                         library_id = jellyfin_library["Id"]
                         break
+                
                 if library_id:
                     library_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&limit=1", "get")
                     library_type = library_search["Items"][0]["Type"]
