@@ -1,6 +1,6 @@
 import requests, os
 from dotenv import load_dotenv
-from src.functions import logger, search_mapping
+from src.functions import logger, search_mapping, str_to_bool
 
 load_dotenv(override=True)
 
@@ -56,7 +56,7 @@ class Jellyfin():
 
         return users  
 
-    def get_jellyfin_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type):
+    def get_jellyfin_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
         users_watched = {}
 
         for user_name, user_id in users.items():
@@ -67,82 +67,105 @@ class Jellyfin():
             
             for library in libraries:
                 library_title = library["Name"]
-
                 library_id = library["Id"]
-                # if whitelist is not empty and library is not in whitelist
-                if len(whitelist_library) > 0 and library_title.lower() not in whitelist_library:
-                    pass
+                watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get")
+                
+                if len(watched["Items"]) == 0:
+                    logger(f"Jellyfin: No watched items found in library {library_title}", 1)
+                    continue
                 else:
-                    logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
+                    library_type = watched["Items"][0]["Type"]
 
-                    if library_title.lower() not in blacklist_library:
-                        watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get")
-                        
-                        if len(watched["Items"]) == 0:
-                            pass
-                        else:
-                            library_type = watched["Items"][0]["Type"]
+                if library_type.lower() in blacklist_library_type:
+                    logger(f"Jellyfin: Library type {library_type} is blacklist_library_type", 1)
+                    continue
 
-                            # if Type in blacklist_library_type then break
-                            if library_type in blacklist_library_type or (len(whitelist_library_type) > 0 and library_type.lower() not in whitelist_library_type):
-                                break
-                            
-                            # Movies
-                            if library_type == "Movie":
-                                watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds", "get")
-                                for movie in watched["Items"]:
-                                    if movie["UserData"]["Played"] == True:
-                                        if movie["ProviderIds"]:
-                                            if user_name not in users_watched:
-                                                users_watched[user_name] = {}
-                                            if library_title not in users_watched[user_name]:
-                                                users_watched[user_name][library_title] = []
-                                            # Lowercase movie["ProviderIds"] keys
-                                            movie["ProviderIds"] = {k.lower(): v for k, v in movie["ProviderIds"].items()}
-                                            users_watched[user_name][library_title].append(movie["ProviderIds"])
+                if library_title.lower() in [x.lower() for x in blacklist_library]:
+                    logger(f"Jellyfin: Library {library_title} is blacklist_library", 1)
+                    continue
 
-                            # TV Shows
-                            if library_type == "Episode":
-                                watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}", "get")
-                                watched_shows = [x for x in watched["Items"] if x["Type"] == "Series"]
+                library_other = None
+                if library_mapping:
+                    library_other = search_mapping(library_mapping, library_title)
+                if library_other:
+                    library_other.lower()
+                    if library_other not in [x.lower() for x in blacklist_library]:
+                        logger(f"Jellyfin: Library {library_other} is blacklist_library", 1)
+                        continue
 
-                                for show in watched_shows:
-                                    seasons = self.query(f"/Shows/{show['Id']}/Seasons?userId={user_id}&Fields=ItemCounts", "get")
-                                    if len(seasons["Items"]) > 0:
-                                        for season in seasons["Items"]:
-                                            episodes = self.query(f"/Shows/{show['Id']}/Episodes?seasonId={season['Id']}&userId={user_id}&Fields=ItemCounts,ProviderIds", "get")
-                                            if len(episodes["Items"]) > 0:
-                                                for episode in episodes["Items"]:
-                                                    if episode["UserData"]["Played"] == True:
-                                                        if episode["ProviderIds"]:
-                                                            if user_name not in users_watched:
-                                                                users_watched[user_name] = {}
-                                                            if library_title not in users_watched[user_name]:
-                                                                users_watched[user_name][library_title] = {}
-                                                            if show["Name"] not in users_watched[user_name][library_title]:
-                                                                users_watched[user_name][library_title][show["Name"]] = {}
-                                                            if season["Name"] not in users_watched[user_name][library_title][show["Name"]]:
-                                                                users_watched[user_name][library_title][show["Name"]][season["Name"]] = []
-            
-                                                            # Lowercase episode["ProviderIds"] keys
-                                                            episode["ProviderIds"] = {k.lower(): v for k, v in episode["ProviderIds"].items()}
-                                                            users_watched[user_name][library_title][show["Name"]][season["Name"]].append(episode["ProviderIds"])
+                if len(whitelist_library_type) > 0:
+                    if library_type.lower() not in whitelist_library_type:
+                        logger(f"Jellyfin: Library type {library_type} is not whitelist_library_type", 1)
+                        continue
+
+                # if whitelist is not empty and library is not in whitelist
+                if len(whitelist_library) > 0:
+                    if library_title.lower() not in [x.lower() for x in whitelist_library]:
+                        logger(f"Jellyfin: Library {library_title} is not whitelist_library", 1)
+                        continue
+                    
+                    if library_other:
+                        if library_other not in [x.lower() for x in whitelist_library]:
+                            logger(f"Jellyfin: Library {library_other} is not whitelist_library", 1)
+                            continue
+
+                logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
+                # Movies
+                if library_type == "Movie":
+                    watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds", "get")
+                    for movie in watched["Items"]:
+                        if movie["UserData"]["Played"] == True:
+                            if movie["ProviderIds"]:
+                                if user_name not in users_watched:
+                                    users_watched[user_name] = {}
+                                if library_title not in users_watched[user_name]:
+                                    users_watched[user_name][library_title] = []
+                                # Lowercase movie["ProviderIds"] keys
+                                movie["ProviderIds"] = {k.lower(): v for k, v in movie["ProviderIds"].items()}
+                                users_watched[user_name][library_title].append(movie["ProviderIds"])
+
+                # TV Shows
+                if library_type == "Episode":
+                    watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}", "get")
+                    watched_shows = [x for x in watched["Items"] if x["Type"] == "Series"]
+
+                    for show in watched_shows:
+                        seasons = self.query(f"/Shows/{show['Id']}/Seasons?userId={user_id}&Fields=ItemCounts", "get")
+                        if len(seasons["Items"]) > 0:
+                            for season in seasons["Items"]:
+                                episodes = self.query(f"/Shows/{show['Id']}/Episodes?seasonId={season['Id']}&userId={user_id}&Fields=ItemCounts,ProviderIds", "get")
+                                if len(episodes["Items"]) > 0:
+                                    for episode in episodes["Items"]:
+                                        if episode["UserData"]["Played"] == True:
+                                            if episode["ProviderIds"]:
+                                                if user_name not in users_watched:
+                                                    users_watched[user_name] = {}
+                                                if library_title not in users_watched[user_name]:
+                                                    users_watched[user_name][library_title] = {}
+                                                if show["Name"] not in users_watched[user_name][library_title]:
+                                                    users_watched[user_name][library_title][show["Name"]] = {}
+                                                if season["Name"] not in users_watched[user_name][library_title][show["Name"]]:
+                                                    users_watched[user_name][library_title][show["Name"]][season["Name"]] = []
+
+                                                # Lowercase episode["ProviderIds"] keys
+                                                episode["ProviderIds"] = {k.lower(): v for k, v in episode["ProviderIds"].items()}
+                                                users_watched[user_name][library_title][show["Name"]][season["Name"]].append(episode["ProviderIds"])
                             
         return users_watched
 
-    def update_watched(self, watched_list, user_mapping=None, dryrun=False):
+    def update_watched(self, watched_list, user_mapping=None, library_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
             if user_mapping:
-                other = None
+                user_other = None
 
                 if user in user_mapping.keys():
-                    other = user_mapping[user]
+                    user_other = user_mapping[user]
                 elif user in user_mapping.values():
-                    other = search_mapping(user_mapping, user)
+                    user_other = search_mapping(user_mapping, user)
                 
-                if other:
-                    logger(f"Swapping user {user} with {other}", 1)
-                    user = other
+                if user_other:
+                    logger(f"Swapping user {user} with {user_other}", 1)
+                    user = user_other
 
             user_id = None
             for key, value in self.users.items():
@@ -157,13 +180,30 @@ class Jellyfin():
             jellyfin_libraries = self.query(f"/Users/{user_id}/Views", "get")["Items"]
             
             for library, videos in libraries.items():
+                if library_mapping:
+                    library_other = None
+
+                    if library in library_mapping.keys():
+                        library_other = library_mapping[library]
+                    elif library in library_mapping.values():
+                        library_other = search_mapping(library_mapping, library)
+                    
+                    if library_other:
+                        logger(f"Swapping library {library} with {library_other}", 1)
+                        library = library_other
+
+                if library not in [x["Name"] for x in jellyfin_libraries]:
+                    logger(f"{library} not found in Jellyfin", 2)
+                    continue
+
                 library_id = None
                 for jellyfin_library in jellyfin_libraries:
                     if jellyfin_library["Name"] == library:
                         library_id = jellyfin_library["Id"]
-                        break
+                        continue
                 
                 if library_id:
+                    logger(f"Jellyfin: Updating watched for {user} in library {library}", 1)
                     library_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&limit=1", "get")
                     library_type = library_search["Items"][0]["Type"]
 
@@ -171,12 +211,12 @@ class Jellyfin():
                     if library_type == "Movie":
                         jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds", "get")
                         for jellyfin_video in jellyfin_search["Items"]:
-                            if jellyfin_video["UserData"]["Played"] == False:
+                            if str_to_bool(jellyfin_video["UserData"]["Played"]) == False:
                                 jellyfin_video_id = jellyfin_video["Id"]
                                 for video in videos:
                                     for key, value in jellyfin_video["ProviderIds"].items():
                                         if key.lower() in video.keys() and value.lower() == video[key.lower()].lower():
-                                            msg = f"{jellyfin_video['Name']} as watched for {user} in Jellyfin"
+                                            msg = f"{jellyfin_video['Name']} as watched for {user} in {library} for Jellyfin"
                                             if not dryrun:
                                                 logger(f"Marking {msg}", 0)
                                                 self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")
@@ -194,18 +234,17 @@ class Jellyfin():
                                 jellyfin_show_id = jellyfin_show["Id"]
                                 jellyfin_episodes = self.query(f"/Shows/{jellyfin_show_id}/Episodes?userId={user_id}&Fields=ItemCounts,ProviderIds", "get")
                                 for jellyfin_episode in jellyfin_episodes["Items"]:
-                                    if jellyfin_episode["UserData"]["Played"] == False:
+                                    if str_to_bool(jellyfin_episode["UserData"]["Played"]) == False:
                                         jellyfin_episode_id = jellyfin_episode["Id"]
                                         for show in videos:
                                             for season in videos[show]:
                                                 for episode in videos[show][season]:
                                                     for key, value in jellyfin_episode["ProviderIds"].items():
                                                         if key.lower() in episode.keys() and value.lower() == episode[key.lower()].lower():
-                                                            msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} {jellyfin_episode['Name']} as watched for {user} in Jellyfin"
+                                                            msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} {jellyfin_episode['Name']} as watched for {user} in {library} for Jellyfin"
                                                             if not dryrun:
                                                                 logger(f"Marked {msg}", 0)
                                                                 self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}", "post")
                                                             else:
                                                                 logger(f"Dryrun {msg}", 0)
                                                             break
-                              
