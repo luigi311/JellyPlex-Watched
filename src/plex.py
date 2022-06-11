@@ -11,6 +11,7 @@ plex_baseurl = os.getenv("PLEX_BASEURL")
 plex_token = os.getenv("PLEX_TOKEN")
 username = os.getenv("PLEX_USERNAME")
 password = os.getenv("PLEX_PASSWORD")
+servername = os.getenv("PLEX_SERVERNAME")
 
 # class plex accept base url and token and username and password but default with none
 class Plex:
@@ -19,25 +20,32 @@ class Plex:
         self.token = plex_token
         self.username = username
         self.password = password
+        self.servername = servername
         self.plex = self.plex_login()
         self.admin_user = self.plex.myPlexAccount()
         self.users = self.get_plex_users()
 
     def plex_login(self):
-        if self.baseurl:
-            if self.token:
-                # Login via token
-                plex = PlexServer(self.baseurl, self.token)
-            elif self.username and self.password:
+        try:
+            if self.baseurl and self.token:
+                    # Login via token
+                    plex = PlexServer(self.baseurl, self.token)
+            elif self.username and self.password and self.servername:
                 # Login via plex account
                 account = MyPlexAccount(self.username, self.password)
-                plex = account.resource(self.baseurl).connect()
+                plex = account.resource(self.servername).connect()
             else:
-                raise Exception("No plex credentials provided")
-        else:
-            raise Exception("No plex baseurl provided")
-
-        return plex
+                raise Exception("No complete plex credentials provided")
+            
+            return plex
+        except Exception as e:
+            if self.username or self.password:
+                msg = f"Failed to login via plex account {self.username}"
+                logger(f"Plex: Failed to login, {msg}, Error: {e}", 2)
+            else:
+                logger(f"Plex: Failed to login, Error: {e}", 2)
+            return None
+            
 
     def get_plex_users(self):
         users = self.plex.myPlexAccount().users()
