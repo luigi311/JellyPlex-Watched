@@ -67,7 +67,7 @@ def check_skip_logic(library_title, library_type, blacklist_library, whitelist_l
     if len(whitelist_library) > 0:
         if library_title.lower() not in [x.lower() for x in whitelist_library]:
             skip_reason = "is not whitelist_library"
-        
+
         if library_other:
             if library_other.lower() not in [x.lower() for x in whitelist_library]:
                 skip_reason = "is not whitelist_library"

@@ -14,7 +14,7 @@ class Jellyfin():
 
         if not self.baseurl:
             raise Exception("Jellyfin baseurl not set")
-        
+
         if not self.token:
             raise Exception("Jellyfin token not set")
 
@@ -27,7 +27,7 @@ class Jellyfin():
 
             if query_type == "get":
                 response = requests.get(self.baseurl + query, headers={"accept":"application/json", "X-Emby-Token": self.token})
-            
+
             elif query_type == "post":
                 authorization = (
                     'MediaBrowser , '
@@ -42,19 +42,19 @@ class Jellyfin():
         except Exception as e:
             logger(e, 2)
             logger(response, 2)
-            
+
     def get_users(self):
         users = {}
 
         query = "/Users"
         response = self.query(query, "get")
-        
+
         # If reponse is not empty
         if response:
             for user in response:
                 users[user["Name"]] = user["Id"]
 
-        return users  
+        return users
 
     def get_jellyfin_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
         users_watched = {}
@@ -64,12 +64,12 @@ class Jellyfin():
             user_name = user_name.lower()
 
             libraries = self.query(f"/Users/{user_id}/Views", "get")["Items"]
-            
+
             for library in libraries:
                 library_title = library["Name"]
                 library_id = library["Id"]
                 watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get")
-                
+
                 if len(watched["Items"]) == 0:
                     logger(f"Jellyfin: No watched items found in library {library_title}", 1)
                     continue
@@ -123,7 +123,7 @@ class Jellyfin():
                                                 # Lowercase episode["ProviderIds"] keys
                                                 episode["ProviderIds"] = {k.lower(): v for k, v in episode["ProviderIds"].items()}
                                                 users_watched[user_name][library_title][show["Name"]][season["Name"]].append(episode["ProviderIds"])
-                            
+
         return users_watched
 
     def update_watched(self, watched_list, user_mapping=None, library_mapping=None, dryrun=False):
@@ -135,7 +135,7 @@ class Jellyfin():
                     user_other = user_mapping[user]
                 elif user in user_mapping.values():
                     user_other = search_mapping(user_mapping, user)
-                
+
                 if user_other:
                     logger(f"Swapping user {user} with {user_other}", 1)
                     user = user_other
@@ -145,13 +145,13 @@ class Jellyfin():
                 if user.lower() == key.lower():
                     user_id = self.users[key]
                     break
-            
+
             if not user_id:
                 logger(f"{user} not found in Jellyfin", 2)
                 break
-            
+
             jellyfin_libraries = self.query(f"/Users/{user_id}/Views", "get")["Items"]
-            
+
             for library, videos in libraries.items():
                 if library_mapping:
                     library_other = None
@@ -160,7 +160,7 @@ class Jellyfin():
                         library_other = library_mapping[library]
                     elif library in library_mapping.values():
                         library_other = search_mapping(library_mapping, library)
-                    
+
                     if library_other:
                         logger(f"Swapping library {library} with {library_other}", 1)
                         library = library_other
@@ -174,7 +174,7 @@ class Jellyfin():
                     if jellyfin_library["Name"] == library:
                         library_id = jellyfin_library["Id"]
                         continue
-                
+
                 if library_id:
                     logger(f"Jellyfin: Updating watched for {user} in library {library}", 1)
                     library_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&limit=1", "get")
@@ -196,7 +196,7 @@ class Jellyfin():
                                             else:
                                                 logger(f"Dryrun {msg}", 0)
                                             break
-                    
+
                     # TV Shows
                     if library_type == "Episode":
                         jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&isPlayed=false", "get")
