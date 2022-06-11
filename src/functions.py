@@ -33,7 +33,43 @@ def str_to_bool(value: any) -> bool:
 def search_mapping(dictionary: dict, key_value: str):
     if key_value in dictionary.keys():
         return dictionary[key_value]
+    elif key_value.lower() in dictionary.keys():
+        return dictionary[key_value]
     elif key_value in dictionary.values():
+        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
+    elif key_value.lower() in dictionary.values():
         return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
     else:
         return None
+
+
+def check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
+    skip_reason = None
+
+    if library_type.lower() in blacklist_library_type:
+        skip_reason = "is blacklist_library_type"
+
+    if library_title.lower() in [x.lower() for x in blacklist_library]:
+        skip_reason = "is blacklist_library"
+
+    library_other = None
+    if library_mapping:
+        library_other = search_mapping(library_mapping, library_title)
+    if library_other:
+        if library_other.lower() in [x.lower() for x in blacklist_library]:
+            skip_reason = "is blacklist_library"
+
+    if len(whitelist_library_type) > 0:
+        if library_type.lower() not in whitelist_library_type:
+            skip_reason = "is not whitelist_library_type"
+
+    # if whitelist is not empty and library is not in whitelist
+    if len(whitelist_library) > 0:
+        if library_title.lower() not in [x.lower() for x in whitelist_library]:
+            skip_reason = "is not whitelist_library"
+        
+        if library_other:
+            if library_other.lower() not in [x.lower() for x in whitelist_library]:
+                skip_reason = "is not whitelist_library"
+
+    return skip_reason
