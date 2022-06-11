@@ -1,5 +1,7 @@
 # JellyPlex-Watched
 
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=luigi311/JellyPlex-Watched&amp;utm_campaign=Badge_Grade)
+
 Sync watched between jellyfin and plex
 
 ## Description
