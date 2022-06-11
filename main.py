@@ -10,7 +10,7 @@ load_dotenv(override=True)
 
 def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_mapping=None):
     modified_watched_list_1 = copy.deepcopy(watched_list_1)
-    
+
     # remove entries from plex_watched that are in jellyfin_watched
     for user_1 in watched_list_1:
         user_other = None
@@ -47,7 +47,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                             if watch_list_1_key == watch_list_2_item_key and watch_list_1_value == watch_list_2_item_value:
                                                 if item in modified_watched_list_1[user_1][library_1]:
                                                     modified_watched_list_1[user_1][library_1].remove(item)
-                            
+
                             # TV Shows
                             elif isinstance(watched_list_1[user_1][library_1], dict):
                                 if item in watched_list_2[user_2][library_2]:
@@ -60,22 +60,22 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                                             if watch_list_1_episode_key == watch_list_2_episode_key and watch_list_1_episode_value == watch_list_2_episode_value:
                                                                 if episode in modified_watched_list_1[user_1][library_1][item][season]:
                                                                     modified_watched_list_1[user_1][library_1][item][season].remove(episode)
-                                    
+
                                         # If season is empty, remove season
                                         if len(modified_watched_list_1[user_1][library_1][item][season]) == 0:
                                             if season in modified_watched_list_1[user_1][library_1][item]:
                                                 del modified_watched_list_1[user_1][library_1][item][season]
 
-                                # If the show is empty, remove the show    
+                                # If the show is empty, remove the show
                                 if len(modified_watched_list_1[user_1][library_1][item]) == 0:
                                     if item in modified_watched_list_1[user_1][library_1]:
                                         del modified_watched_list_1[user_1][library_1][item]
-                                
+
                     # If library is empty then remove it
                     if len(modified_watched_list_1[user_1][library_1]) == 0:
                         if library_1 in modified_watched_list_1[user_1]:
                             del modified_watched_list_1[user_1][library_1]
-        
+
         # If user is empty delete user
         if len(modified_watched_list_1[user_1]) == 0:
             del modified_watched_list_1[user_1]
@@ -95,10 +95,10 @@ def setup_black_white_lists(library_mapping=None):
                     if library_other:
                         temp_library.append(library_other)
 
-                blacklist_library = blacklist_library + temp_library  
+                blacklist_library = blacklist_library + temp_library
     else:
         blacklist_library = []
-    
+
     logger(f"Blacklist Library: {blacklist_library}", 1)
 
     whitelist_library = os.getenv("WHITELIST_LIBRARY")
@@ -140,11 +140,11 @@ def setup_black_white_lists(library_mapping=None):
     if blacklist_users:
         if len(blacklist_users) > 0:
             blacklist_users = blacklist_users.split(",")
-            blacklist_users = [x.lower().strip() for x in blacklist_users]    
+            blacklist_users = [x.lower().strip() for x in blacklist_users]
     else:
         blacklist_users = []
     logger(f"Blacklist Users: {blacklist_users}", 1)
-    
+
     whitelist_users = os.getenv("WHITELIST_USERS")
     if whitelist_users:
         if len(whitelist_users) > 0:
@@ -159,11 +159,11 @@ def setup_black_white_lists(library_mapping=None):
     return blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users
 
 def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=None):
-    
+
     # generate list of users from plex.users
     plex_users = [ x.title.lower() for x in plex.users ]
     jellyfin_users = [ key.lower() for key in jellyfin.users.keys() ]
-    
+
     # combined list of overlapping users from plex and jellyfin
     users = {}
 
@@ -173,10 +173,10 @@ def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=N
             if jellyfin_plex_mapped_user:
                 users[plex_user] = jellyfin_plex_mapped_user
                 continue
-    
+
         if plex_user in jellyfin_users:
             users[plex_user] = plex_user
-    
+
     for jellyfin_user in jellyfin_users:
         if user_mapping:
             plex_jellyfin_mapped_user =  search_mapping(user_mapping, jellyfin_user)
@@ -186,9 +186,9 @@ def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=N
 
         if jellyfin_user in plex_users:
             users[jellyfin_user] = jellyfin_user
-    
+
     logger(f"User list that exist on both servers {users}", 1)
- 
+
     users_filtered = {}
     for user in users:
         # whitelist_user is not empty and user lowercase is not in whitelist lowercase
@@ -196,17 +196,17 @@ def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=N
             if user not in whitelist_users and users[user] not in whitelist_users:
                 logger(f"{user} or {users[user]} is not in whitelist", 1)
                 continue
-        
+
         if user not in blacklist_users and users[user] not in blacklist_users:
             users_filtered[user] = users[user]
 
     logger(f"Filtered user list {users_filtered}", 1)
-    
+
     plex_users = []
     for plex_user in plex.users:
         if plex_user.title.lower() in users_filtered.keys() or plex_user.title.lower() in users_filtered.values():
             plex_users.append(plex_user)
-    
+
     jellyfin_users = {}
     for jellyfin_user, jellyfin_id in jellyfin.users.items():
         if jellyfin_user.lower() in users_filtered.keys() or jellyfin_user.lower() in users_filtered.values():
@@ -267,11 +267,11 @@ def main():
     # Update watched status
     plex.update_watched(jellyfin_watched, user_mapping, library_mapping, dryrun)
     jellyfin.update_watched(plex_watched, user_mapping, library_mapping, dryrun)
-    
+
 
 if __name__ == "__main__":
     sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
-    
+
     while(True):
         try:
             main()

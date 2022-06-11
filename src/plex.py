@@ -36,7 +36,7 @@ class Plex:
                 plex = account.resource(self.servername).connect()
             else:
                 raise Exception("No complete plex credentials provided")
-            
+
             return plex
         except Exception as e:
             if self.username or self.password:
@@ -45,14 +45,14 @@ class Plex:
             else:
                 logger(f"Plex: Failed to login, Error: {e}", 2)
             return None
-            
+
 
     def get_plex_users(self):
         users = self.plex.myPlexAccount().users()
-        
+
         # append self to users
         users.append(self.plex.myPlexAccount())
-        
+
         return users
 
     def get_plex_user_watched(self, user, library):
@@ -60,9 +60,9 @@ class Plex:
             user_plex = self.plex
         else:
             user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
-        
+
         watched = None
-        
+
         if library.type == "movie":
             watched = []
             library_videos = user_plex.library.section(library.title)
@@ -81,22 +81,22 @@ class Plex:
                 for season in show.seasons():
                     guids = []
                     for episode in season.episodes():
-                        if episode.viewCount > 0:     
-                            guids_temp = {}                
+                        if episode.viewCount > 0:
+                            guids_temp = {}
                             for guid in episode.guids:
                                 # Extract after :// from guid.id
                                 guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
                                 guid_id = re.search(r'://(.*)', guid.id).group(1)
                                 guids_temp[guid_source] = guid_id
-                                
-                            guids.append(guids_temp)        
-                        
+
+                            guids.append(guids_temp)
+
                     if guids:
                         # append show, season, episode
                         if show.title not in watched:
                             watched[show.title] = {}
                         if season.title not in watched[show.title]:
-                            watched[show.title][season.title] = {}   
+                            watched[show.title][season.title] = {}
                         watched[show.title][season.title] = guids
 
         return watched
@@ -116,7 +116,7 @@ class Plex:
             if skip_reason:
                 logger(f"Plex: Skipping library {library_title} {skip_reason}", 1)
                 continue
-            
+
             for user in users:
                 logger(f"Plex: Generating watched for {user.title} in library {library_title}", 0)
                 user_name = user.title.lower()
@@ -127,9 +127,9 @@ class Plex:
                     if library_title not in users_watched[user_name]:
                         users_watched[user_name][library_title] = []
                     users_watched[user_name][library_title] = watched
-                        
+
         return users_watched
-    
+
     def update_watched(self, watched_list, user_mapping=None, library_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
             if user_mapping:
@@ -139,7 +139,7 @@ class Plex:
                     user_other = user_mapping[user]
                 elif user in user_mapping.values():
                     user_other = search_mapping(user_mapping, user)
-                
+
                 if user_other:
                     logger(f"Swapping user {user} with {user_other}", 1)
                     user = user_other
@@ -162,7 +162,7 @@ class Plex:
                         library_other = library_mapping[library]
                     elif library in library_mapping.values():
                         library_other = search_mapping(library_mapping, library)
-                    
+
                     if library_other:
                         logger(f"Swapping library {library} with {library_other}", 1)
                         library = library_other
@@ -192,7 +192,7 @@ class Plex:
                                             else:
                                                 logger(f"Dryrun {msg}", 0)
                                             break
-                
+
                 elif library_videos.type == "show":
                     for show_search in library_videos.search(unmatched=False, unwatched=True):
                         if show_search.title in videos:
@@ -201,9 +201,9 @@ class Plex:
                                     for guid in episode_search.guids:
                                         guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
                                         guid_id = re.search(r'://(.*)', guid.id).group(1)
-                                        for show, seasons in videos.items():
-                                            for season, episodes in seasons.items():
-                                                for episode in episodes:
+                                        for show in videos:
+                                            for season in videos[show]:
+                                                for episode in videos[show][season]:
                                                     for episode_keys, episode_id in episode.items():
                                                         if episode_keys == guid_source and episode_id == guid_id:
                                                             if episode_search.viewCount == 0:
