@@ -1,6 +1,6 @@
 import requests, os
 from dotenv import load_dotenv
-from src.functions import logger, search_mapping, str_to_bool
+from src.functions import logger, search_mapping, str_to_bool, check_skip_logic
 
 load_dotenv(override=True)
 
@@ -76,38 +76,11 @@ class Jellyfin():
                 else:
                     library_type = watched["Items"][0]["Type"]
 
-                if library_type.lower() in blacklist_library_type:
-                    logger(f"Jellyfin: Library type {library_type} is blacklist_library_type", 1)
+                skip_reason = check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+
+                if skip_reason:
+                    logger(f"Jellyfin: Skipping library {library_title} {skip_reason}", 1)
                     continue
-
-                if library_title.lower() in [x.lower() for x in blacklist_library]:
-                    logger(f"Jellyfin: Library {library_title} is blacklist_library", 1)
-                    continue
-
-                library_other = None
-                if library_mapping:
-                    library_other = search_mapping(library_mapping, library_title)
-                if library_other:
-                    library_other.lower()
-                    if library_other not in [x.lower() for x in blacklist_library]:
-                        logger(f"Jellyfin: Library {library_other} is blacklist_library", 1)
-                        continue
-
-                if len(whitelist_library_type) > 0:
-                    if library_type.lower() not in whitelist_library_type:
-                        logger(f"Jellyfin: Library type {library_type} is not whitelist_library_type", 1)
-                        continue
-
-                # if whitelist is not empty and library is not in whitelist
-                if len(whitelist_library) > 0:
-                    if library_title.lower() not in [x.lower() for x in whitelist_library]:
-                        logger(f"Jellyfin: Library {library_title} is not whitelist_library", 1)
-                        continue
-                    
-                    if library_other:
-                        if library_other not in [x.lower() for x in whitelist_library]:
-                            logger(f"Jellyfin: Library {library_other} is not whitelist_library", 1)
-                            continue
 
                 logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
                 # Movies
