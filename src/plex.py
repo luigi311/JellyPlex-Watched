@@ -1,4 +1,4 @@
-import re, os, time
+import re, os
 from dotenv import load_dotenv
 
 from src.functions import logger, search_mapping, check_skip_logic, generate_library_guids_dict
@@ -86,7 +86,7 @@ class Plex:
                     show_guid_id = re.search(r'://(.*)', show_guid.id).group(1)
                     show_guids[show_guid_source] = show_guid_id
                 show_guids = frozenset(show_guids.items())
-                
+
                 for season in show.seasons():
                     episode_guids = []
                     for episode in season.episodes():
@@ -202,7 +202,7 @@ class Plex:
                                         else:
                                             logger(f"Dryrun {msg}", 0)
                                     break
-                        
+
 
                 elif library_videos.type == "show":
                     videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
@@ -221,7 +221,7 @@ class Plex:
                                         for episode_guid in episode_search.guids:
                                             episode_guid_source = re.search(r'(.*)://', episode_guid.id).group(1).lower()
                                             episode_guid_id = re.search(r'://(.*)', episode_guid.id).group(1)
-                                        
+
                                             # If episode provider source and episode provider id are in videos_episode_ids exactly, then the episode is in the list
                                             if episode_guid_source in videos_episode_ids.keys():
                                                 if episode_guid_id in videos_episode_ids[episode_guid_source]:
@@ -233,6 +233,6 @@ class Plex:
                                                         else:
                                                             logger(f"Dryrun {msg}", 0)
                                                     break
-                            
+
                             if show_found:
-                                break                  
+                                break

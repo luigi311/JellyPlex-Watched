@@ -186,12 +186,12 @@ class Jellyfin():
                     # Movies
                     if library_type == "Movie":
                         _, _, videos_movies_ids = generate_library_guids_dict(videos, 2)
-                        
+
                         jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds", "get")
                         for jellyfin_video in jellyfin_search["Items"]:
                             if str_to_bool(jellyfin_video["UserData"]["Played"]) == False:
                                 jellyfin_video_id = jellyfin_video["Id"]
-                
+
                                 for movie_provider_source, movie_provider_id in jellyfin_video["ProviderIds"].items():
                                     if movie_provider_source.lower() in videos_movies_ids:
                                         if movie_provider_id.lower() in videos_movies_ids[movie_provider_source.lower()]:
@@ -206,7 +206,7 @@ class Jellyfin():
                     # TV Shows
                     if library_type == "Episode":
                         videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
-                        
+
                         jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds", "get")
                         jellyfin_shows = [x for x in jellyfin_search["Items"]]
 
@@ -221,7 +221,7 @@ class Jellyfin():
                                         for jellyfin_episode in jellyfin_episodes["Items"]:
                                             if str_to_bool(jellyfin_episode["UserData"]["Played"]) == False:
                                                 jellyfin_episode_id = jellyfin_episode["Id"]
-                                               
+
                                                 for episode_provider_source, episode_provider_id in jellyfin_episode["ProviderIds"].items():
                                                     if episode_provider_source.lower() in videos_episode_ids:
                                                         if episode_provider_id.lower() in videos_episode_ids[episode_provider_source.lower()]:
@@ -232,6 +232,6 @@ class Jellyfin():
                                                             else:
                                                                 logger(f"Dryrun {msg}", 0)
                                                             break
-                                                        
+
                                 if show_found:
                                     break

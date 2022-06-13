@@ -37,7 +37,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     else:
                         logger(f"library {library_1} and {library_other} not found in watched list 2", 1)
                         continue
-                    
+
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
                         for item in watched_list_1[user_1][library_1]:
@@ -49,13 +49,13 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                                 logger(f"Removing {item} from {library_1}", 1)
                                                 modified_watched_list_1[user_1][library_1].remove(item)
 
-                    
+
                     # TV Shows
                     elif isinstance(watched_list_1[user_1][library_1], dict):
-                        # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1                    
+                        # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
                         _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2], 1)
-                        
-                        for show_key_1, show_item_1 in watched_list_1[user_1][library_1].items():
+
+                        for show_key_1 in watched_list_1[user_1][library_1].keys():
                             show_key_dict = dict(show_key_1)
                             for season in watched_list_1[user_1][library_1][show_key_1]:
                                 for episode in watched_list_1[user_1][library_1][show_key_1][season]:
@@ -66,7 +66,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                                 if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
                                                     logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 1)
                                                     modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
-                                                                        
+
                                 # Remove empty seasons
                                 if len(modified_watched_list_1[user_1][library_1][show_key_1][season]) == 0:
                                     if season in modified_watched_list_1[user_1][library_1][show_key_1]:
@@ -263,15 +263,15 @@ def main():
 
     plex_watched = plex.get_plex_watched(plex_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
     jellyfin_watched = jellyfin.get_jellyfin_watched(jellyfin_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
-    
+
     # clone watched so it isnt modified in the cleanup function so all duplicates are actually removed
     plex_watched_filtered = copy.deepcopy(plex_watched)
     jellyfin_watched_filtered = copy.deepcopy(jellyfin_watched)
 
-    logger(f"Cleaning Plex Watched", 1)
+    logger("Cleaning Plex Watched", 1)
     plex_watched = cleanup_watched(plex_watched_filtered, jellyfin_watched_filtered, user_mapping, library_mapping)
 
-    logger(f"Cleaning Jellyfin Watched", 1)
+    logger("Cleaning Jellyfin Watched", 1)
     jellyfin_watched = cleanup_watched(jellyfin_watched_filtered, plex_watched_filtered, user_mapping, library_mapping)
 
     logger(f"plex_watched that needs to be synced to jellyfin:\n{plex_watched}", 1)

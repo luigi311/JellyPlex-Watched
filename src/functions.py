@@ -92,7 +92,7 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                 if provider_key.lower() not in show_output_dict:
                     show_output_dict[provider_key.lower()] = []
                 show_output_dict[provider_key.lower()].append(prvider_value.lower())
-    
+
     if generate_output in (1, 3):
         for show in user_list:
             for season in user_list[show]:
@@ -101,7 +101,7 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                         if episode_key.lower() not in episode_output_dict:
                             episode_output_dict[episode_key.lower()] = []
                         episode_output_dict[episode_key.lower()].append(episode_value.lower())
-    
+
     if generate_output == 2:
         for movie in user_list:
             for movie_key, movie_value in movie.items():
