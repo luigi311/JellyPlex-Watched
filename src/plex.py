@@ -1,7 +1,7 @@
-import re, os
+import re, os, time
 from dotenv import load_dotenv
 
-from src.functions import logger, search_mapping, check_skip_logic
+from src.functions import logger, search_mapping, check_skip_logic, generate_library_guids_dict
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
@@ -78,26 +78,35 @@ class Plex:
             watched = {}
             library_videos = user_plex.library.section(library.title)
             for show in library_videos.search(unmatched=False, unwatched=False):
+                show_guids = {}
+                for show_guid in show.guids:
+                    show_guids["title"] = show.title
+                    # Extract after :// from guid.id
+                    show_guid_source = re.search(r'(.*)://', show_guid.id).group(1).lower()
+                    show_guid_id = re.search(r'://(.*)', show_guid.id).group(1)
+                    show_guids[show_guid_source] = show_guid_id
+                show_guids = frozenset(show_guids.items())
+                
                 for season in show.seasons():
-                    guids = []
+                    episode_guids = []
                     for episode in season.episodes():
                         if episode.viewCount > 0:
-                            guids_temp = {}
+                            episode_guids_temp = {}
                             for guid in episode.guids:
                                 # Extract after :// from guid.id
                                 guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
                                 guid_id = re.search(r'://(.*)', guid.id).group(1)
-                                guids_temp[guid_source] = guid_id
+                                episode_guids_temp[guid_source] = guid_id
 
-                            guids.append(guids_temp)
+                            episode_guids.append(episode_guids_temp)
 
-                    if guids:
+                    if episode_guids:
                         # append show, season, episode
-                        if show.title not in watched:
-                            watched[show.title] = {}
-                        if season.title not in watched[show.title]:
-                            watched[show.title][season.title] = {}
-                        watched[show.title][season.title] = guids
+                        if show_guids not in watched:
+                            watched[show_guids] = {}
+                        if season.title not in watched[show_guids]:
+                            watched[show_guids][season.title] = {}
+                        watched[show_guids][season.title] = episode_guids
 
         return watched
 
@@ -177,40 +186,53 @@ class Plex:
                 library_videos = user_plex.library.section(library)
 
                 if library_videos.type == "movie":
+                    _, _, videos_movies_ids = generate_library_guids_dict(videos, 2)
                     for movies_search in library_videos.search(unmatched=False, unwatched=True):
-                        for guid in movies_search.guids:
-                            guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
-                            guid_id = re.search(r'://(.*)', guid.id).group(1)
-                            for video in videos:
-                                for video_keys, video_id in video.items():
-                                    if video_keys == guid_source and video_id == guid_id:
-                                        if movies_search.viewCount == 0:
-                                            msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
-                                            if not dryrun:
-                                                logger(f"Marked {msg}", 0)
-                                                movies_search.markWatched()
-                                            else:
-                                                logger(f"Dryrun {msg}", 0)
-                                            break
+                        for movie_guid in movies_search.guids:
+                            movie_guid_source = re.search(r'(.*)://', movie_guid.id).group(1).lower()
+                            movie_guid_id = re.search(r'://(.*)', movie_guid.id).group(1)
+                            # If movie provider source and movie provider id are in videos_movie_ids exactly, then the movie is in the list
+                            if movie_guid_source in videos_movies_ids.keys():
+                                if movie_guid_id in videos_movies_ids[movie_guid_source]:
+                                    if movies_search.viewCount == 0:
+                                        msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
+                                        if not dryrun:
+                                            logger(f"Marked {msg}", 0)
+                                            movies_search.markWatched()
+                                        else:
+                                            logger(f"Dryrun {msg}", 0)
+                                    break
+                        
 
                 elif library_videos.type == "show":
+                    videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
+
                     for show_search in library_videos.search(unmatched=False, unwatched=True):
-                        if show_search.title in videos:
-                            for season_search in show_search.seasons():
-                                for episode_search in season_search.episodes():
-                                    for guid in episode_search.guids:
-                                        guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
-                                        guid_id = re.search(r'://(.*)', guid.id).group(1)
-                                        for show in videos:
-                                            for season in videos[show]:
-                                                for episode in videos[show][season]:
-                                                    for episode_keys, episode_id in episode.items():
-                                                        if episode_keys == guid_source and episode_id == guid_id:
-                                                            if episode_search.viewCount == 0:
-                                                                msg = f"{show_search.title} {season_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
-                                                                if not dryrun:
-                                                                    logger(f"Marked {msg}", 0)
-                                                                    episode_search.markWatched()
-                                                                else:
-                                                                    logger(f"Dryrun {msg}", 0)
-                                                                break
+                        show_found = False
+                        for show_guid in show_search.guids:
+                            show_guid_source = re.search(r'(.*)://', show_guid.id).group(1).lower()
+                            show_guid_id = re.search(r'://(.*)', show_guid.id).group(1)
+
+                            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+                            if show_guid_source in videos_shows_ids.keys():
+                                if show_guid_id in videos_shows_ids[show_guid_source]:
+                                    show_found = True
+                                    for episode_search in show_search.episodes():
+                                        for episode_guid in episode_search.guids:
+                                            episode_guid_source = re.search(r'(.*)://', episode_guid.id).group(1).lower()
+                                            episode_guid_id = re.search(r'://(.*)', episode_guid.id).group(1)
+                                        
+                                            # If episode provider source and episode provider id are in videos_episode_ids exactly, then the episode is in the list
+                                            if episode_guid_source in videos_episode_ids.keys():
+                                                if episode_guid_id in videos_episode_ids[episode_guid_source]:
+                                                    if episode_search.viewCount == 0:
+                                                        msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
+                                                        if not dryrun:
+                                                            logger(f"Marked {msg}", 0)
+                                                            episode_search.markWatched()
+                                                        else:
+                                                            logger(f"Dryrun {msg}", 0)
+                                                    break
+                            
+                            if show_found:
+                                break                  

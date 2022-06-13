@@ -73,3 +73,41 @@ def check_skip_logic(library_title, library_type, blacklist_library, whitelist_l
                 skip_reason = "is not whitelist_library"
 
     return skip_reason
+
+
+def generate_library_guids_dict(user_list: dict, generate_output: int):
+    # if generate_output is 0 then only generate shows, if 1 then only generate episodes, if 2 then generate movies, if 3 then generate shows and episodes
+    show_output_dict = {}
+    episode_output_dict = {}
+    movies_output_dict = {}
+
+    if generate_output in (0, 3):
+        show_output_keys = user_list.keys()
+        show_output_keys = ([ dict(x) for x in list(show_output_keys) ])
+        for show_key in show_output_keys:
+            for provider_key, prvider_value in show_key.items():
+                # Skip title
+                if provider_key.lower() == "title":
+                    continue
+                if provider_key.lower() not in show_output_dict:
+                    show_output_dict[provider_key.lower()] = []
+                show_output_dict[provider_key.lower()].append(prvider_value.lower())
+    
+    if generate_output in (1, 3):
+        for show in user_list:
+            for season in user_list[show]:
+                for episode in user_list[show][season]:
+                    for episode_key, episode_value in episode.items():
+                        if episode_key.lower() not in episode_output_dict:
+                            episode_output_dict[episode_key.lower()] = []
+                        episode_output_dict[episode_key.lower()].append(episode_value.lower())
+    
+    if generate_output == 2:
+        for movie in user_list:
+            for movie_key, movie_value in movie.items():
+                if movie_key.lower() not in movies_output_dict:
+                    movies_output_dict[movie_key.lower()] = []
+                movies_output_dict[movie_key.lower()].append(movie_value.lower())
+
+    return show_output_dict, episode_output_dict, movies_output_dict
+
