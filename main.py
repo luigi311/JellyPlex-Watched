@@ -168,34 +168,49 @@ def setup_black_white_lists(library_mapping=None):
 
     return blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users
 
-def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=None):
+def setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mapping=None):
 
-    # generate list of users from plex.users
-    plex_users = [ x.title.lower() for x in plex.users ]
-    jellyfin_users = [ key.lower() for key in jellyfin.users.keys() ]
+    # generate list of users from server 1 and server 2
+    server_1_type = server_1[0]
+    server_1_connection = server_1[1]
+    server_2_type = server_2[0]
+    server_2_connection = server_2[1]
+
+    server_1_users = []
+    if server_1_type == "plex":
+        server_1_users = [ x.title.lower() for x in server_1_connection.users ]
+    elif server_1_type == "jellyfin":
+        server_1_users = [ key.lower() for key in server_1_connection.users.keys() ]
+
+    server_2_users = []
+    if server_2_type == "plex":
+        server_2_users = [ x.title.lower() for x in server_2_connection.users ]
+    elif server_2_type == "jellyfin":
+        server_2_users = [ key.lower() for key in server_2_connection.users.keys() ]
+
 
     # combined list of overlapping users from plex and jellyfin
     users = {}
 
-    for plex_user in plex_users:
+    for server_1_user in server_1_users:
         if user_mapping:
-            jellyfin_plex_mapped_user =  search_mapping(user_mapping, plex_user)
+            jellyfin_plex_mapped_user =  search_mapping(user_mapping, server_1_user)
             if jellyfin_plex_mapped_user:
-                users[plex_user] = jellyfin_plex_mapped_user
+                users[server_1_user] = jellyfin_plex_mapped_user
                 continue
 
-        if plex_user in jellyfin_users:
-            users[plex_user] = plex_user
+        if server_1_user in server_2_users:
+            users[server_1_user] = server_1_user
 
-    for jellyfin_user in jellyfin_users:
+    for server_2_user in server_2_users:
         if user_mapping:
-            plex_jellyfin_mapped_user =  search_mapping(user_mapping, jellyfin_user)
+            plex_jellyfin_mapped_user =  search_mapping(user_mapping, server_2_user)
             if plex_jellyfin_mapped_user:
-                users[plex_jellyfin_mapped_user] = jellyfin_user
+                users[plex_jellyfin_mapped_user] = server_2_user
                 continue
 
-        if jellyfin_user in plex_users:
-            users[jellyfin_user] = jellyfin_user
+        if server_2_user in server_1_users:
+            users[server_2_user] = server_2_user
 
     logger(f"User list that exist on both servers {users}", 1)
 
@@ -212,26 +227,84 @@ def setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping=N
 
     logger(f"Filtered user list {users_filtered}", 1)
 
-    plex_users = []
-    for plex_user in plex.users:
-        if plex_user.title.lower() in users_filtered.keys() or plex_user.title.lower() in users_filtered.values():
-            plex_users.append(plex_user)
+    if server_1_type == "plex":
+        output_server_1_users = []
+        for plex_user in server_1_connection.users:
+            if plex_user.title.lower() in users_filtered.keys() or plex_user.title.lower() in users_filtered.values():
+                output_server_1_users.append(plex_user)
+    elif server_1_type == "jellyfin":
+        output_server_1_users = {}
+        for jellyfin_user, jellyfin_id in server_1_connection.users.items():
+            if jellyfin_user.lower() in users_filtered.keys() or jellyfin_user.lower() in users_filtered.values():
+                output_server_1_users[jellyfin_user] = jellyfin_id
 
-    jellyfin_users = {}
-    for jellyfin_user, jellyfin_id in jellyfin.users.items():
-        if jellyfin_user.lower() in users_filtered.keys() or jellyfin_user.lower() in users_filtered.values():
-            jellyfin_users[jellyfin_user] = jellyfin_id
+    if server_2_type == "plex":
+        output_server_2_users = []
+        for plex_user in server_2_connection.users:
+            if plex_user.title.lower() in users_filtered.keys() or plex_user.title.lower() in users_filtered.values():
+                output_server_2_users.append(plex_user)
+    elif server_2_type == "jellyfin":
+        output_server_2_users = {}
+        for jellyfin_user, jellyfin_id in server_2_connection.users.items():
+            if jellyfin_user.lower() in users_filtered.keys() or jellyfin_user.lower() in users_filtered.values():
+                output_server_2_users[jellyfin_user] = jellyfin_id
 
-    if len(plex_users) == 0:
-        raise Exception(f"No plex users found, users found {users} filtered users {users_filtered}")
+    if len(output_server_1_users) == 0:
+        raise Exception(f"No users found for server 1, users found {users} filtered users {users_filtered}")
 
-    if len(jellyfin_users) == 0:
-        raise Exception(f"No jellyfin users found, users found {users} filtered users {users_filtered}")
+    if len(output_server_2_users) == 0:
+        raise Exception(f"No users found for server 2, users found {users} filtered users {users_filtered}")
 
-    logger(f"plex_users: {plex_users}", 1)
-    logger(f"jellyfin_users: {jellyfin_users}", 1)
+    logger(f"Server 1 users: {output_server_1_users}", 1)
+    logger(f"Server 2 users: {output_server_2_users}", 1)
 
-    return plex_users, jellyfin_users
+    return output_server_1_users, output_server_2_users
+
+def generate_server_connections():
+    servers = []
+
+    plex_baseurl = os.getenv("PLEX_BASEURL", None)
+    plex_token = os.getenv("PLEX_TOKEN", None)
+    plex_username = os.getenv("PLEX_USERNAME", None)
+    plex_password = os.getenv("PLEX_PASSWORD", None)
+    plex_servername = os.getenv("PLEX_SERVERNAME", None)
+
+    if plex_baseurl and plex_token:
+        plex_baseurl = plex_baseurl.split(",")
+        plex_token = plex_token.split(",")
+
+        if len(plex_baseurl) != len(plex_token):
+            raise Exception("PLEX_BASEURL and PLEX_TOKEN must have the same number of entries")
+
+        for i in range(len(plex_baseurl)):
+            servers.append(("plex", Plex(baseurl=plex_baseurl[i].strip(), token=plex_token[i].strip(), username=None, password=None, servername=None)))
+
+    if plex_username and plex_password and plex_servername:
+        plex_username = plex_username.split(",")
+        plex_password = plex_password.split(",")
+        plex_servername = plex_servername.split(",")
+
+        if len(plex_username) != len(plex_password) or len(plex_username) != len(plex_servername):
+            raise Exception("PLEX_USERNAME, PLEX_PASSWORD and PLEX_SERVERNAME must have the same number of entries")
+
+        for i in range(len(plex_username)):
+            servers.append(("plex", Plex(baseurl=None, token=None, username=plex_username[i].strip(), password=plex_password[i].strip(), servername=plex_servername[i].strip())))
+
+    jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)
+    jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
+
+    if jellyfin_baseurl and jellyfin_token:
+        jellyfin_baseurl = jellyfin_baseurl.split(",")
+        jellyfin_token = jellyfin_token.split(",")
+
+        if len(jellyfin_baseurl) != len(jellyfin_token):
+            raise Exception("JELLYFIN_BASEURL and JELLYFIN_TOKEN must have the same number of entries")
+
+        for i in range(len(jellyfin_baseurl)):
+            servers.append(("jellyfin", Jellyfin(baseurl=jellyfin_baseurl[i].strip(), token=jellyfin_token[i].strip())))
+
+    print(f"Servers: {servers}")
+    return servers
 
 def main():
     logfile = os.getenv("LOGFILE","log.log")
@@ -252,34 +325,50 @@ def main():
         library_mapping = json.loads(library_mapping)
         logger(f"Library Mapping: {library_mapping}", 1)
 
-    plex = Plex()
-    jellyfin = Jellyfin()
-
     # Create (black/white)lists
     blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users = setup_black_white_lists(library_mapping)
 
-    # Create users list
-    plex_users, jellyfin_users = setup_users(plex, jellyfin, blacklist_users, whitelist_users, user_mapping)
+    # Create server connections
+    servers = generate_server_connections()
 
-    plex_watched = plex.get_plex_watched(plex_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
-    jellyfin_watched = jellyfin.get_jellyfin_watched(jellyfin_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+    for server_1 in servers:
+        # If server is the final server in the list, then we are done with the loop
+        if server_1 == servers[-1]:
+            break
 
-    # clone watched so it isnt modified in the cleanup function so all duplicates are actually removed
-    plex_watched_filtered = copy.deepcopy(plex_watched)
-    jellyfin_watched_filtered = copy.deepcopy(jellyfin_watched)
+        # Start server_2 at the next server in the list
+        servers_2_ = servers[servers.index(server_1) + 1:]
+        for server_2 in servers[servers.index(server_1) + 1:]:
+            print(f"server_1: {server_1}, server_2: {server_2}")
 
-    logger("Cleaning Plex Watched", 1)
-    plex_watched = cleanup_watched(plex_watched_filtered, jellyfin_watched_filtered, user_mapping, library_mapping)
+            server_1_type = server_1[0]
+            server_1_connection = server_1[1]
 
-    logger("Cleaning Jellyfin Watched", 1)
-    jellyfin_watched = cleanup_watched(jellyfin_watched_filtered, plex_watched_filtered, user_mapping, library_mapping)
+            server_2_type = server_2[0]
+            server_2_connection = server_2[1]
 
-    logger(f"plex_watched that needs to be synced to jellyfin:\n{plex_watched}", 1)
-    logger(f"jellyfin_watched that needs to be synced to plex:\n{jellyfin_watched}", 1)
+            # Create users list
+            server_1_users, server_2_users = setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mapping)
 
-    # Update watched status
-    plex.update_watched(jellyfin_watched, user_mapping, library_mapping, dryrun)
-    jellyfin.update_watched(plex_watched, user_mapping, library_mapping, dryrun)
+            server_1_watched = server_1_connection.get_watched(server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+            server_2_watched = server_2_connection.get_watched(server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+
+            # clone watched so it isnt modified in the cleanup function so all duplicates are actually removed
+            server_1_watched_filtered = copy.deepcopy(server_1_watched)
+            server_2_watched_filtered = copy.deepcopy(server_2_watched)
+
+            logger("Cleaning Server 1 Watched", 1)
+            server_1_watched_filtered = cleanup_watched(server_1_watched, server_2_watched, user_mapping, library_mapping)
+
+            logger("Cleaning Server 2 Watched", 1)
+            server_2_watched_filtered = cleanup_watched(server_2_watched, server_1_watched, user_mapping, library_mapping)
+
+            logger(f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}", 1)
+            logger(f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}", 1)
+
+            # Update watched status
+            server_1_connection.update_watched(server_2_watched_filtered, user_mapping, library_mapping, dryrun)
+            server_2_connection.update_watched(server_1_watched_filtered, user_mapping, library_mapping, dryrun)
 
 
 if __name__ == "__main__":

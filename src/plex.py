@@ -1,31 +1,22 @@
-import re, os
-from dotenv import load_dotenv
+import re
 
 from src.functions import logger, search_mapping, check_skip_logic, generate_library_guids_dict
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
-load_dotenv(override=True)
-
-plex_baseurl = os.getenv("PLEX_BASEURL")
-plex_token = os.getenv("PLEX_TOKEN")
-username = os.getenv("PLEX_USERNAME")
-password = os.getenv("PLEX_PASSWORD")
-servername = os.getenv("PLEX_SERVERNAME")
-
 # class plex accept base url and token and username and password but default with none
 class Plex:
-    def __init__(self):
-        self.baseurl = plex_baseurl
-        self.token = plex_token
+    def __init__(self, baseurl=None, token=None, username=None, password=None, servername=None):
+        self.baseurl = baseurl
+        self.token = token
         self.username = username
         self.password = password
         self.servername = servername
-        self.plex = self.plex_login()
+        self.plex = self.login()
         self.admin_user = self.plex.myPlexAccount()
-        self.users = self.get_plex_users()
+        self.users = self.get_users()
 
-    def plex_login(self):
+    def login(self):
         try:
             if self.baseurl and self.token:
                     # Login via token
@@ -47,7 +38,7 @@ class Plex:
             return None
 
 
-    def get_plex_users(self):
+    def get_users(self):
         users = self.plex.myPlexAccount().users()
 
         # append self to users
@@ -55,7 +46,7 @@ class Plex:
 
         return users
 
-    def get_plex_user_watched(self, user, library):
+    def get_user_watched(self, user, library):
         if self.admin_user == user:
             user_plex = self.plex
         else:
@@ -110,7 +101,7 @@ class Plex:
 
         return watched
 
-    def get_plex_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
+    def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
         # Get all libraries
         libraries = self.plex.library.sections()
         users_watched = {}
@@ -129,7 +120,7 @@ class Plex:
             for user in users:
                 logger(f"Plex: Generating watched for {user.title} in library {library_title}", 0)
                 user_name = user.title.lower()
-                watched = self.get_plex_user_watched(user, library)
+                watched = self.get_user_watched(user, library)
                 if watched:
                     if user_name not in users_watched:
                         users_watched[user_name] = {}
@@ -141,20 +132,19 @@ class Plex:
 
     def update_watched(self, watched_list, user_mapping=None, library_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
+            user_other = None
+            # If type of user is dict
             if user_mapping:
-                user_other = None
-
                 if user in user_mapping.keys():
                     user_other = user_mapping[user]
                 elif user in user_mapping.values():
                     user_other = search_mapping(user_mapping, user)
 
-                if user_other:
-                    logger(f"Swapping user {user} with {user_other}", 1)
-                    user = user_other
-
             for index, value in enumerate(self.users):
                 if user.lower() == value.title.lower():
+                    user = self.users[index]
+                    break
+                elif user_other and user_other.lower() == value.title.lower():
                     user = self.users[index]
                     break
 
@@ -164,23 +154,22 @@ class Plex:
                 user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
 
             for library, videos in libraries.items():
+                library_other = None
                 if library_mapping:
-                    library_other = None
-
                     if library in library_mapping.keys():
                         library_other = library_mapping[library]
                     elif library in library_mapping.values():
                         library_other = search_mapping(library_mapping, library)
 
-                    if library_other:
-                        logger(f"Swapping library {library} with {library_other}", 1)
-                        library = library_other
-
                 # if library in plex library list
                 library_list = user_plex.library.sections()
                 if library.lower() not in [x.title.lower() for x in library_list]:
-                    logger(f"Library {library} not found in Plex library list", 2)
-                    continue
+                    if library_other and library_other.lower() in [x.title.lower() for x in library_list]:
+                        logger(f"Plex: Library {library} not found, but {library_other} found, using {library_other}", 1)
+                        library = library_other
+                    else:
+                        logger(f"Library {library} {library_other} not found in Plex library list", 2)
+                        continue
 
                 logger(f"Plex: Updating watched for {user.title} in library {library}", 1)
                 library_videos = user_plex.library.section(library)
@@ -191,6 +180,7 @@ class Plex:
                         for movie_guid in movies_search.guids:
                             movie_guid_source = re.search(r'(.*)://', movie_guid.id).group(1).lower()
                             movie_guid_id = re.search(r'://(.*)', movie_guid.id).group(1)
+
                             # If movie provider source and movie provider id are in videos_movie_ids exactly, then the movie is in the list
                             if movie_guid_source in videos_movies_ids.keys():
                                 if movie_guid_id in videos_movies_ids[movie_guid_source]:

@@ -1,16 +1,10 @@
-import requests, os
-from dotenv import load_dotenv
+import requests
 from src.functions import logger, search_mapping, str_to_bool, check_skip_logic, generate_library_guids_dict
 
-load_dotenv(override=True)
-
-jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL")
-jellyfin_token = os.getenv("JELLYFIN_TOKEN")
-
 class Jellyfin():
-    def __init__(self):
-        self.baseurl = jellyfin_baseurl
-        self.token = jellyfin_token
+    def __init__(self, baseurl, token):
+        self.baseurl = baseurl
+        self.token = token
 
         if not self.baseurl:
             raise Exception("Jellyfin baseurl not set")
@@ -56,7 +50,7 @@ class Jellyfin():
 
         return users
 
-    def get_jellyfin_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
+    def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
         users_watched = {}
 
         for user_name, user_id in users.items():
@@ -131,46 +125,45 @@ class Jellyfin():
 
     def update_watched(self, watched_list, user_mapping=None, library_mapping=None, dryrun=False):
         for user, libraries in watched_list.items():
+            user_other = None
             if user_mapping:
-                user_other = None
-
                 if user in user_mapping.keys():
                     user_other = user_mapping[user]
                 elif user in user_mapping.values():
                     user_other = search_mapping(user_mapping, user)
-
-                if user_other:
-                    logger(f"Swapping user {user} with {user_other}", 1)
-                    user = user_other
 
             user_id = None
             for key in self.users.keys():
                 if user.lower() == key.lower():
                     user_id = self.users[key]
                     break
+                elif user_other and user_other.lower() == key.lower():
+                    user_id = self.users[key]
+                    break
 
             if not user_id:
-                logger(f"{user} not found in Jellyfin", 2)
+                logger(f"{user} {user_other} not found in Jellyfin", 2)
                 break
 
             jellyfin_libraries = self.query(f"/Users/{user_id}/Views", "get")["Items"]
 
             for library, videos in libraries.items():
+                library_other = None
                 if library_mapping:
-                    library_other = None
-
                     if library in library_mapping.keys():
                         library_other = library_mapping[library]
                     elif library in library_mapping.values():
                         library_other = search_mapping(library_mapping, library)
 
-                    if library_other:
-                        logger(f"Swapping library {library} with {library_other}", 1)
-                        library = library_other
 
-                if library not in [x["Name"] for x in jellyfin_libraries]:
-                    logger(f"{library} not found in Jellyfin", 2)
-                    continue
+                if library.lower() not in [x["Name"].lower() for x in jellyfin_libraries]:
+                    if library_other and library_other.lower() in [x["Name"].lower() for x in jellyfin_libraries]:
+                        logger(f"Plex: Library {library} not found, but {library_other} found, using {library_other}", 1)
+                        library = library_other
+                    else:
+                        logger(f"Library {library} {library_other} not found in Plex library list", 2)
+                        continue
+
 
                 library_id = None
                 for jellyfin_library in jellyfin_libraries:

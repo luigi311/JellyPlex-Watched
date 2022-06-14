@@ -6,16 +6,16 @@ logfile = os.getenv("LOGFILE","log.log")
 
 def logger(message, log_type=0):
     debug = str_to_bool(os.getenv("DEBUG", "True"))
-    debug_level = os.getenv("DEBUG_LEVEL", "INFO")
+    debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
 
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1 and (debug or debug_level == "INFO"):
+    elif log_type == 1 and (debug or debug_level == "info"):
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"
-    elif log_type == 3 and (debug and debug_level == "DEBUG"):
+    elif log_type == 3 and (debug and debug_level == "debug"):
         output = f"[DEBUG]: {output}"
     else:
         output = None
