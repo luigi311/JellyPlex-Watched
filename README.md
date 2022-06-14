@@ -10,7 +10,7 @@ Keep in sync all your users watched history between jellyfin and plex locally. T
 
 ## Installation
 
-### Baremeta
+### Baremetal
 
 -   Setup virtualenv of your choice
 
