@@ -276,8 +276,8 @@ def generate_server_connections():
         if len(plex_baseurl) != len(plex_token):
             raise Exception("PLEX_BASEURL and PLEX_TOKEN must have the same number of entries")
 
-        for i in range(len(plex_baseurl)):
-            servers.append(("plex", Plex(baseurl=plex_baseurl[i].strip(), token=plex_token[i].strip(), username=None, password=None, servername=None)))
+        for i, url in enumerate(plex_baseurl):
+            servers.append(("plex", Plex(baseurl=url.strip(), token=plex_token[i].strip(), username=None, password=None, servername=None)))
 
     if plex_username and plex_password and plex_servername:
         plex_username = plex_username.split(",")
@@ -287,8 +287,8 @@ def generate_server_connections():
         if len(plex_username) != len(plex_password) or len(plex_username) != len(plex_servername):
             raise Exception("PLEX_USERNAME, PLEX_PASSWORD and PLEX_SERVERNAME must have the same number of entries")
 
-        for i in range(len(plex_username)):
-            servers.append(("plex", Plex(baseurl=None, token=None, username=plex_username[i].strip(), password=plex_password[i].strip(), servername=plex_servername[i].strip())))
+        for i, username in enumerate(plex_username):
+            servers.append(("plex", Plex(baseurl=None, token=None, username=username.strip(), password=plex_password[i].strip(), servername=plex_servername[i].strip())))
 
     jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)
     jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
@@ -300,8 +300,8 @@ def generate_server_connections():
         if len(jellyfin_baseurl) != len(jellyfin_token):
             raise Exception("JELLYFIN_BASEURL and JELLYFIN_TOKEN must have the same number of entries")
 
-        for i in range(len(jellyfin_baseurl)):
-            servers.append(("jellyfin", Jellyfin(baseurl=jellyfin_baseurl[i].strip(), token=jellyfin_token[i].strip())))
+        for i, baseurl in enumerate(jellyfin_baseurl):
+            servers.append(("jellyfin", Jellyfin(baseurl=baseurl.strip(), token=jellyfin_token[i].strip())))
 
     print(f"Servers: {servers}")
     return servers
@@ -337,14 +337,10 @@ def main():
             break
 
         # Start server_2 at the next server in the list
-        servers_2_ = servers[servers.index(server_1) + 1:]
         for server_2 in servers[servers.index(server_1) + 1:]:
             print(f"server_1: {server_1}, server_2: {server_2}")
 
-            server_1_type = server_1[0]
             server_1_connection = server_1[1]
-
-            server_2_type = server_2[0]
             server_2_connection = server_2[1]
 
             # Create users list
