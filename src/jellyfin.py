@@ -144,7 +144,7 @@ class Jellyfin():
                     user = user_other
 
             user_id = None
-            for key, value in self.users.items():
+            for key in self.users.keys():
                 if user.lower() == key.lower():
                     user_id = self.users[key]
                     break
