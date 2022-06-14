@@ -46,7 +46,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                     for watch_list_2_item_key, watch_list_2_item_value in watch_list_2_item.items():
                                         if watch_list_1_key == watch_list_2_item_key and watch_list_1_value == watch_list_2_item_value:
                                             if item in modified_watched_list_1[user_1][library_1]:
-                                                logger(f"Removing {item} from {library_1}", 1)
+                                                logger(f"Removing {item} from {library_1}", 3)
                                                 modified_watched_list_1[user_1][library_1].remove(item)
 
 
@@ -64,13 +64,13 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                         if episode_key in episode_watched_list_2_keys_dict.keys():
                                             if episode_item in episode_watched_list_2_keys_dict[episode_key]:
                                                 if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
-                                                    logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 1)
+                                                    logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 3)
                                                     modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
 
                                 # Remove empty seasons
                                 if len(modified_watched_list_1[user_1][library_1][show_key_1][season]) == 0:
                                     if season in modified_watched_list_1[user_1][library_1][show_key_1]:
-                                        logger(f"Removing {season} from {library_1} because it is empty", 1)
+                                        logger(f"Removing {season} from {library_1} because it is empty", 3)
                                         del modified_watched_list_1[user_1][library_1][show_key_1][season]
 
                             # If the show is empty, remove the show
