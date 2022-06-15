@@ -131,5 +131,5 @@ def future_thread_executor(args: list):
                 results.append(result)
             except Exception as e:
                 raise Exception(e)
-    
+
     return results

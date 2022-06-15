@@ -307,7 +307,6 @@ def generate_server_connections():
         for i, baseurl in enumerate(jellyfin_baseurl):
             servers.append(("jellyfin", Jellyfin(baseurl=baseurl.strip(), token=jellyfin_token[i].strip())))
 
-    print(f"Servers: {servers}")
     return servers
 
 def main():
@@ -342,7 +341,6 @@ def main():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1:]:
-            print(f"server_1: {server_1}, server_2: {server_2}")
 
             server_1_connection = server_1[1]
             server_2_connection = server_2[1]
@@ -376,12 +374,12 @@ def main():
             future_thread_executor(args)
 
 if __name__ == "__main__":
-    sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
+    sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
 
     while(True):
         try:
             main()
-            logger(f"Looping in {sleep_timer}")
+            logger(f"Looping in {sleep_duration}")
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
@@ -391,10 +389,10 @@ if __name__ == "__main__":
 
 
             logger(traceback.format_exc(), 2)
-            logger(f"Retrying in {sleep_timer}", log_type=0)
+            logger(f"Retrying in {sleep_duration}", log_type=0)
 
         except KeyboardInterrupt:
             logger("Exiting", log_type=0)
             os._exit(0)
 
-        sleep(sleep_timer)
+        sleep(sleep_duration)

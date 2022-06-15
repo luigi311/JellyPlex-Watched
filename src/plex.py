@@ -107,7 +107,6 @@ class Plex:
 
     def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
         # Get all libraries
-
         users_watched = {}
         args = []
 
@@ -115,7 +114,7 @@ class Plex:
             if self.admin_user == user:
                 user_plex = self.plex
             else:
-                user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
+                user_plex = PlexServer(self.plex._baseurl, user.get_token(self.plex.machineIdentifier))
 
             libraries = user_plex.library.sections()
 
@@ -221,7 +220,7 @@ class Plex:
             if self.admin_user == user:
                 user_plex = self.plex
             else:
-                user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
+                user_plex = PlexServer(self.plex._baseurl, user.get_token(self.plex.machineIdentifier))
 
             for library, videos in libraries.items():
                 library_other = None
