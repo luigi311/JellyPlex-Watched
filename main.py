@@ -380,6 +380,7 @@ if __name__ == "__main__":
         try:
             main()
             logger(f"Looping in {sleep_duration}")
+            sleep(sleep_duration)
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
@@ -394,5 +395,3 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             logger("Exiting", log_type=0)
             os._exit(0)
-
-        sleep(sleep_duration)
