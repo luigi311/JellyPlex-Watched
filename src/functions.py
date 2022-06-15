@@ -1,10 +1,12 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 logfile = os.getenv("LOGFILE","log.log")
 
-def logger(message, log_type=0):
+def logger(message: str, log_type=0):
     debug = str_to_bool(os.getenv("DEBUG", "True"))
     debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
 
@@ -114,3 +116,20 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
+def future_thread_executor(args: list):
+    futures_list = []
+    results = []
+
+    with ThreadPoolExecutor() as executor:
+        for arg in args:
+            # * arg unpacks the list into actual arguments
+            futures_list.append(executor.submit(*arg))
+
+        for future in futures_list:
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                raise Exception(e)
+    
+    return results

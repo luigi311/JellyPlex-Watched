@@ -2,7 +2,8 @@ import copy, os, traceback, json
 from dotenv import load_dotenv
 from time import sleep
 
-from src.functions import logger, str_to_bool, search_mapping, generate_library_guids_dict
+
+from src.functions import logger, str_to_bool, search_mapping, generate_library_guids_dict, future_thread_executor
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
@@ -346,8 +347,12 @@ def main():
             # Create users list
             server_1_users, server_2_users = setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mapping)
 
-            server_1_watched = server_1_connection.get_watched(server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
-            server_2_watched = server_2_connection.get_watched(server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+            args = [[server_1_connection.get_watched, server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]
+                    , [server_2_connection.get_watched, server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]]
+
+            results = future_thread_executor(args)
+            server_1_watched = results[0]
+            server_2_watched = results[1]
 
             # clone watched so it isnt modified in the cleanup function so all duplicates are actually removed
             server_1_watched_filtered = copy.deepcopy(server_1_watched)
@@ -362,10 +367,10 @@ def main():
             logger(f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}", 1)
             logger(f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}", 1)
 
-            # Update watched status
-            server_1_connection.update_watched(server_2_watched_filtered, user_mapping, library_mapping, dryrun)
-            server_2_connection.update_watched(server_1_watched_filtered, user_mapping, library_mapping, dryrun)
+            args= [[server_1_connection.update_watched, server_2_watched_filtered, user_mapping, library_mapping, dryrun]
+                , [server_2_connection.update_watched, server_1_watched_filtered, user_mapping, library_mapping, dryrun]]
 
+            future_thread_executor(args)
 
 if __name__ == "__main__":
     sleep_timer = float(os.getenv("SLEEP_TIMER", "3600"))
