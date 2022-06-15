@@ -80,16 +80,19 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                     logger(f"Removing {show_key_dict['title']} from {library_1} because it is empty", 1)
                                     del modified_watched_list_1[user_1][library_1][show_key_1]
 
+    for user_1 in watched_list_1:
+        for library_1 in watched_list_1[user_1]:
+            if library_1 in modified_watched_list_1[user_1]:
                 # If library is empty then remove it
                 if len(modified_watched_list_1[user_1][library_1]) == 0:
-                    if library_1 in modified_watched_list_1[user_1]:
                         logger(f"Removing {library_1} from {user_1} because it is empty", 1)
                         del modified_watched_list_1[user_1][library_1]
 
-        # If user is empty delete user
-        if len(modified_watched_list_1[user_1]) == 0:
-            logger(f"Removing {user_1} from watched list 1 because it is empty", 1)
-            del modified_watched_list_1[user_1]
+        if user_1 in modified_watched_list_1:
+            # If user is empty delete user
+            if len(modified_watched_list_1[user_1]) == 0:
+                logger(f"Removing {user_1} from watched list 1 because it is empty", 1)
+                del modified_watched_list_1[user_1]
 
     return modified_watched_list_1
 

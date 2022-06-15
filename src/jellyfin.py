@@ -58,24 +58,23 @@ class Jellyfin():
 
     def get_user_watched(self, user_name, user_id, library_type, library_id, library_title):
         user_watched = {}
+        user_watched[user_name] = {}
 
         logger(f"Jellyfin: Generating watched for {user_name} in library {library_title}", 0)
         # Movies
         if library_type == "Movie":
+            user_watched[user_name][library_title] = []
             watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds", "get")
             for movie in watched["Items"]:
                 if movie["UserData"]["Played"] == True:
                     if movie["ProviderIds"]:
-                        if user_name not in user_watched:
-                            user_watched[user_name] = {}
-                        if library_title not in user_watched[user_name]:
-                            user_watched[user_name][library_title] = []
                         # Lowercase movie["ProviderIds"] keys
                         movie["ProviderIds"] = {k.lower(): v for k, v in movie["ProviderIds"].items()}
                         user_watched[user_name][library_title].append(movie["ProviderIds"])
 
         # TV Shows
         if library_type == "Episode":
+            user_watched[user_name][library_title] = {}
             watched = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Fields=ItemCounts,ProviderIds", "get")
             watched_shows = [x for x in watched["Items"] if x["Type"] == "Series"]
 
@@ -91,10 +90,6 @@ class Jellyfin():
                             for episode in episodes["Items"]:
                                 if episode["UserData"]["Played"] == True:
                                     if episode["ProviderIds"]:
-                                        if user_name not in user_watched:
-                                            user_watched[user_name] = {}
-                                        if library_title not in user_watched[user_name]:
-                                            user_watched[user_name][library_title] = {}
                                         if show_guids not in user_watched[user_name][library_title]:
                                             user_watched[user_name][library_title][show_guids] = {}
                                         if season["Name"] not in user_watched[user_name][library_title][show_guids]:
@@ -110,7 +105,7 @@ class Jellyfin():
     def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
         users_watched = {}
         args = []
-        
+
         for user_name, user_id in users.items():
             # Get all libraries
             user_name = user_name.lower()
@@ -137,7 +132,10 @@ class Jellyfin():
                 args.append([self.get_user_watched, user_name, user_id, library_type, library_id, library_title])
 
         for user_watched in future_thread_executor(args):
-            users_watched.update(user_watched)
+            for user, user_watched_temp in user_watched.items():
+                if user not in users_watched:
+                    users_watched[user] = {}
+                users_watched[user].update(user_watched_temp)
 
         return users_watched
 

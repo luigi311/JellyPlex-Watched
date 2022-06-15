@@ -1,4 +1,5 @@
 import re
+from collections import ChainMap
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
@@ -48,16 +49,15 @@ class Plex:
 
         return users
 
-    def get_user_watched(self, user, library):
-        if self.admin_user == user:
-            user_plex = self.plex
-        else:
-            user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
+    def get_user_watched(self, user, user_plex, library):
+        user_watched = {}
+        user_watched[user.title] = {}
 
-        watched = None
+        logger(f"Plex: Generating watched for {user.title} in library {library.title}", 0)
 
         if library.type == "movie":
-            watched = []
+            user_watched[user.title][library.title] = []
+
             library_videos = user_plex.library.section(library.title)
             for video in library_videos.search(unmatched=False, unwatched=False):
                 guids = {}
@@ -65,10 +65,11 @@ class Plex:
                     guid_source = re.search(r'(.*)://', guid.id).group(1).lower()
                     guid_id = re.search(r'://(.*)', guid.id).group(1)
                     guids[guid_source] = guid_id
-                watched.append(guids)
+                user_watched[user.title][library.title].append(guids)
 
         elif library.type == "show":
-            watched = {}
+            user_watched[user.title][library.title] = {}
+
             library_videos = user_plex.library.section(library.title)
             for show in library_videos.search(unmatched=False, unwatched=False):
                 show_guids = {}
@@ -95,41 +96,47 @@ class Plex:
 
                     if episode_guids:
                         # append show, season, episode
-                        if show_guids not in watched:
-                            watched[show_guids] = {}
-                        if season.title not in watched[show_guids]:
-                            watched[show_guids][season.title] = {}
-                        watched[show_guids][season.title] = episode_guids
+                        if show_guids not in user_watched[user.title][library.title]:
+                            user_watched[user.title][library.title][show_guids] = {}
+                        if season.title not in user_watched[user.title][library.title][show_guids]:
+                            user_watched[user.title][library.title][show_guids][season.title] = {}
+                        user_watched[user.title][library.title][show_guids][season.title] = episode_guids
 
-        return watched
+
+        return user_watched
 
     def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
         # Get all libraries
-        libraries = self.plex.library.sections()
+
         users_watched = {}
+        args = []
 
-        # for not in blacklist
-        for library in libraries:
-            library_title = library.title
-            library_type = library.type
+        for user in users:
+            if self.admin_user == user:
+                user_plex = self.plex
+            else:
+                user_plex = PlexServer(self.baseurl, user.get_token(self.plex.machineIdentifier))
 
-            skip_reason = check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+            libraries = user_plex.library.sections()
 
-            if skip_reason:
-                logger(f"Plex: Skipping library {library_title} {skip_reason}", 1)
-                continue
+            for library in libraries:
+                library_title = library.title
+                library_type = library.type
 
-            args = []
-            for user in users:
-                logger(f"Plex: Generating watched for {user.title} in library {library_title}", 0)
-                user_name = user.title.lower()
-                watched = args.append([self.get_user_watched, user, library])
+                skip_reason = check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
 
-            for user_watched in future_thread_executor(args):
-                if user_watched:
-                    if user_name not in users_watched:
-                        users_watched[user_name] = {}
-                    users_watched[user_name][library_title] = user_watched
+                if skip_reason:
+                    logger(f"Plex: Skipping library {library_title} {skip_reason}", 1)
+                    continue
+
+                args.append([self.get_user_watched, user, user_plex, library])
+
+        for user_watched in future_thread_executor(args):
+            for user, user_watched_temp in user_watched.items():
+                if user not in users_watched:
+                    users_watched[user] = {}
+                users_watched[user].update(user_watched_temp)
+
         return users_watched
 
     def update_user_watched (self, user, user_plex, library, videos, dryrun):
