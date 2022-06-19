@@ -39,11 +39,11 @@ def search_mapping(dictionary: dict, key_value: str):
     if key_value in dictionary.keys():
         return dictionary[key_value]
     elif key_value.lower() in dictionary.keys():
-        return dictionary[key_value]
+        return dictionary[key_value.lower()]
     elif key_value in dictionary.values():
         return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
     elif key_value.lower() in dictionary.values():
-        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
+        return list(dictionary.keys())[list(dictionary.values()).index(key_value.lower())]
     else:
         return None
 
@@ -116,11 +116,14 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
-def future_thread_executor(args: list):
+def future_thread_executor(args: list, workers: int = -1):
     futures_list = []
     results = []
+    workers=1
+    if workers == -1:
+        workers = min(32, os.cpu_count()*1.25)
 
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         for arg in args:
             # * arg unpacks the list into actual arguments
             futures_list.append(executor.submit(*arg))
