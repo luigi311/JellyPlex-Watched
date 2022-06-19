@@ -119,7 +119,7 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
 def future_thread_executor(args: list, workers: int = -1):
     futures_list = []
     results = []
-    workers=1
+
     if workers == -1:
         workers = min(32, os.cpu_count()*1.25)
 
