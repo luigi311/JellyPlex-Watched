@@ -6,8 +6,6 @@ from src.functions import logger, str_to_bool, search_mapping, generate_library_
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
-
-
 load_dotenv(override=True)
 
 def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_mapping=None):
@@ -97,8 +95,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
 
     return modified_watched_list_1
 
-def setup_black_white_lists(library_mapping=None):
-    blacklist_library = os.getenv("BLACKLIST_LIBRARY")
+def setup_black_white_lists(blacklist_library: str, whitelist_library: str, blacklist_library_type: str, whitelist_library_type: str, blacklist_users: str, whitelist_users: str, library_mapping=None, user_mapping=None):
     if blacklist_library:
         if len(blacklist_library) > 0:
             blacklist_library = blacklist_library.split(",")
@@ -113,10 +110,8 @@ def setup_black_white_lists(library_mapping=None):
                 blacklist_library = blacklist_library + temp_library
     else:
         blacklist_library = []
-
     logger(f"Blacklist Library: {blacklist_library}", 1)
 
-    whitelist_library = os.getenv("WHITELIST_LIBRARY")
     if whitelist_library:
         if len(whitelist_library) > 0:
             whitelist_library = whitelist_library.split(",")
@@ -133,7 +128,6 @@ def setup_black_white_lists(library_mapping=None):
         whitelist_library = []
     logger(f"Whitelist Library: {whitelist_library}", 1)
 
-    blacklist_library_type = os.getenv("BLACKLIST_LIBRARY_TYPE")
     if blacklist_library_type:
         if len(blacklist_library_type) > 0:
             blacklist_library_type = blacklist_library_type.split(",")
@@ -142,7 +136,6 @@ def setup_black_white_lists(library_mapping=None):
         blacklist_library_type = []
     logger(f"Blacklist Library Type: {blacklist_library_type}", 1)
 
-    whitelist_library_type = os.getenv("WHITELIST_LIBRARY_TYPE")
     if whitelist_library_type:
         if len(whitelist_library_type) > 0:
             whitelist_library_type = whitelist_library_type.split(",")
@@ -151,20 +144,34 @@ def setup_black_white_lists(library_mapping=None):
         whitelist_library_type = []
     logger(f"Whitelist Library Type: {whitelist_library_type}", 1)
 
-    blacklist_users = os.getenv("BLACKLIST_USERS")
     if blacklist_users:
         if len(blacklist_users) > 0:
             blacklist_users = blacklist_users.split(",")
             blacklist_users = [x.lower().strip() for x in blacklist_users]
+            if user_mapping:
+                temp_users = []
+                for user in blacklist_users:
+                    user_other = search_mapping(user_mapping, user)
+                    if user_other:
+                        temp_users.append(user_other)
+                    
+                blacklist_users = blacklist_users + temp_users
     else:
         blacklist_users = []
     logger(f"Blacklist Users: {blacklist_users}", 1)
 
-    whitelist_users = os.getenv("WHITELIST_USERS")
     if whitelist_users:
         if len(whitelist_users) > 0:
             whitelist_users = whitelist_users.split(",")
             whitelist_users = [x.lower().strip() for x in whitelist_users]
+            if user_mapping:
+                temp_users = []
+                for user in whitelist_users:
+                    user_other = search_mapping(user_mapping, user)
+                    if user_other:
+                        temp_users.append(user_other)
+
+                whitelist_users = whitelist_users + temp_users
         else:
             whitelist_users = []
     else:
@@ -330,9 +337,18 @@ def main_loop():
         logger(f"Library Mapping: {library_mapping}", 1)
 
     # Create (black/white)lists
-    blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users = setup_black_white_lists(library_mapping)
+    logger("Creating (black/white)lists", 1)
+    blacklist_library = os.getenv("BLACKLIST_LIBRARY", None)
+    whitelist_library = os.getenv("WHITELIST_LIBRARY", None)
+    blacklist_library_type = os.getenv("BLACKLIST_LIBRARY_TYPE", None)
+    whitelist_library_type = os.getenv("WHITELIST_LIBRARY_TYPE", None)
+    blacklist_users = os.getenv("BLACKLIST_USERS", None)
+    whitelist_users = os.getenv("WHITELIST_USERS", None)
+
+    blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users = setup_black_white_lists(blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, blacklist_users, whitelist_users, library_mapping, user_mapping)
 
     # Create server connections
+    logger("Creating server connections", 1)
     servers = generate_server_connections()
 
     for server_1 in servers:
@@ -347,8 +363,10 @@ def main_loop():
             server_2_connection = server_2[1]
 
             # Create users list
+            logger("Creating users list", 1)
             server_1_users, server_2_users = setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mapping)
 
+            logger("Creating watched lists", 1)
             args = [[server_1_connection.get_watched, server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]
                     , [server_2_connection.get_watched, server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]]
 
@@ -394,6 +412,7 @@ def main():
 
             logger(traceback.format_exc(), 2)
             logger(f"Retrying in {sleep_duration}", log_type=0)
+            sleep(sleep_duration)
 
         except KeyboardInterrupt:
             logger("Exiting", log_type=0)
