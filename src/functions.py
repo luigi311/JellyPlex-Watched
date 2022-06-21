@@ -1,21 +1,23 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 logfile = os.getenv("LOGFILE","log.log")
 
-def logger(message, log_type=0):
+def logger(message: str, log_type=0):
     debug = str_to_bool(os.getenv("DEBUG", "True"))
-    debug_level = os.getenv("DEBUG_LEVEL", "INFO")
+    debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
 
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1 and (debug or debug_level == "INFO"):
+    elif log_type == 1 and (debug or debug_level == "info"):
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"
-    elif log_type == 3 and (debug and debug_level == "DEBUG"):
+    elif log_type == 3 and (debug and debug_level == "debug"):
         output = f"[DEBUG]: {output}"
     else:
         output = None
@@ -37,11 +39,11 @@ def search_mapping(dictionary: dict, key_value: str):
     if key_value in dictionary.keys():
         return dictionary[key_value]
     elif key_value.lower() in dictionary.keys():
-        return dictionary[key_value]
+        return dictionary[key_value.lower()]
     elif key_value in dictionary.values():
         return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
     elif key_value.lower() in dictionary.values():
-        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
+        return list(dictionary.keys())[list(dictionary.values()).index(key_value.lower())]
     else:
         return None
 
@@ -88,13 +90,17 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
         show_output_keys = user_list.keys()
         show_output_keys = ([ dict(x) for x in list(show_output_keys) ])
         for show_key in show_output_keys:
-            for provider_key, prvider_value in show_key.items():
+            for provider_key, provider_value in show_key.items():
                 # Skip title
                 if provider_key.lower() == "title":
                     continue
                 if provider_key.lower() not in show_output_dict:
                     show_output_dict[provider_key.lower()] = []
-                show_output_dict[provider_key.lower()].append(prvider_value.lower())
+                if provider_key.lower() == "locations":
+                    for show_location in provider_value:
+                        show_output_dict[provider_key.lower()].append(show_location)
+                else:
+                    show_output_dict[provider_key.lower()].append(provider_value.lower())
 
     if generate_output in (1, 3):
         for show in user_list:
@@ -103,14 +109,42 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                     for episode_key, episode_value in episode.items():
                         if episode_key.lower() not in episode_output_dict:
                             episode_output_dict[episode_key.lower()] = []
-                        episode_output_dict[episode_key.lower()].append(episode_value.lower())
+                        if episode_key == "locations":
+                            for episode_location in episode_value:
+                                episode_output_dict[episode_key.lower()].append(episode_location)
+                        else:
+                            episode_output_dict[episode_key.lower()].append(episode_value.lower())
 
     if generate_output == 2:
         for movie in user_list:
             for movie_key, movie_value in movie.items():
                 if movie_key.lower() not in movies_output_dict:
                     movies_output_dict[movie_key.lower()] = []
-                movies_output_dict[movie_key.lower()].append(movie_value.lower())
+                if movie_key == "locations":
+                    for movie_location in movie_value:
+                        movies_output_dict[movie_key.lower()].append(movie_location)
+                else:
+                    movies_output_dict[movie_key.lower()].append(movie_value.lower())
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
+def future_thread_executor(args: list, workers: int = -1):
+    futures_list = []
+    results = []
+
+    if workers == -1:
+        workers = min(32, os.cpu_count()*1.25)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for arg in args:
+            # * arg unpacks the list into actual arguments
+            futures_list.append(executor.submit(*arg))
+
+        for future in futures_list:
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                raise Exception(e)
+
+    return results
