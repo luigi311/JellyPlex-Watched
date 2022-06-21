@@ -40,32 +40,54 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
 
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
-                        for item in watched_list_1[user_1][library_1]:
-                            for watch_list_1_key, watch_list_1_value in item.items():
-                                for watch_list_2_item in watched_list_2[user_2][library_2]:
-                                    for watch_list_2_item_key, watch_list_2_item_value in watch_list_2_item.items():
-                                        if watch_list_1_key == watch_list_2_item_key and watch_list_1_value == watch_list_2_item_value:
-                                            if item in modified_watched_list_1[user_1][library_1]:
-                                                logger(f"Removing {item} from {library_1}", 3)
-                                                modified_watched_list_1[user_1][library_1].remove(item)
+                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2], 2)
+                        for movie in watched_list_1[user_1][library_1]:
+                            movie_found = False
+                            for movie_key, movie_value in movie.items():
+                                if movie_key == "locations":
+                                    for location in movie_value:
+                                        if location in movies_watched_list_2_keys_dict["locations"]:
+                                            movie_found = True
+                                            break
+                                else:
+                                    if movie_key in movies_watched_list_2_keys_dict.keys():
+                                        if movie_value in movies_watched_list_2_keys_dict[movie_key]:
+                                            movie_found = True
+
+                                if movie_found:
+                                    logger(f"Removing {movie} from {library_1}", 3)
+                                    modified_watched_list_1[user_1][library_1].remove(movie)
+                                    break
 
 
                     # TV Shows
                     elif isinstance(watched_list_1[user_1][library_1], dict):
                         # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
-                        _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2], 1)
+                        show_watched_list_2_keys_dict, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2], 3)
 
                         for show_key_1 in watched_list_1[user_1][library_1].keys():
                             show_key_dict = dict(show_key_1)
                             for season in watched_list_1[user_1][library_1][show_key_1]:
                                 for episode in watched_list_1[user_1][library_1][show_key_1][season]:
-                                    for episode_key, episode_item in episode.items():
-                                        # If episode_key and episode_item are in episode_watched_list_2_keys_dict exactly, then remove from watch_list_1
-                                        if episode_key in episode_watched_list_2_keys_dict.keys():
-                                            if episode_item in episode_watched_list_2_keys_dict[episode_key]:
-                                                if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
-                                                    logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 3)
-                                                    modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
+                                    episode_found = False
+                                    for episode_key, episode_value in episode.items():
+                                        # If episode_key and episode_value are in episode_watched_list_2_keys_dict exactly, then remove from watch_list_1
+                                        if episode_key == "locations":
+                                            for location in episode_value:
+                                                if location in episode_watched_list_2_keys_dict["locations"]:
+                                                    episode_found = True
+                                                    break
+
+                                        else:
+                                            if episode_key in episode_watched_list_2_keys_dict.keys():
+                                                if episode_value in episode_watched_list_2_keys_dict[episode_key]:
+                                                    episode_found = True
+
+                                        if episode_found:
+                                            if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
+                                                logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 3)
+                                                modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
+                                                break
 
                                 # Remove empty seasons
                                 if len(modified_watched_list_1[user_1][library_1][show_key_1][season]) == 0:
@@ -154,7 +176,7 @@ def setup_black_white_lists(blacklist_library: str, whitelist_library: str, blac
                     user_other = search_mapping(user_mapping, user)
                     if user_other:
                         temp_users.append(user_other)
-                    
+
                 blacklist_users = blacklist_users + temp_users
     else:
         blacklist_users = []

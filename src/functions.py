@@ -97,7 +97,8 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                 if provider_key.lower() not in show_output_dict:
                     show_output_dict[provider_key.lower()] = []
                 if provider_key.lower() == "locations":
-                    show_output_dict[provider_key.lower()].append(provider_value)
+                    for show_location in provider_value:
+                        show_output_dict[provider_key.lower()].append(show_location)
                 else:
                     show_output_dict[provider_key.lower()].append(provider_value.lower())
 
@@ -109,7 +110,8 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                         if episode_key.lower() not in episode_output_dict:
                             episode_output_dict[episode_key.lower()] = []
                         if episode_key == "locations":
-                            episode_output_dict[episode_key.lower()].append(episode_value)
+                            for episode_location in episode_value:
+                                episode_output_dict[episode_key.lower()].append(episode_location)
                         else:
                             episode_output_dict[episode_key.lower()].append(episode_value.lower())
 
@@ -119,7 +121,8 @@ def generate_library_guids_dict(user_list: dict, generate_output: int):
                 if movie_key.lower() not in movies_output_dict:
                     movies_output_dict[movie_key.lower()] = []
                 if movie_key == "locations":
-                    movies_output_dict[movie_key.lower()].append(movie_value)
+                    for movie_location in movie_value:
+                        movies_output_dict[movie_key.lower()].append(movie_location)
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
 

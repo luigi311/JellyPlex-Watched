@@ -1,15 +1,15 @@
 import sys
 import os
-  
+
 # getting the name of the directory
 # where the this file is present.
 current = os.path.dirname(os.path.realpath(__file__))
-  
+
 # Getting the parent directory name
 # where the current directory is present.
 parent = os.path.dirname(current)
-  
-# adding the parent directory to 
+
+# adding the parent directory to
 # the sys.path.
 sys.path.append(parent)
 
@@ -20,6 +20,12 @@ tv_shows_watched_list_1 = {
         "Season 1": [
             {'imdb': 'tt0550489', 'tmdb': '282843', 'tvdb': '176357', 'locations': ('Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv',)},
             {'imdb': 'tt0550487', 'tmdb': '282861', 'tvdb': '300385', 'locations': ('Criminal Minds S01E02 Compulsion WEBDL-720p.mkv',)}
+        ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {'locations': ('Test S01E01.mkv',)},
+            {'locations': ('Test S01E02.mkv',)}
         ]
     }
 }
@@ -34,6 +40,12 @@ tv_shows_watched_list_2 = {
         "Season 1": [
             {'imdb': 'tt0550487', 'tmdb': '282861', 'tvdb': '300385', 'locations': ('Criminal Minds S01E02 Compulsion WEBDL-720p.mkv',)},
             {'imdb': 'tt0550498', 'tmdb': '282865', 'tvdb': '300474', 'locations': ("Criminal Minds S01E03 Won't Get Fooled Again WEBDL-720p.mkv",)}
+        ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {'locations': ('Test S01E02.mkv',)},
+            {'locations': ('Test S01E03.mkv',)}
         ]
     }
 }
@@ -57,6 +69,11 @@ expected_tv_show_watched_list_1 = {
         "Season 1": [
             {'imdb': 'tt0550489', 'tmdb': '282843', 'tvdb': '176357', 'locations': ('Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv',)}
         ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {'locations': ('Test S01E01.mkv',)}
+        ]
     }
 }
 
@@ -68,6 +85,11 @@ expected_tv_show_watched_list_2 = {
     frozenset({("tvdb", "75710"), ("title", "Criminal Minds"), ("imdb", "tt0452046"), ("locations", ("Criminal Minds",)), ("tmdb", "4057")}): {
         "Season 1": [
             {'imdb': 'tt0550498', 'tmdb': '282865', 'tvdb': '300474', 'locations': ("Criminal Minds S01E03 Won't Get Fooled Again WEBDL-720p.mkv",)}
+        ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {'locations': ('Test S01E03.mkv',)}
         ]
     }
 }
@@ -106,7 +128,7 @@ def test_simple_cleanup_watched():
             , "Movies": expected_movie_watched_list_2
         }
     }
-    
+
     return_watched_list_1 = cleanup_watched(user_watched_list_1, user_watched_list_2)
     return_watched_list_2 = cleanup_watched(user_watched_list_2, user_watched_list_1)
 
@@ -149,6 +171,6 @@ def test_mapping_cleanup_watched():
 
     return_watched_list_1 = cleanup_watched(user_watched_list_1, user_watched_list_2, user_mapping=user_mapping, library_mapping=library_mapping)
     return_watched_list_2 = cleanup_watched(user_watched_list_2, user_watched_list_1, user_mapping=user_mapping, library_mapping=library_mapping)
-    
+
     assert return_watched_list_1 == expected_watched_list_1
     assert return_watched_list_2 == expected_watched_list_2
