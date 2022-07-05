@@ -185,13 +185,12 @@ class Plex:
                                     break
 
                     if movie_found:
-                        if movies_search.viewCount == 0:
-                            msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
-                            if not dryrun:
-                                logger(f"Marked {msg}", 0)
-                                movies_search.markWatched()
-                            else:
-                                logger(f"Dryrun {msg}", 0)
+                        msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
+                        if not dryrun:
+                            logger(f"Marked {msg}", 0)
+                            movies_search.markWatched()
+                        else:
+                            logger(f"Dryrun {msg}", 0)
 
 
             elif library_videos.type == "show":
@@ -236,13 +235,12 @@ class Plex:
                                             break
 
                             if episode_found:
-                                if episode_search.viewCount == 0:
-                                    msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
-                                    if not dryrun:
-                                        logger(f"Marked {msg}", 0)
-                                        episode_search.markWatched()
-                                    else:
-                                        logger(f"Dryrun {msg}", 0)
+                                msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
+                                if not dryrun:
+                                    logger(f"Marked {msg}", 0)
+                                    episode_search.markWatched()
+                                else:
+                                    logger(f"Dryrun {msg}", 0)
         except Exception as e:
             logger(f"Plex: Failed to update watched for {user.title} in library {library}, Error: {e}", 2)
             raise Exception(e)
