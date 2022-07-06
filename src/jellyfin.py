@@ -16,7 +16,7 @@ class Jellyfin():
         self.users = asyncio.run(self.get_users())
 
 
-    async def query(self, query, query_type, session):
+    async def query(self, query, query_type, session, identifiers=None):
         try:
             response = None
 
@@ -27,7 +27,11 @@ class Jellyfin():
 
             if query_type == "get":
                 async with session.get(self.baseurl + query, headers=headers) as response:
-                    return await response.json()
+                    results = await response.json()
+                    # append identifiers to results
+                    if identifiers:
+                        results["Identifiers"] = identifiers
+                    return results
 
             elif query_type == "post":
                 authorization = (
@@ -39,7 +43,9 @@ class Jellyfin():
                 )
                 headers["X-Emby-Authorization"] = authorization
                 async with session.post(self.baseurl + query, headers=headers) as response:
-                    return await response.json()
+                    results = await response.json()
+                    results["identifiers"] = identifiers
+                    return results
         
         except Exception as e:
                 logger(f"Jellyfin: Query failed {e}", 2)
@@ -128,21 +134,20 @@ class Jellyfin():
         try:
             users_watched = {}
             args = []
+            tasks_watched = []
 
             for user_name, user_id in users.items():
                 # Get all libraries
                 user_name = user_name.lower()
 
                 tasks_libraries = []
-                tasks_watched = []
                 async with aiohttp.ClientSession() as session:
                     libraries = await self.query(f"/Users/{user_id}/Views", "get", session)
-                    library_id_name_tuples = []
                     for library in libraries["Items"]:
                         library_id = library["Id"]
                         library_title = library["Name"]
-                        library_id_name_tuples.append((library_id, library_title))
-                        task = asyncio.ensure_future(self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get", session))
+                        identifiers = {"library_id": library_id, "library_title": library_title}
+                        task = asyncio.ensure_future(self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&limit=1", "get", session, identifiers=identifiers))
                         tasks_libraries.append(task)
 
                     libraries = await asyncio.gather(*tasks_libraries, return_exceptions=True)
@@ -151,7 +156,8 @@ class Jellyfin():
                         if len(watched["Items"]) == 0:
                             continue
                         
-                        library_id, library_title = library_id_name_tuples.pop(0)
+                        library_id = watched["Identifiers"]["library_id"]
+                        library_title = watched["Identifiers"]["library_title"]
                         library_type = watched["Items"][0]["Type"]
 
                         skip_reason = check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
@@ -164,14 +170,13 @@ class Jellyfin():
                         task = asyncio.ensure_future(self.get_user_watched(user_name, user_id, library_type, library_id, library_title))
                         tasks_watched.append(task)
 
-            for user_watched in await asyncio.gather(*tasks_watched, return_exceptions=True):
+            watched = await asyncio.gather(*tasks_watched, return_exceptions=True)
+            for user_watched in watched:
                 for user, user_watched_temp in user_watched.items():
                     if user not in users_watched:
                         users_watched[user] = {}
                     users_watched[user].update(user_watched_temp)
-            
-            logger(users_watched,0)
-            
+                        
             return users_watched
         except Exception as e:
             logger(f"Jellyfin: Failed to get watched, Error: {e}", 2)
