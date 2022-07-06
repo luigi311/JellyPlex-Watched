@@ -44,7 +44,9 @@ class Jellyfin():
                 headers["X-Emby-Authorization"] = authorization
                 async with session.post(self.baseurl + query, headers=headers) as response:
                     results = await response.json()
-                    results["identifiers"] = identifiers
+                    # append identifiers to results
+                    if identifiers:
+                        results["Identifiers"] = identifiers
                     return results
         
         except Exception as e:
