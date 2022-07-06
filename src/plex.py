@@ -1,4 +1,4 @@
-import re
+import re, requests
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
@@ -8,7 +8,7 @@ from src.functions import logger, search_mapping, check_skip_logic, generate_lib
 
 # class plex accept base url and token and username and password but default with none
 class Plex:
-    def __init__(self, baseurl=None, token=None, username=None, password=None, servername=None):
+    def __init__(self, baseurl=None, token=None, username=None, password=None, servername=None, ssl_bypass=False):
         self.baseurl = baseurl
         self.token = token
         self.username = username
@@ -22,6 +22,7 @@ class Plex:
         try:
             if self.baseurl and self.token:
                     # Login via token
+                    if 
                     plex = PlexServer(self.baseurl, self.token)
             elif self.username and self.password and self.servername:
                 # Login via plex account
@@ -193,7 +194,7 @@ class Plex:
                         else:
                             logger(f"Dryrun {msg}", 0)
                     else:
-                        logger(f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user_name}", 1)
+                        logger(f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user.title}", 1)
 
 
             if videos_shows_ids and videos_episodes_ids:
@@ -243,12 +244,12 @@ class Plex:
                                 else:
                                     logger(f"Dryrun {msg}", 0)
                             else:
-                                logger(f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user_name}", 1)
+                                logger(f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user.title}", 1)
                     else:
-                        logger(f"Plex: Skipping show {show_search.title} as it is not in mark list for {user_name}", 1)
+                        logger(f"Plex: Skipping show {show_search.title} as it is not in mark list for {user.title}", 1)
 
             if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
-                logger(f"Jellyfin: No videos to mark as watched for {user_name} in library {library}", 1)
+                logger(f"Jellyfin: No videos to mark as watched for {user.title} in library {library}", 1)
 
         except Exception as e:
             logger(f"Plex: Failed to update watched for {user.title} in library {library}, Error: {e}", 2)
