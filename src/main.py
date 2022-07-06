@@ -37,16 +37,17 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     else:
                         logger(f"library {library_1} and {library_other} not found in watched list 2", 1)
                         continue
-
+                    
+                    _, episode_watched_list_2_keys_dict, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2])
+                    
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
-                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2])
                         for movie in watched_list_1[user_1][library_1]:
                             movie_found = False
                             for movie_key, movie_value in movie.items():
                                 if movie_key == "locations":
-                                    for location in movie_value:
-                                        if "locations" in movies_watched_list_2_keys_dict.keys():
+                                    if "locations" in movies_watched_list_2_keys_dict.keys():
+                                        for location in movie_value:
                                             if location in movies_watched_list_2_keys_dict["locations"]:
                                                 movie_found = True
                                                 break
@@ -64,7 +65,6 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     # TV Shows
                     elif isinstance(watched_list_1[user_1][library_1], dict):
                         # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
-                        _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2])
 
                         for show_key_1 in watched_list_1[user_1][library_1].keys():
                             show_key_dict = dict(show_key_1)
@@ -74,10 +74,11 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                                     for episode_key, episode_value in episode.items():
                                         # If episode_key and episode_value are in episode_watched_list_2_keys_dict exactly, then remove from watch_list_1
                                         if episode_key == "locations":
-                                            for location in episode_value:
-                                                if location in episode_watched_list_2_keys_dict["locations"]:
-                                                    episode_found = True
-                                                    break
+                                            if "locations" in episode_watched_list_2_keys_dict.keys():
+                                                for location in episode_value:
+                                                    if location in episode_watched_list_2_keys_dict["locations"]:
+                                                        episode_found = True
+                                                        break
 
                                         else:
                                             if episode_key in episode_watched_list_2_keys_dict.keys():
@@ -306,7 +307,7 @@ def generate_server_connections():
     plex_password = os.getenv("PLEX_PASSWORD", None)
     plex_servername = os.getenv("PLEX_SERVERNAME", None)
     ssl_bypass = str_to_bool(os.getenv("SSL_BYPASS", "False"))
-    
+
     if plex_baseurl and plex_token:
         plex_baseurl = plex_baseurl.split(",")
         plex_token = plex_token.split(",")
@@ -342,6 +343,7 @@ def generate_server_connections():
             servers.append(("jellyfin", Jellyfin(baseurl=baseurl.strip(), token=jellyfin_token[i].strip())))
 
     return servers
+
 
 def main_loop():
     logfile = os.getenv("LOGFILE","log.log")
@@ -417,14 +419,17 @@ def main_loop():
 def main():
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     iterations = 0
-    start = perf_counter()
-    while(iterations < 3):
+    times = []
+    while(True):
         try:
+            start = perf_counter()
             main_loop()
-            #logger(f"Looping in {sleep_duration}")
-            iterations += 1
-            #os._exit(0)
-            #sleep(sleep_duration)
+            end = perf_counter()
+            times.append(end - start)
+                        
+            logger(f"Looping in {sleep_duration}")
+            sleep(sleep_duration)
+
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
@@ -438,7 +443,8 @@ def main():
             sleep(sleep_duration)
 
         except KeyboardInterrupt:
+            logger(f"Average time: {sum(times) / len(times)}", 0)
             logger("Exiting", log_type=0)
             os._exit(0)
 
-    logger(f"Total time: {perf_counter() - start}", 0)
+    

@@ -133,6 +133,17 @@ def generate_library_guids_dict(user_list: dict):
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
+def combine_watched_dicts(dicts: list):
+    combined_dict = {}
+    for dict in dicts:
+        for key, value in dict.items():
+            if key not in combined_dict:
+                combined_dict[key] = {}
+            for subkey, subvalue in value.items():
+                combined_dict[key][subkey] = subvalue
+                
+    return combined_dict
+
 def future_thread_executor(args: list, workers: int = -1):
     futures_list = []
     results = []
