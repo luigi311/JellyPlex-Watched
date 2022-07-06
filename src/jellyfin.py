@@ -162,16 +162,14 @@ class Jellyfin():
             logger(f"Jellyfin: Failed to get watched, Error: {e}", 2)
             raise Exception(e)
 
-    def update_user_watched(self, user, user_id, library, library_id, videos, dryrun):
+    def update_user_watched(self, user_name, user_id, library, library_id, videos, dryrun):
         try:
-            logger(f"Jellyfin: Updating watched for {user} in library {library}", 1)
-            library_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&limit=1", "get")
-            library_type = library_search["Items"][0]["Type"]
+            logger(f"Jellyfin: Updating watched for {user_name} in library {library}", 1)
+            videos_shows_ids, videos_episodes_ids, videos_movies_ids = generate_library_guids_dict(videos)
 
-            # Movies
-            if library_type == "Movie":
-                _, _, videos_movies_ids = generate_library_guids_dict(videos, 2)
+            logger(f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}", 1)
 
+            if videos_movies_ids:
                 jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources", "get")
                 for jellyfin_video in jellyfin_search["Items"]:
                         movie_found = False
@@ -191,26 +189,24 @@ class Jellyfin():
 
                         if movie_found:
                             jellyfin_video_id = jellyfin_video["Id"]
-                            msg = f"{jellyfin_video['Name']} as watched for {user} in {library} for Jellyfin"
+                            msg = f"{jellyfin_video['Name']} as watched for {user_name} in {library} for Jellyfin"
                             if not dryrun:
                                 logger(f"Marking {msg}", 0)
                                 self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")
                             else:
                                 logger(f"Dryrun {msg}", 0)
+                        else:
+                            logger(f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}", 1)
+
 
 
             # TV Shows
-            if library_type == "Episode":
-                videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
-
+            if videos_shows_ids and videos_episodes_ids:
                 jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,Path", "get")
                 jellyfin_shows = [x for x in jellyfin_search["Items"]]
 
                 for jellyfin_show in jellyfin_shows:
                     show_found = False
-
-                    if jellyfin_show["Name"] == "The 13 Ghosts of Scooby-Doo":
-                        print(jellyfin_show)
 
                     if "Path" in jellyfin_show:
                         if jellyfin_show["Path"].split("/")[-1] in videos_shows_ids["locations"]:
@@ -224,6 +220,7 @@ class Jellyfin():
                                     break
 
                     if show_found:
+                        logger(f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show['Name']}", 1)
                         jellyfin_show_id = jellyfin_show["Id"]
                         jellyfin_episodes = self.query(f"/Shows/{jellyfin_show_id}/Episodes?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources", "get")
 
@@ -232,28 +229,35 @@ class Jellyfin():
 
                             if "MediaSources" in jellyfin_episode:
                                 for episode_location in jellyfin_episode["MediaSources"]:
-                                    if episode_location["Path"].split("/")[-1] in videos_episode_ids["locations"]:
+                                    if episode_location["Path"].split("/")[-1] in videos_episodes_ids["locations"]:
                                         episode_found = True
                                         break
 
                             if not episode_found:
                                 for episode_provider_source, episode_provider_id in jellyfin_episode["ProviderIds"].items():
-                                    if episode_provider_source.lower() in videos_episode_ids:
-                                        if episode_provider_id.lower() in videos_episode_ids[episode_provider_source.lower()]:
+                                    if episode_provider_source.lower() in videos_episodes_ids:
+                                        if episode_provider_id.lower() in videos_episodes_ids[episode_provider_source.lower()]:
                                             episode_found = True
                                             break
 
                             if episode_found:
                                 jellyfin_episode_id = jellyfin_episode["Id"]
-                                msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['IndexNumber']} {jellyfin_episode['Name']} as watched for {user} in {library} for Jellyfin"
+                                msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['Name']} as watched for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     logger(f"Marked {msg}", 0)
                                     self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}", "post")
                                 else:
                                     logger(f"Dryrun {msg}", 0)
+                            else:
+                                logger(f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}", 1)
+                    else:
+                        logger(f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}", 1)
+
+            if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
+                logger(f"Jellyfin: No videos to mark as watched for {user_name} in library {library}", 1)
 
         except Exception as e:
-            logger(f"Jellyfin: Error updating watched for {user} in library {library}", 2)
+            logger(f"Jellyfin: Error updating watched for {user_name} in library {library}", 2)
             raise Exception(e)
 
 
@@ -261,7 +265,9 @@ class Jellyfin():
         try:
             args = []
             for user, libraries in watched_list.items():
+                logger(f"Jellyfin: Updating for entry {user}, {libraries}", 1)
                 user_other = None
+                user_name = None
                 if user_mapping:
                     if user in user_mapping.keys():
                         user_other = user_mapping[user]
@@ -272,9 +278,11 @@ class Jellyfin():
                 for key in self.users.keys():
                     if user.lower() == key.lower():
                         user_id = self.users[key]
+                        user_name = key
                         break
                     elif user_other and user_other.lower() == key.lower():
                         user_id = self.users[key]
+                        user_name = key
                         break
 
                 if not user_id:
@@ -311,7 +319,7 @@ class Jellyfin():
                             continue
 
                     if library_id:
-                        args.append([self.update_user_watched, user, user_id, library, library_id, videos, dryrun])
+                        args.append([self.update_user_watched, user_name, user_id, library, library_id, videos, dryrun])
 
             future_thread_executor(args)
         except Exception as e:

@@ -40,7 +40,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
 
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
-                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2], 2)
+                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2])
                         for movie in watched_list_1[user_1][library_1]:
                             movie_found = False
                             for movie_key, movie_value in movie.items():
@@ -63,7 +63,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     # TV Shows
                     elif isinstance(watched_list_1[user_1][library_1], dict):
                         # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
-                        show_watched_list_2_keys_dict, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2], 3)
+                        _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2])
 
                         for show_key_1 in watched_list_1[user_1][library_1].keys():
                             show_key_dict = dict(show_key_1)
@@ -85,14 +85,14 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
 
                                         if episode_found:
                                             if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
-                                                logger(f"Removing {show_key_dict['title']} {episode} from {library_1}", 3)
+                                                logger(f"Removing {episode} from {show_key_dict['title']}", 3)
                                                 modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
                                                 break
 
                                 # Remove empty seasons
                                 if len(modified_watched_list_1[user_1][library_1][show_key_1][season]) == 0:
                                     if season in modified_watched_list_1[user_1][library_1][show_key_1]:
-                                        logger(f"Removing {season} from {library_1} because it is empty", 3)
+                                        logger(f"Removing {season} from {show_key_dict['title']} because it is empty", 3)
                                         del modified_watched_list_1[user_1][library_1][show_key_1][season]
 
                             # If the show is empty, remove the show
