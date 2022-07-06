@@ -22,7 +22,6 @@ class Plex:
         try:
             if self.baseurl and self.token:
                     # Login via token
-                    if 
                     plex = PlexServer(self.baseurl, self.token)
             elif self.username and self.password and self.servername:
                 # Login via plex account
