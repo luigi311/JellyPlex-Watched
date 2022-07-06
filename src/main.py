@@ -40,7 +40,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
 
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
-                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2], 2)
+                        _, _, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2])
                         for movie in watched_list_1[user_1][library_1]:
                             movie_found = False
                             for movie_key, movie_value in movie.items():
@@ -63,7 +63,7 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     # TV Shows
                     elif isinstance(watched_list_1[user_1][library_1], dict):
                         # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
-                        _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2], 1)
+                        _, episode_watched_list_2_keys_dict, _ = generate_library_guids_dict(watched_list_2[user_2][library_2])
 
                         for show_key_1 in watched_list_1[user_1][library_1].keys():
                             show_key_dict = dict(show_key_1)

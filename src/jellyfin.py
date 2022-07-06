@@ -165,13 +165,11 @@ class Jellyfin():
     def update_user_watched(self, user_name, user_id, library, library_id, videos, dryrun):
         try:
             logger(f"Jellyfin: Updating watched for {user_name} in library {library}", 1)
-            library_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&limit=1", "get")
-            library_type = library_search["Items"][0]["Type"]
+            videos_shows_ids, videos_episodes_ids, videos_movies_ids = generate_library_guids_dict(videos)
 
-            # Movies
-            if library_type == "Movie":
-                _, _, videos_movies_ids = generate_library_guids_dict(videos, 2)
+            logger(f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}", 1)
 
+            if videos_movies_ids:
                 jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources", "get")
                 for jellyfin_video in jellyfin_search["Items"]:
                         movie_found = False
@@ -200,11 +198,7 @@ class Jellyfin():
 
 
             # TV Shows
-            if library_type == "Episode":
-                videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
-
-                logger(f"Jellyfin: shows to mark {videos_shows_ids}\nepisodes to mark {videos_episode_ids}", 1)
-
+            if videos_shows_ids and videos_episodes_ids:
                 jellyfin_search = self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,Path", "get")
                 jellyfin_shows = [x for x in jellyfin_search["Items"]]
 
@@ -232,14 +226,14 @@ class Jellyfin():
 
                             if "MediaSources" in jellyfin_episode:
                                 for episode_location in jellyfin_episode["MediaSources"]:
-                                    if episode_location["Path"].split("/")[-1] in videos_episode_ids["locations"]:
+                                    if episode_location["Path"].split("/")[-1] in videos_episodes_ids["locations"]:
                                         episode_found = True
                                         break
 
                             if not episode_found:
                                 for episode_provider_source, episode_provider_id in jellyfin_episode["ProviderIds"].items():
-                                    if episode_provider_source.lower() in videos_episode_ids:
-                                        if episode_provider_id.lower() in videos_episode_ids[episode_provider_source.lower()]:
+                                    if episode_provider_source.lower() in videos_episodes_ids:
+                                        if episode_provider_id.lower() in videos_episodes_ids[episode_provider_source.lower()]:
                                             episode_found = True
                                             break
 
@@ -256,7 +250,7 @@ class Jellyfin():
                     else:
                         logger(f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}", 1)
             else:
-                logger(f"Jellyfin: Library {library} is not a TV Show or Movie, skipping", 2)
+                logger(f"Jellyfin: Library {library} is not a TV Show or Movie, skipping\n{library_search}", 2)
 
         except Exception as e:
             logger(f"Jellyfin: Error updating watched for {user_name} in library {library}", 2)

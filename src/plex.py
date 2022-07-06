@@ -162,10 +162,11 @@ class Plex:
     def update_user_watched (self, user, user_plex, library, videos, dryrun):
         try:
             logger(f"Plex: Updating watched for {user.title} in library {library}", 1)
-            library_videos = user_plex.library.section(library)
+            videos_shows_ids, videos_episodes_ids, videos_movies_ids = generate_library_guids_dict(videos)
+            logger(f"Plex: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}", 1)
 
-            if library_videos.type == "movie":
-                _, _, videos_movies_ids = generate_library_guids_dict(videos, 2)
+            library_videos = user_plex.library.section(library)
+            if videos_movies_ids:
                 for movies_search in library_videos.search(unwatched=True):
                     movie_found = False
                     for movie_location in movies_search.locations:
@@ -193,9 +194,7 @@ class Plex:
                             logger(f"Dryrun {msg}", 0)
 
 
-            elif library_videos.type == "show":
-                videos_shows_ids, videos_episode_ids, _ = generate_library_guids_dict(videos, 3)
-
+            if videos_shows_ids and videos_episodes_ids:
                 for show_search in library_videos.search(unwatched=True):
                     show_found = False
                     for show_location in show_search.locations:
@@ -219,7 +218,7 @@ class Plex:
                             episode_found = False
 
                             for episode_location in episode_search.locations:
-                                if episode_location.split("/")[-1] in videos_episode_ids["locations"]:
+                                if episode_location.split("/")[-1] in videos_episodes_ids["locations"]:
                                     episode_found = True
                                     break
 
@@ -228,9 +227,9 @@ class Plex:
                                     episode_guid_source = re.search(r'(.*)://', episode_guid.id).group(1).lower()
                                     episode_guid_id = re.search(r'://(.*)', episode_guid.id).group(1)
 
-                                    # If episode provider source and episode provider id are in videos_episode_ids exactly, then the episode is in the list
-                                    if episode_guid_source in videos_episode_ids.keys():
-                                        if episode_guid_id in videos_episode_ids[episode_guid_source]:
+                                    # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
+                                    if episode_guid_source in videos_episodes_ids.keys():
+                                        if episode_guid_id in videos_episodes_ids[episode_guid_source]:
                                             episode_found = True
                                             break
 
