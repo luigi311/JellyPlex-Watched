@@ -192,6 +192,8 @@ class Plex:
                             movies_search.markWatched()
                         else:
                             logger(f"Dryrun {msg}", 0)
+                    else:
+                        logger(f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user_name}", 1)
 
 
             if videos_shows_ids and videos_episodes_ids:
@@ -240,6 +242,14 @@ class Plex:
                                     episode_search.markWatched()
                                 else:
                                     logger(f"Dryrun {msg}", 0)
+                            else:
+                                logger(f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user_name}", 1)
+                    else:
+                        logger(f"Plex: Skipping show {show_search.title} as it is not in mark list for {user_name}", 1)
+
+            if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
+                logger(f"Jellyfin: No videos to mark as watched for {user_name} in library {library}", 1)
+
         except Exception as e:
             logger(f"Plex: Failed to update watched for {user.title} in library {library}, Error: {e}", 2)
             raise Exception(e)

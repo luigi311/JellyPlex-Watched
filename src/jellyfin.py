@@ -195,6 +195,9 @@ class Jellyfin():
                                 self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}", "post")
                             else:
                                 logger(f"Dryrun {msg}", 0)
+                        else:
+                            logger(f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}", 1)
+
 
 
             # TV Shows
@@ -239,18 +242,19 @@ class Jellyfin():
 
                             if episode_found:
                                 jellyfin_episode_id = jellyfin_episode["Id"]
-                                msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['IndexNumber']} {jellyfin_episode['Name']} as watched for {user_name} in {library} for Jellyfin"
+                                msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['Name']} as watched for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     logger(f"Marked {msg}", 0)
                                     self.query(f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}", "post")
                                 else:
                                     logger(f"Dryrun {msg}", 0)
                             else:
-                                logger(f"Jellyfin: Skipping episode {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['IndexNumber']} {jellyfin_episode['Name']} as it is not in mark list for {user_name}", 1)
+                                logger(f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}", 1)
                     else:
                         logger(f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}", 1)
-            else:
-                logger(f"Jellyfin: Library {library} is not a TV Show or Movie, skipping\n{library_search}", 2)
+
+            if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
+                logger(f"Jellyfin: No videos to mark as watched for {user_name} in library {library}", 1)
 
         except Exception as e:
             logger(f"Jellyfin: Error updating watched for {user_name} in library {library}", 2)
