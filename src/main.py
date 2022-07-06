@@ -1,6 +1,6 @@
-import copy, os, traceback, json
+import copy, os, traceback, json, asyncio
 from dotenv import load_dotenv
-from time import sleep
+from time import sleep, perf_counter
 
 from src.functions import logger, str_to_bool, search_mapping, generate_library_guids_dict, future_thread_executor
 from src.plex import Plex
@@ -46,9 +46,10 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                             for movie_key, movie_value in movie.items():
                                 if movie_key == "locations":
                                     for location in movie_value:
-                                        if location in movies_watched_list_2_keys_dict["locations"]:
-                                            movie_found = True
-                                            break
+                                        if "locations" in movies_watched_list_2_keys_dict.keys():
+                                            if location in movies_watched_list_2_keys_dict["locations"]:
+                                                movie_found = True
+                                                break
                                 else:
                                     if movie_key in movies_watched_list_2_keys_dict.keys():
                                         if movie_value in movies_watched_list_2_keys_dict[movie_key]:
@@ -209,6 +210,8 @@ def setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mappi
     server_1_connection = server_1[1]
     server_2_type = server_2[0]
     server_2_connection = server_2[1]
+    print(f"Server 1: {server_1_type} {server_1_connection}")
+    print(f"Server 2: {server_2_type} {server_2_connection}")
 
     server_1_users = []
     if server_1_type == "plex":
@@ -302,7 +305,8 @@ def generate_server_connections():
     plex_username = os.getenv("PLEX_USERNAME", None)
     plex_password = os.getenv("PLEX_PASSWORD", None)
     plex_servername = os.getenv("PLEX_SERVERNAME", None)
-
+    ssl_bypass = str_to_bool(os.getenv("SSL_BYPASS", "False"))
+    
     if plex_baseurl and plex_token:
         plex_baseurl = plex_baseurl.split(",")
         plex_token = plex_token.split(",")
@@ -311,7 +315,7 @@ def generate_server_connections():
             raise Exception("PLEX_BASEURL and PLEX_TOKEN must have the same number of entries")
 
         for i, url in enumerate(plex_baseurl):
-            servers.append(("plex", Plex(baseurl=url.strip(), token=plex_token[i].strip(), username=None, password=None, servername=None)))
+            servers.append(("plex", Plex(baseurl=url.strip(), token=plex_token[i].strip(), username=None, password=None, servername=None, ssl_bypass=ssl_bypass)))
 
     if plex_username and plex_password and plex_servername:
         plex_username = plex_username.split(",")
@@ -322,7 +326,7 @@ def generate_server_connections():
             raise Exception("PLEX_USERNAME, PLEX_PASSWORD and PLEX_SERVERNAME must have the same number of entries")
 
         for i, username in enumerate(plex_username):
-            servers.append(("plex", Plex(baseurl=None, token=None, username=username.strip(), password=plex_password[i].strip(), servername=plex_servername[i].strip())))
+            servers.append(("plex", Plex(baseurl=None, token=None, username=username.strip(), password=plex_password[i].strip(), servername=plex_servername[i].strip(), ssl_bypass=ssl_bypass)))
 
     jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)
     jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
@@ -389,12 +393,8 @@ def main_loop():
             server_1_users, server_2_users = setup_users(server_1, server_2, blacklist_users, whitelist_users, user_mapping)
 
             logger("Creating watched lists", 1)
-            args = [[server_1_connection.get_watched, server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]
-                    , [server_2_connection.get_watched, server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping]]
-
-            results = future_thread_executor(args)
-            server_1_watched = results[0]
-            server_2_watched = results[1]
+            server_1_watched = server_1_connection.get_watched(server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+            server_2_watched = asyncio.run(server_2_connection.get_watched(server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping))
             logger(f"Server 1 watched: {server_1_watched}", 3)
             logger(f"Server 2 watched: {server_2_watched}", 3)
 
@@ -411,19 +411,20 @@ def main_loop():
             logger(f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}", 1)
             logger(f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}", 1)
 
-            args= [[server_1_connection.update_watched, server_2_watched_filtered, user_mapping, library_mapping, dryrun]
-                , [server_2_connection.update_watched, server_1_watched_filtered, user_mapping, library_mapping, dryrun]]
-
-            future_thread_executor(args)
+            server_1_connection.update_watched(server_2_watched_filtered, user_mapping, library_mapping, dryrun)
+            asyncio.run(server_2_connection.update_watched(server_1_watched_filtered, user_mapping, library_mapping, dryrun))
 
 def main():
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
-
-    while(True):
+    iterations = 0
+    start = perf_counter()
+    while(iterations < 3):
         try:
             main_loop()
-            logger(f"Looping in {sleep_duration}")
-            sleep(sleep_duration)
+            #logger(f"Looping in {sleep_duration}")
+            iterations += 1
+            #os._exit(0)
+            #sleep(sleep_duration)
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
@@ -439,3 +440,5 @@ def main():
         except KeyboardInterrupt:
             logger("Exiting", log_type=0)
             os._exit(0)
+
+    logger(f"Total time: {perf_counter() - start}", 0)
