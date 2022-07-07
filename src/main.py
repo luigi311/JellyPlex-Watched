@@ -348,8 +348,8 @@ def generate_server_connections():
 def main_loop():
     logfile = os.getenv("LOGFILE","log.log")
     # Delete logfile if it exists
-    if os.path.exists(logfile):
-        os.remove(logfile)
+    #if os.path.exists(logfile):
+    #    os.remove(logfile)
 
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger(f"Dryrun: {dryrun}", 1)
@@ -396,7 +396,9 @@ def main_loop():
 
             logger("Creating watched lists", 1)
             server_1_watched = server_1_connection.get_watched(server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
+            logger("Finished creating watched list server 1", 0)
             server_2_watched = asyncio.run(server_2_connection.get_watched(server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping))
+            logger("Finished creating watched list server 2", 0)
             logger(f"Server 1 watched: {server_1_watched}", 3)
             logger(f"Server 2 watched: {server_2_watched}", 3)
 
@@ -412,13 +414,12 @@ def main_loop():
 
             logger(f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}", 1)
             logger(f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}", 1)
-
+            
             server_1_connection.update_watched(server_2_watched_filtered, user_mapping, library_mapping, dryrun)
             asyncio.run(server_2_connection.update_watched(server_1_watched_filtered, user_mapping, library_mapping, dryrun))
 
 def main():
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
-    iterations = 0
     times = []
     while(True):
         try:
