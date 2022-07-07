@@ -57,6 +57,7 @@ class Plex:
             logger(f"Plex: Failed to get users, Error: {e}", 2)
             raise Exception(e)
 
+
     def get_user_watched(self, user, user_plex, library):
         try:
             user_name = user.title.lower()

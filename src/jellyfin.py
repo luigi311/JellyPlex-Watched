@@ -48,6 +48,7 @@ class Jellyfin():
                 logger(f"Jellyfin: Query failed {e}", 2)
                 raise Exception(e)
 
+
     async def get_users(self):
         try:
             users = {}
@@ -66,6 +67,7 @@ class Jellyfin():
             logger(f"Jellyfin: Get users failed {e}", 2)
             raise Exception(e)
 
+
     async def get_user_watched(self, user_name, user_id, library_type, library_id, library_title):
         try:
             user_name = user_name.lower()
@@ -77,50 +79,68 @@ class Jellyfin():
             async with aiohttp.ClientSession() as session:
                 if library_type == "Movie":
                     user_watched[user_name][library_title] = []
-                    watched = await self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources", "get", session)
+                    watched = await self.query(f"/Users/{user_id}/Items?ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources", "get", session)
                     for movie in watched["Items"]:
                         if movie["UserData"]["Played"] == True:
                             movie_guids = {}
                             movie_guids["title"] = movie["Name"]
-                            if movie["ProviderIds"]:
+                            if "ProviderIds" in movie:
                                 # Lowercase movie["ProviderIds"] keys
                                 movie_guids = {k.lower(): v for k, v in movie["ProviderIds"].items()}
-                            if movie["MediaSources"]:
+                            if "MediaSources" in movie:
                                 movie_guids["locations"] = tuple([x["Path"].split("/")[-1] for x in movie["MediaSources"]])
                             user_watched[user_name][library_title].append(movie_guids)
 
                 # TV Shows
                 if library_type == "Series":
                     user_watched[user_name][library_title] = {}
-                    watched = await self.query(f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&ParentId={library_id}&Fields=ItemCounts,ProviderIds,Path", "get", session)
-                    watched_shows = [x for x in watched["Items"] if x["Type"] == "Series"]
-                    show_tasks = []
-                    for show in watched_shows:
+                    watched_shows = await self.query(f"/Users/{user_id}/Items?ParentId={library_id}&isPlaceHolder=false&Fields=ProviderIds,Path,RecursiveItemCount", "get", session)
+                    watched_shows_filtered = []
+                    for show in watched_shows["Items"]:
+                        if "PlayedPercentage" in  show["UserData"]:
+                            if show["UserData"]["PlayedPercentage"] > 0:
+                                watched_shows_filtered.append(show)
+                    seasons_tasks = []
+                    for show in watched_shows_filtered:
                         show_guids = {k.lower(): v for k, v in show["ProviderIds"].items()}
                         show_guids["title"] = show["Name"]
                         show_guids["locations"] = tuple([show["Path"].split("/")[-1]])
                         show_guids = frozenset(show_guids.items())
                         identifiers = {"show_guids": show_guids, "show_id": show["Id"]}
-                        task =  asyncio.ensure_future(self.query(f"/Shows/{show['Id']}/Seasons?userId={user_id}&Fields=ItemCounts,ProviderIds", "get", session, frozenset(identifiers.items())))
-                        show_tasks.append(task)
+                        task =  asyncio.ensure_future(self.query(f"/Shows/{show['Id']}/Seasons?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount", "get", session, frozenset(identifiers.items())))
+                        seasons_tasks.append(task)
 
-                    shows = await asyncio.gather(*show_tasks)
-                    season_tasks = []
-                    for show in shows:
-                        if len(show["Items"]) > 0:
-                            for season in show["Items"]:
-                                season_identifiers = dict(show["Identifiers"])
+                    seasons_watched = await asyncio.gather(*seasons_tasks)
+                    seasons_watched_filtered = []
+
+                    for seasons in seasons_watched:
+                        seasons_watched_filtered_dict = {}
+                        seasons_watched_filtered_dict["Identifiers"] = seasons["Identifiers"]
+                        seasons_watched_filtered_dict["Items"] = []
+                        for season in seasons["Items"]:
+                            if "PlayedPercentage" in season["UserData"]:
+                                if season["UserData"]["PlayedPercentage"] > 0:
+                                    seasons_watched_filtered_dict["Items"].append(season)
+
+                        if seasons_watched_filtered_dict["Items"]:
+                            seasons_watched_filtered.append(seasons_watched_filtered_dict)
+
+                    episodes_tasks = []
+                    for seasons in seasons_watched_filtered:
+                        if len(seasons["Items"]) > 0:
+                            for season in seasons["Items"]:
+                                season_identifiers = dict(seasons["Identifiers"])
                                 season_identifiers["season_id"] = season["Id"]
                                 season_identifiers["season_name"] = season["Name"]
-                                task = asyncio.ensure_future(self.query(f"/Shows/{season_identifiers['show_id']}/Episodes?seasonId={season['Id']}&userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources", "get", session, frozenset(season_identifiers.items())))
-                                season_tasks.append(task)
+                                task = asyncio.ensure_future(self.query(f"/Shows/{season_identifiers['show_id']}/Episodes?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&isPlayed=true&Fields=ProviderIds,MediaSources", "get", session, frozenset(season_identifiers.items())))
+                                episodes_tasks.append(task)
 
-                    seasons = await asyncio.gather(*season_tasks)
-                    for episodes in seasons:
+                    watched_episodes = await asyncio.gather(*episodes_tasks)
+                    for episodes in watched_episodes:
                         if len(episodes["Items"]) > 0:
                             for episode in episodes["Items"]:
                                 if episode["UserData"]["Played"] == True:
-                                    if episode["ProviderIds"] or episode["MediaSources"]:
+                                    if "ProviderIds" in episode or "MediaSources" in episode:
                                         episode_identifiers = dict(episodes["Identifiers"])
                                         show_guids = episode_identifiers["show_guids"]
                                         if show_guids not in user_watched[user_name][library_title]:
@@ -129,9 +149,9 @@ class Jellyfin():
                                             user_watched[user_name][library_title][show_guids][episode_identifiers["season_name"]] = []
 
                                         episode_guids = {}
-                                        if episode["ProviderIds"]:
+                                        if "ProviderIds" in episode:
                                             episode_guids = {k.lower(): v for k, v in episode["ProviderIds"].items()}
-                                        if episode["MediaSources"]:
+                                        if "MediaSources" in episode:
                                             episode_guids["locations"] = tuple([x["Path"].split("/")[-1] for x in episode["MediaSources"]])
                                         user_watched[user_name][library_title][show_guids][episode_identifiers["season_name"]].append(episode_guids)
 
@@ -139,6 +159,7 @@ class Jellyfin():
         except Exception as e:
             logger(f"Jellyfin: Failed to get watched for {user_name} in library {library_title}, Error: {e}", 2)
             raise Exception(e)
+
 
     async def get_users_watched(self, user_name, user_id, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
         try:
@@ -182,6 +203,7 @@ class Jellyfin():
             logger(f"Jellyfin: Failed to get users watched, Error: {e}", 2)
             raise Exception(e)
 
+
     async def get_watched(self, users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping=None):
         try:
             users_watched = {}
@@ -189,8 +211,6 @@ class Jellyfin():
 
             for user_name, user_id in users.items():
                 watched.append(await self.get_users_watched(user_name, user_id, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping))
-                
-
 
             for user_watched in watched:
                 user_watched_temp = combine_watched_dicts(user_watched)
@@ -203,6 +223,7 @@ class Jellyfin():
         except Exception as e:
             logger(f"Jellyfin: Failed to get watched, Error: {e}", 2)
             raise Exception(e)
+
 
     async def update_user_watched(self, user_name, user_id, library, library_id, videos, dryrun):
         try:

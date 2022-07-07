@@ -37,9 +37,9 @@ def cleanup_watched(watched_list_1, watched_list_2, user_mapping=None, library_m
                     else:
                         logger(f"library {library_1} and {library_other} not found in watched list 2", 1)
                         continue
-                    
+
                     _, episode_watched_list_2_keys_dict, movies_watched_list_2_keys_dict = generate_library_guids_dict(watched_list_2[user_2][library_2])
-                    
+
                     # Movies
                     if isinstance(watched_list_1[user_1][library_1], list):
                         for movie in watched_list_1[user_1][library_1]:
@@ -414,7 +414,7 @@ def main_loop():
 
             logger(f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}", 1)
             logger(f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}", 1)
-            
+
             server_1_connection.update_watched(server_2_watched_filtered, user_mapping, library_mapping, dryrun)
             asyncio.run(server_2_connection.update_watched(server_1_watched_filtered, user_mapping, library_mapping, dryrun))
 
@@ -448,5 +448,3 @@ def main():
                 logger(f"Average time: {sum(times) / len(times)}", 0)
             logger("Exiting", log_type=0)
             os._exit(0)
-
-    
