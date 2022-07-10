@@ -14,15 +14,20 @@ class Plex:
         self.username = username
         self.password = password
         self.servername = servername
-        self.plex = self.login()
+        self.plex = self.login(ssl_bypass)
         self.admin_user = self.plex.myPlexAccount()
         self.users = self.get_users()
 
-    def login(self):
+    def login(self, ssl_bypass=False):
         try:
             if self.baseurl and self.token:
                     # Login via token
-                    plex = PlexServer(self.baseurl, self.token)
+                    if ssl_bypass:
+                        session = requests.Session()
+                        session.verify = False
+                        plex = PlexServer(self.baseurl, self.token, session=session)
+                    else:
+                        plex = PlexServer(self.baseurl, self.token)
             elif self.username and self.password and self.servername:
                 # Login via plex account
                 account = MyPlexAccount(self.username, self.password)
@@ -51,6 +56,7 @@ class Plex:
         except Exception as e:
             logger(f"Plex: Failed to get users, Error: {e}", 2)
             raise Exception(e)
+
 
     def get_user_watched(self, user, user_plex, library):
         try:
