@@ -396,9 +396,9 @@ def main_loop():
 
             logger("Creating watched lists", 1)
             server_1_watched = server_1_connection.get_watched(server_1_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping)
-            logger("Finished creating watched list server 1", 0)
+            logger("Finished creating watched list server 1", 1)
             server_2_watched = asyncio.run(server_2_connection.get_watched(server_2_users, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping))
-            logger("Finished creating watched list server 2", 0)
+            logger("Finished creating watched list server 2", 1)
             logger(f"Server 1 watched: {server_1_watched}", 3)
             logger(f"Server 2 watched: {server_2_watched}", 3)
 
