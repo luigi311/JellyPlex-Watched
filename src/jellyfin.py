@@ -90,12 +90,13 @@ class Jellyfin:
                 if library_type == "Movie":
                     user_watched[user_name][library_title] = []
                     watched = await self.query(
-                        f"/Users/{user_id}/Items?ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources",
+                        f"/Users/{user_id}/Items"
+                        + f"?ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources",
                         "get",
                         session,
                     )
                     for movie in watched["Items"]:
-                        if movie["UserData"]["Played"] == True:
+                        if movie["UserData"]["Played"] is True:
                             movie_guids = {}
                             movie_guids["title"] = movie["Name"]
                             if "ProviderIds" in movie:
@@ -117,7 +118,8 @@ class Jellyfin:
                 if library_type == "Series":
                     user_watched[user_name][library_title] = {}
                     watched_shows = await self.query(
-                        f"/Users/{user_id}/Items?ParentId={library_id}&isPlaceHolder=false&Fields=ProviderIds,Path,RecursiveItemCount",
+                        f"/Users/{user_id}/Items"
+                        + f"?ParentId={library_id}&isPlaceHolder=false&Fields=ProviderIds,Path,RecursiveItemCount",
                         "get",
                         session,
                     )
@@ -137,7 +139,8 @@ class Jellyfin:
                         identifiers = {"show_guids": show_guids, "show_id": show["Id"]}
                         task = asyncio.ensure_future(
                             self.query(
-                                f"/Shows/{show['Id']}/Seasons?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount",
+                                f"/Shows/{show['Id']}/Seasons"
+                                + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount",
                                 "get",
                                 session,
                                 frozenset(identifiers.items()),
@@ -175,7 +178,8 @@ class Jellyfin:
                                 season_identifiers["season_name"] = season["Name"]
                                 task = asyncio.ensure_future(
                                     self.query(
-                                        f"/Shows/{season_identifiers['show_id']}/Episodes?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&isPlayed=true&Fields=ProviderIds,MediaSources",
+                                        f"/Shows/{season_identifiers['show_id']}/Episodes"
+                                        + f"?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&isPlayed=true&Fields=ProviderIds,MediaSources",
                                         "get",
                                         session,
                                         frozenset(season_identifiers.items()),
@@ -187,7 +191,7 @@ class Jellyfin:
                     for episodes in watched_episodes:
                         if len(episodes["Items"]) > 0:
                             for episode in episodes["Items"]:
-                                if episode["UserData"]["Played"] == True:
+                                if episode["UserData"]["Played"] is True:
                                     if (
                                         "ProviderIds" in episode
                                         or "MediaSources" in episode
@@ -271,7 +275,8 @@ class Jellyfin:
                     }
                     task = asyncio.ensure_future(
                         self.query(
-                            f"/Users/{user_id}/Items?ParentId={library_id}&Filters=IsPlayed&limit=1",
+                            f"/Users/{user_id}/Items"
+                            + f"?ParentId={library_id}&Filters=IsPlayed&limit=1",
                             "get",
                             session,
                             identifiers=identifiers,
@@ -380,7 +385,9 @@ class Jellyfin:
             async with aiohttp.ClientSession() as session:
                 if videos_movies_ids:
                     jellyfin_search = await self.query(
-                        f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources",
+                        f"/Users/{user_id}/Items"
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources",
                         "get",
                         session,
                     )
@@ -432,7 +439,9 @@ class Jellyfin:
                 # TV Shows
                 if videos_shows_ids and videos_episodes_ids:
                     jellyfin_search = await self.query(
-                        f"/Users/{user_id}/Items?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}&isPlayed=false&Fields=ItemCounts,ProviderIds,Path",
+                        f"/Users/{user_id}/Items"
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path",
                         "get",
                         session,
                     )
@@ -469,7 +478,8 @@ class Jellyfin:
                             )
                             jellyfin_show_id = jellyfin_show["Id"]
                             jellyfin_episodes = await self.query(
-                                f"/Shows/{jellyfin_show_id}/Episodes?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
+                                f"/Shows/{jellyfin_show_id}/Episodes"
+                                + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
                                 "get",
                                 session,
                             )

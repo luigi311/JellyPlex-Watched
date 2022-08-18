@@ -644,6 +644,9 @@ def main():
             end = perf_counter()
             times.append(end - start)
 
+            if len(times) > 0:
+                logger(f"Average time: {sum(times) / len(times)}", 0)
+
             logger(f"Looping in {sleep_duration}")
             sleep(sleep_duration)
 
@@ -659,7 +662,5 @@ def main():
             sleep(sleep_duration)
 
         except KeyboardInterrupt:
-            if len(times) > 0:
-                logger(f"Average time: {sum(times) / len(times)}", 0)
             logger("Exiting", log_type=0)
             os._exit(0)
