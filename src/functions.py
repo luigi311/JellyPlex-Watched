@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-logfile = os.getenv("LOGFILE","log.log")
+logfile = os.getenv("LOGFILE", "log.log")
+
 
 def logger(message: str, log_type=0):
     debug = str_to_bool(os.getenv("DEBUG", "True"))
@@ -29,12 +30,14 @@ def logger(message: str, log_type=0):
         file = open(logfile, "a", encoding="utf-8")
         file.write(output + "\n")
 
+
 # Reimplementation of distutils.util.strtobool due to it being deprecated
 # Source: https://github.com/PostHog/posthog/blob/01e184c29d2c10c43166f1d40a334abbc3f99d8a/posthog/utils.py#L668
 def str_to_bool(value: any) -> bool:
     if not value:
         return False
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
+
 
 # Get mapped value
 def search_mapping(dictionary: dict, key_value: str):
@@ -45,12 +48,22 @@ def search_mapping(dictionary: dict, key_value: str):
     elif key_value in dictionary.values():
         return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
     elif key_value.lower() in dictionary.values():
-        return list(dictionary.keys())[list(dictionary.values()).index(key_value.lower())]
+        return list(dictionary.keys())[
+            list(dictionary.values()).index(key_value.lower())
+        ]
     else:
         return None
 
 
-def check_skip_logic(library_title, library_type, blacklist_library, whitelist_library, blacklist_library_type, whitelist_library_type, library_mapping):
+def check_skip_logic(
+    library_title,
+    library_type,
+    blacklist_library,
+    whitelist_library,
+    blacklist_library_type,
+    whitelist_library_type,
+    library_mapping,
+):
     skip_reason = None
 
     if library_type.lower() in blacklist_library_type:
@@ -89,7 +102,7 @@ def generate_library_guids_dict(user_list: dict):
 
     try:
         show_output_keys = user_list.keys()
-        show_output_keys = ([ dict(x) for x in list(show_output_keys) ])
+        show_output_keys = [dict(x) for x in list(show_output_keys)]
         for show_key in show_output_keys:
             for provider_key, provider_value in show_key.items():
                 # Skip title
@@ -101,9 +114,11 @@ def generate_library_guids_dict(user_list: dict):
                     for show_location in provider_value:
                         show_output_dict[provider_key.lower()].append(show_location)
                 else:
-                    show_output_dict[provider_key.lower()].append(provider_value.lower())
-    except:
-        logger(f"Generating show_output_dict failed, skipping", 1)
+                    show_output_dict[provider_key.lower()].append(
+                        provider_value.lower()
+                    )
+    except Exception:
+        logger("Generating show_output_dict failed, skipping", 1)
 
     try:
         for show in user_list:
@@ -114,11 +129,15 @@ def generate_library_guids_dict(user_list: dict):
                             episode_output_dict[episode_key.lower()] = []
                         if episode_key == "locations":
                             for episode_location in episode_value:
-                                episode_output_dict[episode_key.lower()].append(episode_location)
+                                episode_output_dict[episode_key.lower()].append(
+                                    episode_location
+                                )
                         else:
-                            episode_output_dict[episode_key.lower()].append(episode_value.lower())
-    except:
-        logger(f"Generating episode_output_dict failed, skipping", 1)
+                            episode_output_dict[episode_key.lower()].append(
+                                episode_value.lower()
+                            )
+    except Exception:
+        logger("Generating episode_output_dict failed, skipping", 1)
 
     try:
         for movie in user_list:
@@ -130,28 +149,30 @@ def generate_library_guids_dict(user_list: dict):
                         movies_output_dict[movie_key.lower()].append(movie_location)
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
-    except:
-        logger(f"Generating movies_output_dict failed, skipping", 1)
+    except Exception:
+        logger("Generating movies_output_dict failed, skipping", 1)
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
+
 def combine_watched_dicts(dicts: list):
     combined_dict = {}
-    for dict in dicts:
-        for key, value in dict.items():
+    for single_dict in dicts:
+        for key, value in single_dict.items():
             if key not in combined_dict:
                 combined_dict[key] = {}
             for subkey, subvalue in value.items():
                 combined_dict[key][subkey] = subvalue
-                
+
     return combined_dict
+
 
 def future_thread_executor(args: list, workers: int = -1):
     futures_list = []
     results = []
 
     if workers == -1:
-        workers = min(32, os.cpu_count()*1.25)
+        workers = min(32, os.cpu_count() * 1.25)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         for arg in args:
