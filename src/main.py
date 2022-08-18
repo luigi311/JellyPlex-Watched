@@ -601,10 +601,6 @@ def main_loop():
             logger(f"Server 1 watched: {server_1_watched}", 3)
             logger(f"Server 2 watched: {server_2_watched}", 3)
 
-            # clone watched so it isnt modified in the cleanup function so all duplicates are actually removed
-            server_1_watched_filtered = copy.deepcopy(server_1_watched)
-            server_2_watched_filtered = copy.deepcopy(server_2_watched)
-
             logger("Cleaning Server 1 Watched", 1)
             server_1_watched_filtered = cleanup_watched(
                 server_1_watched, server_2_watched, user_mapping, library_mapping
