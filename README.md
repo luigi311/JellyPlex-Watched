@@ -56,7 +56,7 @@ Keep in sync all your users watched history between jellyfin and plex servers lo
 
 #### With .env
 
--   Create a .env file similar to .env.sample and set the MNEMONIC variable to your seed phrase
+-   Create a .env file similar to .env.sample and set the variables to match your setup
 
 -   Run
 
