@@ -1,3 +1,4 @@
 plexapi
 requests
 python-dotenv
+aiohttp

@@ -13,12 +13,14 @@ def logger(message: str, log_type=0):
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1 and (debug or debug_level == "info"):
+    elif log_type == 1 and (debug and debug_level == "info"):
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"
     elif log_type == 3 and (debug and debug_level == "debug"):
         output = f"[DEBUG]: {output}"
+    elif log_type == 4:
+        output = f"[WARNING]: {output}"
     else:
         output = None
 
@@ -101,7 +103,7 @@ def generate_library_guids_dict(user_list: dict):
                 else:
                     show_output_dict[provider_key.lower()].append(provider_value.lower())
     except:
-        pass
+        logger(f"Generating show_output_dict failed, skipping", 1)
 
     try:
         for show in user_list:
@@ -116,7 +118,7 @@ def generate_library_guids_dict(user_list: dict):
                         else:
                             episode_output_dict[episode_key.lower()].append(episode_value.lower())
     except:
-        pass
+        logger(f"Generating episode_output_dict failed, skipping", 1)
 
     try:
         for movie in user_list:
@@ -129,9 +131,20 @@ def generate_library_guids_dict(user_list: dict):
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
     except:
-        pass
+        logger(f"Generating movies_output_dict failed, skipping", 1)
 
     return show_output_dict, episode_output_dict, movies_output_dict
+
+def combine_watched_dicts(dicts: list):
+    combined_dict = {}
+    for dict in dicts:
+        for key, value in dict.items():
+            if key not in combined_dict:
+                combined_dict[key] = {}
+            for subkey, subvalue in value.items():
+                combined_dict[key][subkey] = subvalue
+                
+    return combined_dict
 
 def future_thread_executor(args: list, workers: int = -1):
     futures_list = []
