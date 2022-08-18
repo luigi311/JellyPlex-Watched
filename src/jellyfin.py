@@ -1,5 +1,5 @@
 import asyncio, aiohttp
-from src.functions import logger, search_mapping, str_to_bool, check_skip_logic, generate_library_guids_dict, future_thread_executor, combine_watched_dicts
+from src.functions import logger, search_mapping, check_skip_logic, generate_library_guids_dict, combine_watched_dicts
 
 class Jellyfin():
     def __init__(self, baseurl, token):
@@ -389,5 +389,5 @@ class Jellyfin():
 
             await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
-            logger(f"Jellyfin: Error updating watched", 2)
+            logger(f"Jellyfin: Error updating watched, {e}", 2)
             raise Exception(e)

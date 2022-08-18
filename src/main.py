@@ -2,7 +2,7 @@ import copy, os, traceback, json, asyncio
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
-from src.functions import logger, str_to_bool, search_mapping, generate_library_guids_dict, future_thread_executor
+from src.functions import logger, str_to_bool, search_mapping, generate_library_guids_dict
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 

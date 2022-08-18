@@ -103,7 +103,7 @@ def generate_library_guids_dict(user_list: dict):
                 else:
                     show_output_dict[provider_key.lower()].append(provider_value.lower())
     except:
-        logger(f"Generating show_output_dict failed, skipping", 1)
+        logger("Generating show_output_dict failed, skipping", 1)
 
     try:
         for show in user_list:
@@ -118,7 +118,7 @@ def generate_library_guids_dict(user_list: dict):
                         else:
                             episode_output_dict[episode_key.lower()].append(episode_value.lower())
     except:
-        logger(f"Generating episode_output_dict failed, skipping", 1)
+        logger("Generating episode_output_dict failed, skipping", 1)
 
     try:
         for movie in user_list:
@@ -131,19 +131,19 @@ def generate_library_guids_dict(user_list: dict):
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
     except:
-        logger(f"Generating movies_output_dict failed, skipping", 1)
+        logger("Generating movies_output_dict failed, skipping", 1)
 
     return show_output_dict, episode_output_dict, movies_output_dict
 
 def combine_watched_dicts(dicts: list):
     combined_dict = {}
-    for dict in dicts:
-        for key, value in dict.items():
+    for single_dict in dicts:
+        for key, value in single_dict.items():
             if key not in combined_dict:
                 combined_dict[key] = {}
             for subkey, subvalue in value.items():
                 combined_dict[key][subkey] = subvalue
-                
+
     return combined_dict
 
 def future_thread_executor(args: list, workers: int = -1):

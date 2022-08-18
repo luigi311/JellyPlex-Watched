@@ -165,7 +165,7 @@ class Plex:
             raise Exception(e)
 
 
-    def update_user_watched (self, user, user_plex, library, videos, dryrun):
+    def update_user_watched(self, user, user_plex, library, videos, dryrun):
         try:
             logger(f"Plex: Updating watched for {user.title} in library {library}", 1)
             videos_shows_ids, videos_episodes_ids, videos_movies_ids = generate_library_guids_dict(videos)
