@@ -518,7 +518,8 @@ class Jellyfin:
 
                                 if episode_found:
                                     jellyfin_episode_id = jellyfin_episode["Id"]
-                                    msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['Name']} as watched for {user_name} in {library} for Jellyfin"
+                                    msg = f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['Name']}"
+                                    +f" as watched for {user_name} in {library} for Jellyfin"
                                     if not dryrun:
                                         logger(f"Marked {msg}", 0)
                                         await self.query(
@@ -551,7 +552,7 @@ class Jellyfin:
 
         except Exception as e:
             logger(
-                f"Jellyfin: Error updating watched for {user_name} in library {library}",
+                f"Jellyfin: Error updating watched for {user_name} in library {library}, {e}",
                 2,
             )
             raise Exception(e)
