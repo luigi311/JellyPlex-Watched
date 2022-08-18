@@ -348,8 +348,8 @@ def generate_server_connections():
 def main_loop():
     logfile = os.getenv("LOGFILE","log.log")
     # Delete logfile if it exists
-    #if os.path.exists(logfile):
-    #    os.remove(logfile)
+    if os.path.exists(logfile):
+        os.remove(logfile)
 
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger(f"Dryrun: {dryrun}", 1)
