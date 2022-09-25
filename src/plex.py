@@ -1,4 +1,5 @@
 import re, requests
+from urllib3.poolmanager import PoolManager
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
@@ -11,6 +12,14 @@ from src.functions import (
     future_thread_executor,
 )
 
+# Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
+class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
+    def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
+        self.poolmanager = PoolManager(num_pools=connections,
+                                       maxsize=maxsize,
+                                       block=block,
+                                       assert_hostname=False,
+                                       **pool_kwargs)
 
 def get_user_watched(user, user_plex, library):
     try:
@@ -252,20 +261,22 @@ class Plex:
         self.username = username
         self.password = password
         self.servername = servername
-        self.plex = self.login(ssl_bypass)
+        self.ssl_bypass = ssl_bypass
+        self.plex = self.login(self.baseurl, self.token, ssl_bypass)
         self.admin_user = self.plex.myPlexAccount()
         self.users = self.get_users()
 
-    def login(self, ssl_bypass=False):
+    def login(self, baseurl, token, ssl_bypass=False):
         try:
-            if self.baseurl and self.token:
+            if baseurl and token:
                 # Login via token
                 if ssl_bypass:
                     session = requests.Session()
-                    session.verify = False
-                    plex = PlexServer(self.baseurl, self.token, session=session)
+                    # By pass ssl hostname check https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
+                    session.mount("https://", HostNameIgnoringAdapter())
+                    plex = PlexServer(baseurl, token, session=session)
                 else:
-                    plex = PlexServer(self.baseurl, self.token)
+                    plex = PlexServer(baseurl, token)
             elif self.username and self.password and self.servername:
                 # Login via plex account
                 account = MyPlexAccount(self.username, self.password)
@@ -312,8 +323,8 @@ class Plex:
                 if self.admin_user == user:
                     user_plex = self.plex
                 else:
-                    user_plex = PlexServer(
-                        self.plex._baseurl, user.get_token(self.plex.machineIdentifier)
+                    user_plex = self.login(
+                        self.plex._baseurl, user.get_token(self.plex.machineIdentifier), self.ssl_bypass
                     )
 
                 libraries = user_plex.library.sections()
