@@ -14,7 +14,7 @@ def logger(message: str, log_type=0):
     output = str(message)
     if log_type == 0:
         pass
-    elif log_type == 1 and (debug and debug_level == "info"):
+    elif log_type == 1 and (debug and debug_level in ("info", "debug")):
         output = f"[INFO]: {output}"
     elif log_type == 2:
         output = f"[ERROR]: {output}"

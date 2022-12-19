@@ -125,8 +125,8 @@ def setup_users(
     server_1_connection = server_1[1]
     server_2_type = server_2[0]
     server_2_connection = server_2[1]
-    print(f"Server 1: {server_1_type} {server_1_connection}")
-    print(f"Server 2: {server_2_type} {server_2_connection}")
+    logger(f"Server 1: {server_1_type} {server_1_connection}", 0)
+    logger(f"Server 2: {server_2_type} {server_2_connection}", 0)
 
     server_1_users = []
     if server_1_type == "plex":
@@ -419,7 +419,6 @@ def main_loop():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
-
             server_1_connection = server_1[1]
             server_2_connection = server_2[1]
 
