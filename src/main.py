@@ -310,6 +310,32 @@ def generate_server_connections():
 
     return servers
 
+def get_server_watched(server_connection: list, users: dict, blacklist_library: list, whitelist_library: list, blacklist_library_type: list, whitelist_library_type: list, library_mapping: dict):
+    if server_connection[0] == "plex":
+        return server_connection[1].get_watched(
+                users,
+                blacklist_library,
+                whitelist_library,
+                blacklist_library_type,
+                whitelist_library_type,
+                library_mapping,
+            )
+    elif server_connection[0] == "jellyfin":
+        return asyncio.run(server_connection[1].get_watched(
+                users,
+                blacklist_library,
+                whitelist_library,
+                blacklist_library_type,
+                whitelist_library_type,
+                library_mapping,
+            ))
+
+
+def update_server_watched(server_connection: list, server_watched_filtered: dict, user_mapping: dict, library_mapping: dict, dryrun: bool):
+    if server_connection[0] == "plex":
+        server_connection[1].update_watched(server_watched_filtered, user_mapping, library_mapping, dryrun)
+    elif server_connection[0] == "jellyfin":
+        asyncio.run(server_connection[1].update_watched(server_watched_filtered, user_mapping, library_mapping, dryrun))
 
 def main_loop():
     logfile = os.getenv("LOGFILE", "log.log")
@@ -379,7 +405,8 @@ def main_loop():
             )
 
             logger("Creating watched lists", 1)
-            server_1_watched = server_1_connection.get_watched(
+            server_1_watched = get_server_watched(
+                server_1,
                 server_1_users,
                 blacklist_library,
                 whitelist_library,
@@ -388,15 +415,14 @@ def main_loop():
                 library_mapping,
             )
             logger("Finished creating watched list server 1", 1)
-            server_2_watched = asyncio.run(
-                server_2_connection.get_watched(
-                    server_2_users,
-                    blacklist_library,
-                    whitelist_library,
-                    blacklist_library_type,
-                    whitelist_library_type,
-                    library_mapping,
-                )
+            server_2_watched = get_server_watched(
+                server_2,
+                server_2_users,
+                blacklist_library,
+                whitelist_library,
+                blacklist_library_type,
+                whitelist_library_type,
+                library_mapping,
             )
             logger("Finished creating watched list server 2", 1)
             logger(f"Server 1 watched: {server_1_watched}", 3)
@@ -421,13 +447,12 @@ def main_loop():
                 1,
             )
 
-            server_1_connection.update_watched(
-                server_2_watched_filtered, user_mapping, library_mapping, dryrun
+            update_server_watched(
+                server_1, server_2_watched_filtered, user_mapping, library_mapping, dryrun
             )
-            asyncio.run(
-                server_2_connection.update_watched(
-                    server_1_watched_filtered, user_mapping, library_mapping, dryrun
-                )
+            
+            update_server_watched(
+                server_2, server_1_watched_filtered, user_mapping, library_mapping, dryrun
             )
 
 
@@ -455,6 +480,7 @@ def main():
                 logger(error, log_type=2)
 
             logger(traceback.format_exc(), 2)
+
             logger(f"Retrying in {sleep_duration}", log_type=0)
             sleep(sleep_duration)
 

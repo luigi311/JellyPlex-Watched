@@ -239,7 +239,8 @@ class Jellyfin:
                                         ][episode_identifiers["season_name"]].append(
                                             episode_guids
                                         )
-
+           
+            logger(f"Jellyfin: Got watched for {user_name} in library {library_title}")
             return user_watched
         except Exception as e:
             logger(
@@ -342,7 +343,7 @@ class Jellyfin:
 
             for user_name, user_id in users.items():
                 watched.append(
-                    await self.get_users_watched(
+                    self.get_users_watched(
                         user_name,
                         user_id,
                         blacklist_library,
@@ -353,6 +354,7 @@ class Jellyfin:
                     )
                 )
 
+            watched = await asyncio.gather(*watched, return_exceptions=True)
             for user_watched in watched:
                 user_watched_temp = combine_watched_dicts(user_watched)
                 for user, user_watched_temp in user_watched_temp.items():
@@ -534,12 +536,12 @@ class Jellyfin:
                                 else:
                                     logger(
                                         f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}",
-                                        1,
+                                        3,
                                     )
                         else:
                             logger(
                                 f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}",
-                                1,
+                                3,
                             )
 
             if (
@@ -618,13 +620,13 @@ class Jellyfin:
                                 else:
                                     logger(
                                         f"Jellyfin: Library {library} or {library_other} not found in library list",
-                                        2,
+                                        1,
                                     )
                                     continue
                             else:
                                 logger(
                                     f"Jellyfin: Library {library} not found in library list",
-                                    2,
+                                    1,
                                 )
                                 continue
 

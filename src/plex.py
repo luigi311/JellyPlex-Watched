@@ -54,14 +54,13 @@ def get_user_watched(user, user_plex, library):
             user_watched[user_name][library.title] = {}
 
             library_videos = user_plex.library.section(library.title)
-            for show in library_videos.search(unwatched=False):
+            shows = library_videos.search(unwatched=False)
+            for show in shows:
                 show_guids = {}
                 for show_guid in show.guids:
-                    # Extract after :// from guid.id
-                    show_guid_source = (
-                        re.search(r"(.*)://", show_guid.id).group(1).lower()
-                    )
-                    show_guid_id = re.search(r"://(.*)", show_guid.id).group(1)
+                    # Extract source and id from guid.id
+                    m = re.match(r"(.*)://(.*)", show_guid.id)
+                    show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
                     show_guids[show_guid_source] = show_guid_id
 
                 show_guids["title"] = show.title
@@ -69,40 +68,33 @@ def get_user_watched(user, user_plex, library):
                     [x.split("/")[-1] for x in show.locations]
                 )
                 show_guids = frozenset(show_guids.items())
+                
+                # Get all watched episodes for show
+                episode_guids = {}
+                for episode in show.watched():
+                    if episode.viewCount > 0:
+                        episode_guids_temp = {}
+                        for guid in episode.guids:
+                            # Extract after :// from guid.id
+                            m = re.match(r"(.*)://(.*)", guid.id)
+                            guid_source, guid_id = m.group(1).lower(), m.group(2)
+                            episode_guids_temp[guid_source] = guid_id
 
-                for season in show.seasons():
-                    episode_guids = []
-                    for episode in season.episodes():
-                        if episode.viewCount > 0:
-                            episode_guids_temp = {}
-                            for guid in episode.guids:
-                                # Extract after :// from guid.id
-                                guid_source = (
-                                    re.search(r"(.*)://", guid.id).group(1).lower()
-                                )
-                                guid_id = re.search(r"://(.*)", guid.id).group(1)
-                                episode_guids_temp[guid_source] = guid_id
+                        episode_guids_temp["locations"] = tuple(
+                            [x.split("/")[-1] for x in episode.locations]
+                        )
+                        if episode.parentTitle not in episode_guids:
+                            episode_guids[episode.parentTitle] = []
+                        episode_guids[episode.parentTitle].append(episode_guids_temp)
+                    
+                if episode_guids:
+                    # append show, season, episode
+                    if show_guids not in user_watched[user_name][library.title]:
+                        user_watched[user_name][library.title][show_guids] = {}
+                    
+                    user_watched[user_name][library.title][show_guids] = episode_guids
 
-                            episode_guids_temp["locations"] = tuple(
-                                [x.split("/")[-1] for x in episode.locations]
-                            )
-                            episode_guids.append(episode_guids_temp)
-
-                    if episode_guids:
-                        # append show, season, episode
-                        if show_guids not in user_watched[user_name][library.title]:
-                            user_watched[user_name][library.title][show_guids] = {}
-                        if (
-                            season.title
-                            not in user_watched[user_name][library.title][show_guids]
-                        ):
-                            user_watched[user_name][library.title][show_guids][
-                                season.title
-                            ] = {}
-                        user_watched[user_name][library.title][show_guids][
-                            season.title
-                        ] = episode_guids
-
+        logger(f"Plex: Got watched for {user_name} in library {library.title}", 0)
         return user_watched
     except Exception as e:
         logger(
@@ -223,12 +215,12 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                         else:
                             logger(
                                 f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user.title}",
-                                1,
+                                3,
                             )
                 else:
                     logger(
                         f"Plex: Skipping show {show_search.title} as it is not in mark list for {user.title}",
-                        1,
+                        3,
                     )
 
         if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
@@ -415,12 +407,13 @@ class Plex:
                             else:
                                 logger(
                                     f"Plex: Library {library} or {library_other} not found in library list",
-                                    2,
+                                    1,
                                 )
                                 continue
                         else:
                             logger(
-                                f"Plex: Library {library} not found in library list", 2
+                                f"Plex: Library {library} not found in library list", 
+                                1,
                             )
                             continue
 

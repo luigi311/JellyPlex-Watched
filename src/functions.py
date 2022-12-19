@@ -178,28 +178,6 @@ def combine_watched_dicts(dicts: list):
     return combined_dict
 
 
-def future_thread_executor(args: list, workers: int = -1):
-    futures_list = []
-    results = []
-
-    if workers == -1:
-        workers = min(32, os.cpu_count() * 1.25)
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        for arg in args:
-            # * arg unpacks the list into actual arguments
-            futures_list.append(executor.submit(*arg))
-
-        for future in futures_list:
-            try:
-                result = future.result()
-                results.append(result)
-            except Exception as e:
-                raise Exception(e)
-
-    return results
-
-
 def cleanup_watched(
     watched_list_1, watched_list_2, user_mapping=None, library_mapping=None
 ):
@@ -327,3 +305,24 @@ def is_episode_in_dict(episode, episode_watched_list_2_keys_dict):
 
     # If the loop completes without finding a match, return False
     return False
+
+def future_thread_executor(args: list, workers: int = -1):
+    futures_list = []
+    results = []
+
+    if workers == -1:
+        workers = min(32, os.cpu_count() * 2)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for arg in args:
+            # * arg unpacks the list into actual arguments
+            futures_list.append(executor.submit(*arg))
+
+        for future in futures_list:
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                raise Exception(e)
+
+    return results
