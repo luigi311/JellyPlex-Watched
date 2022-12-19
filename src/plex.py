@@ -35,11 +35,13 @@ def get_user_library_watched(user, user_plex, library):
             0,
         )
 
+        library_videos = user_plex.library.section(library.title)
+
         if library.type == "movie":
             user_watched[user_name][library.title] = []
 
-            library_videos = user_plex.library.section(library.title)
             for video in library_videos.search(unwatched=False):
+                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
                 movie_guids = {}
                 for guid in video.guids:
                     # Extract source and id from guid.id
@@ -53,13 +55,13 @@ def get_user_library_watched(user, user_plex, library):
                 )
 
                 user_watched[user_name][library.title].append(movie_guids)
+                logger(f"Plex: Added {movie_guids} to {user_name} watched list", 3)
 
         elif library.type == "show":
             user_watched[user_name][library.title] = {}
 
-            library_videos = user_plex.library.section(library.title)
-            shows = library_videos.search(unwatched=False)
-            for show in shows:
+            for show in library_videos.search(unwatched=False):
+                logger(f"Plex: Adding {show.title} to {user_name} watched list", 3)
                 show_guids = {}
                 for show_guid in show.guids:
                     # Extract source and id from guid.id
@@ -97,8 +99,12 @@ def get_user_library_watched(user, user_plex, library):
                         user_watched[user_name][library.title][show_guids] = {}
 
                     user_watched[user_name][library.title][show_guids] = episode_guids
+                    logger(f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list", 3)
 
         logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
+        if library.title in user_watched[user_name]:
+            logger(f"Plex: {user_watched[user_name][library.title]}", 3)
+        
         return user_watched
     except Exception as e:
         logger(
