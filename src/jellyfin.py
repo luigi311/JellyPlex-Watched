@@ -105,6 +105,11 @@ class Jellyfin:
                             and movie["MediaSources"] is not {}
                         ):
                             logger(f"Jellyfin: Adding {movie['Name']} to {user_name} watched list", 3)
+                            if "ProviderIds" in movie:
+                                logger(f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}", 3)
+                            else:
+                                logger(f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}", 3)
+
                             # Create a dictionary for the movie with its title
                             movie_guids = {"title": movie["Name"]}
 

@@ -8,7 +8,7 @@ logfile = os.getenv("LOGFILE", "log.log")
 
 
 def logger(message: str, log_type=0):
-    debug = str_to_bool(os.getenv("DEBUG", "True"))
+    debug = str_to_bool(os.getenv("DEBUG", "False"))
     debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
 
     output = str(message)

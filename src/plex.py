@@ -1,4 +1,4 @@
-import re, requests
+import re, requests, json
 from urllib3.poolmanager import PoolManager
 
 from plexapi.server import PlexServer
@@ -42,6 +42,8 @@ def get_user_library_watched(user, user_plex, library):
 
             for video in library_videos.search(unwatched=False):
                 logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
+                logger(f"Plex: {video.title} {video.guids} {video.locations}", 3)
+
                 movie_guids = {}
                 for guid in video.guids:
                     # Extract source and id from guid.id
