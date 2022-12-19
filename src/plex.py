@@ -15,11 +15,14 @@ from src.functions import (
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
 class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
-        self.poolmanager = PoolManager(num_pools=connections,
-                                       maxsize=maxsize,
-                                       block=block,
-                                       assert_hostname=False,
-                                       **pool_kwargs)
+        self.poolmanager = PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            assert_hostname=False,
+            **pool_kwargs,
+        )
+
 
 def get_user_library_watched(user, user_plex, library):
     try:
@@ -39,8 +42,9 @@ def get_user_library_watched(user, user_plex, library):
             for video in library_videos.search(unwatched=False):
                 movie_guids = {}
                 for guid in video.guids:
-                    guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
-                    guid_id = re.search(r"://(.*)", guid.id).group(1)
+                    # Extract source and id from guid.id
+                    m = re.match(r"(.*)://(.*)", guid.id)
+                    guid_source, guid_id = m.group(1).lower(), m.group(2)
                     movie_guids[guid_source] = guid_id
 
                 movie_guids["title"] = video.title
@@ -68,7 +72,7 @@ def get_user_library_watched(user, user_plex, library):
                     [x.split("/")[-1] for x in show.locations]
                 )
                 show_guids = frozenset(show_guids.items())
-                
+
                 # Get all watched episodes for show
                 episode_guids = {}
                 for episode in show.watched():
@@ -86,15 +90,15 @@ def get_user_library_watched(user, user_plex, library):
                         if episode.parentTitle not in episode_guids:
                             episode_guids[episode.parentTitle] = []
                         episode_guids[episode.parentTitle].append(episode_guids_temp)
-                    
+
                 if episode_guids:
                     # append show, season, episode
                     if show_guids not in user_watched[user_name][library.title]:
                         user_watched[user_name][library.title][show_guids] = {}
-                    
+
                     user_watched[user_name][library.title][show_guids] = episode_guids
 
-        logger(f"Plex: Got watched for {user_name} in library {library.title}", 0)
+        logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
         return user_watched
     except Exception as e:
         logger(
@@ -316,7 +320,9 @@ class Plex:
                     user_plex = self.plex
                 else:
                     user_plex = self.login(
-                        self.plex._baseurl, user.get_token(self.plex.machineIdentifier), self.ssl_bypass
+                        self.plex._baseurl,
+                        user.get_token(self.plex.machineIdentifier),
+                        self.ssl_bypass,
                     )
 
                 libraries = user_plex.library.sections()
@@ -412,7 +418,7 @@ class Plex:
                                 continue
                         else:
                             logger(
-                                f"Plex: Library {library} not found in library list", 
+                                f"Plex: Library {library} not found in library list",
                                 1,
                             )
                             continue

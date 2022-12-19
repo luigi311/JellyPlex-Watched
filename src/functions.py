@@ -170,7 +170,9 @@ def combine_watched_dicts(dicts: list):
                     # If the subkey already exists in the combined dictionary,
                     # check if the values are different and raise an exception if they are
                     if combined_dict[key][subkey] != subvalue:
-                        raise ValueError(f"Conflicting values for subkey '{subkey}' under key '{key}'")
+                        raise ValueError(
+                            f"Conflicting values for subkey '{subkey}' under key '{key}'"
+                        )
                 else:
                     # If the subkey does not exist in the combined dictionary, add it
                     combined_dict[key][subkey] = subvalue
@@ -218,22 +220,56 @@ def cleanup_watched(
                 for show_key_1 in watched_list_1[user_1][library_1].keys():
                     show_key_dict = dict(show_key_1)
                     for season in watched_list_1[user_1][library_1][show_key_1]:
-                        for episode in watched_list_1[user_1][library_1][show_key_1][season]:
-                            if is_episode_in_dict(episode, episode_watched_list_2_keys_dict):
-                                 if episode in modified_watched_list_1[user_1][library_1][show_key_1][season]:
-                                    logger(f"Removing {episode} from {show_key_dict['title']}", 3)
-                                    modified_watched_list_1[user_1][library_1][show_key_1][season].remove(episode)
+                        for episode in watched_list_1[user_1][library_1][show_key_1][
+                            season
+                        ]:
+                            if is_episode_in_dict(
+                                episode, episode_watched_list_2_keys_dict
+                            ):
+                                if (
+                                    episode
+                                    in modified_watched_list_1[user_1][library_1][
+                                        show_key_1
+                                    ][season]
+                                ):
+                                    logger(
+                                        f"Removing {episode} from {show_key_dict['title']}",
+                                        3,
+                                    )
+                                    modified_watched_list_1[user_1][library_1][
+                                        show_key_1
+                                    ][season].remove(episode)
 
                         # Remove empty seasons
-                        if len(modified_watched_list_1[user_1][library_1][show_key_1][season]) == 0:
-                            if season in modified_watched_list_1[user_1][library_1][show_key_1]:
-                                logger(f"Removing {season} from {show_key_dict['title']} because it is empty", 3)
-                                del modified_watched_list_1[user_1][library_1][show_key_1][season]
+                        if (
+                            len(
+                                modified_watched_list_1[user_1][library_1][show_key_1][
+                                    season
+                                ]
+                            )
+                            == 0
+                        ):
+                            if (
+                                season
+                                in modified_watched_list_1[user_1][library_1][
+                                    show_key_1
+                                ]
+                            ):
+                                logger(
+                                    f"Removing {season} from {show_key_dict['title']} because it is empty",
+                                    3,
+                                )
+                                del modified_watched_list_1[user_1][library_1][
+                                    show_key_1
+                                ][season]
 
                     # Remove empty shows
                     if len(modified_watched_list_1[user_1][library_1][show_key_1]) == 0:
                         if show_key_1 in modified_watched_list_1[user_1][library_1]:
-                            logger(f"Removing {show_key_dict['title']} because it is empty", 3)
+                            logger(
+                                f"Removing {show_key_dict['title']} because it is empty",
+                                3,
+                            )
                             del modified_watched_list_1[user_1][library_1][show_key_1]
 
     for user_1 in watched_list_1:
@@ -280,7 +316,7 @@ def is_movie_in_dict(movie, movies_watched_list_2_keys_dict):
                 # If the movie_value is in the movies_watched_list_2_keys_dict dictionary, return True
                 if movie_value in movies_watched_list_2_keys_dict[movie_key]:
                     return True
-    
+
     # If the loop completes without finding a match, return False
     return False
 
@@ -305,6 +341,7 @@ def is_episode_in_dict(episode, episode_watched_list_2_keys_dict):
 
     # If the loop completes without finding a match, return False
     return False
+
 
 def future_thread_executor(args: list, workers: int = -1):
     futures_list = []

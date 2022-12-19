@@ -13,6 +13,7 @@ from src.jellyfin import Jellyfin
 
 load_dotenv(override=True)
 
+
 def setup_black_white_lists(
     blacklist_library: str,
     whitelist_library: str,
@@ -310,9 +311,28 @@ def generate_server_connections():
 
     return servers
 
-def get_server_watched(server_connection: list, users: dict, blacklist_library: list, whitelist_library: list, blacklist_library_type: list, whitelist_library_type: list, library_mapping: dict):
+
+def get_server_watched(
+    server_connection: list,
+    users: dict,
+    blacklist_library: list,
+    whitelist_library: list,
+    blacklist_library_type: list,
+    whitelist_library_type: list,
+    library_mapping: dict,
+):
     if server_connection[0] == "plex":
         return server_connection[1].get_watched(
+            users,
+            blacklist_library,
+            whitelist_library,
+            blacklist_library_type,
+            whitelist_library_type,
+            library_mapping,
+        )
+    elif server_connection[0] == "jellyfin":
+        return asyncio.run(
+            server_connection[1].get_watched(
                 users,
                 blacklist_library,
                 whitelist_library,
@@ -320,22 +340,27 @@ def get_server_watched(server_connection: list, users: dict, blacklist_library: 
                 whitelist_library_type,
                 library_mapping,
             )
-    elif server_connection[0] == "jellyfin":
-        return asyncio.run(server_connection[1].get_watched(
-                users,
-                blacklist_library,
-                whitelist_library,
-                blacklist_library_type,
-                whitelist_library_type,
-                library_mapping,
-            ))
+        )
 
 
-def update_server_watched(server_connection: list, server_watched_filtered: dict, user_mapping: dict, library_mapping: dict, dryrun: bool):
+def update_server_watched(
+    server_connection: list,
+    server_watched_filtered: dict,
+    user_mapping: dict,
+    library_mapping: dict,
+    dryrun: bool,
+):
     if server_connection[0] == "plex":
-        server_connection[1].update_watched(server_watched_filtered, user_mapping, library_mapping, dryrun)
+        server_connection[1].update_watched(
+            server_watched_filtered, user_mapping, library_mapping, dryrun
+        )
     elif server_connection[0] == "jellyfin":
-        asyncio.run(server_connection[1].update_watched(server_watched_filtered, user_mapping, library_mapping, dryrun))
+        asyncio.run(
+            server_connection[1].update_watched(
+                server_watched_filtered, user_mapping, library_mapping, dryrun
+            )
+        )
+
 
 def main_loop():
     logfile = os.getenv("LOGFILE", "log.log")
@@ -448,11 +473,19 @@ def main_loop():
             )
 
             update_server_watched(
-                server_1, server_2_watched_filtered, user_mapping, library_mapping, dryrun
+                server_1,
+                server_2_watched_filtered,
+                user_mapping,
+                library_mapping,
+                dryrun,
             )
-            
+
             update_server_watched(
-                server_2, server_1_watched_filtered, user_mapping, library_mapping, dryrun
+                server_2,
+                server_1_watched_filtered,
+                user_mapping,
+                library_mapping,
+                dryrun,
             )
 
 
