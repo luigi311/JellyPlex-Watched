@@ -21,7 +21,7 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
                                        assert_hostname=False,
                                        **pool_kwargs)
 
-def get_user_watched(user, user_plex, library):
+def get_user_library_watched(user, user_plex, library):
     try:
         user_name = user.title.lower()
         user_watched = {}
@@ -341,7 +341,7 @@ class Plex:
                         )
                         continue
 
-                    args.append([get_user_watched, user, user_plex, library])
+                    args.append([get_user_library_watched, user, user_plex, library])
 
             for user_watched in future_thread_executor(args):
                 for user, user_watched_temp in user_watched.items():

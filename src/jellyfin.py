@@ -73,7 +73,7 @@ class Jellyfin:
             logger(f"Jellyfin: Get users failed {e}", 2)
             raise Exception(e)
 
-    async def get_user_watched(
+    async def get_user_library_watched(
         self, user_name, user_id, library_type, library_id, library_title
     ):
         try:
@@ -316,7 +316,7 @@ class Jellyfin:
 
                     # Get watched for user
                     task = asyncio.ensure_future(
-                        self.get_user_watched(
+                        self.get_user_library_watched(
                             user_name, user_id, library_type, library_id, library_title
                         )
                     )
