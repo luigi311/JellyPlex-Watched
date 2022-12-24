@@ -101,7 +101,10 @@ def get_user_library_watched(user, user_plex, library):
                         user_watched[user_name][library.title][show_guids] = {}
 
                     user_watched[user_name][library.title][show_guids] = episode_guids
-                    logger(f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list", 3)
+                    logger(
+                        f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
+                        3,
+                    )
 
         logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
         if library.title in user_watched[user_name]:

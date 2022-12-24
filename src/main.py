@@ -15,7 +15,6 @@ from src.jellyfin import Jellyfin
 load_dotenv(override=True)
 
 
-
 def setup_users(
     server_1, server_2, blacklist_users, whitelist_users, user_mapping=None
 ):
@@ -203,7 +202,7 @@ def generate_server_connections():
 
         for i, baseurl in enumerate(jellyfin_baseurl):
             baseurl = baseurl.strip()
-            if baseurl[-1] == '/':
+            if baseurl[-1] == "/":
                 baseurl = baseurl[:-1]
             servers.append(
                 (
@@ -211,7 +210,6 @@ def generate_server_connections():
                     Jellyfin(baseurl=baseurl, token=jellyfin_token[i].strip()),
                 )
             )
-
 
     return servers
 

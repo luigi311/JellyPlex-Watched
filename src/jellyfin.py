@@ -104,11 +104,20 @@ class Jellyfin:
                             and "MediaSources" in movie
                             and movie["MediaSources"] is not {}
                         ):
-                            logger(f"Jellyfin: Adding {movie['Name']} to {user_name} watched list", 3)
+                            logger(
+                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
+                                3,
+                            )
                             if "ProviderIds" in movie:
-                                logger(f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}", 3)
+                                logger(
+                                    f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}",
+                                    3,
+                                )
                             else:
-                                logger(f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}", 3)
+                                logger(
+                                    f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}",
+                                    3,
+                                )
 
                             # Create a dictionary for the movie with its title
                             movie_guids = {"title": movie["Name"]}
@@ -133,7 +142,10 @@ class Jellyfin:
 
                             # Append the movie dictionary to the list for the given user and library
                             user_watched[user_name][library_title].append(movie_guids)
-                            logger(f"Jellyfin: Added {movie_guids} to {user_name} watched list", 3)
+                            logger(
+                                f"Jellyfin: Added {movie_guids} to {user_name} watched list",
+                                3,
+                            )
 
                 # TV Shows
                 if library_type == "Series":
@@ -158,7 +170,10 @@ class Jellyfin:
                     # Create a list of tasks to retrieve the seasons of each watched show
                     seasons_tasks = []
                     for show in watched_shows_filtered:
-                        logger(f"Jellyfin: Adding {show['Name']} to {user_name} watched list", 3)
+                        logger(
+                            f"Jellyfin: Adding {show['Name']} to {user_name} watched list",
+                            3,
+                        )
                         show_guids = {
                             k.lower(): v for k, v in show["ProviderIds"].items()
                         }
@@ -277,15 +292,16 @@ class Jellyfin:
                             ][season_dict["Identifiers"]["season_name"]] = season_dict[
                                 "Episodes"
                             ]
-                            logger(f"Jellyfin: Added {season_dict['Episodes']} to {user_name} {season_dict['Identifiers']['show_guids']} watched list", 1)
+                            logger(
+                                f"Jellyfin: Added {season_dict['Episodes']} to {user_name} {season_dict['Identifiers']['show_guids']} watched list",
+                                1,
+                            )
 
             logger(
                 f"Jellyfin: Got watched for {user_name} in library {library_title}", 1
             )
             if library_title in user_watched[user_name]:
-                logger(
-                    f"Jellyfin: {user_watched[user_name][library_title]}", 3
-                )
+                logger(f"Jellyfin: {user_watched[user_name][library_title]}", 3)
 
             return user_watched
         except Exception as e:
