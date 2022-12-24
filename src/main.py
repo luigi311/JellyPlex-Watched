@@ -1,4 +1,4 @@
-import copy, os, traceback, json, asyncio
+import os, traceback, json, asyncio
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
@@ -6,312 +6,13 @@ from src.functions import (
     logger,
     str_to_bool,
     search_mapping,
-    generate_library_guids_dict,
+    cleanup_watched,
+    setup_black_white_lists,
 )
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
 load_dotenv(override=True)
-
-
-def cleanup_watched(
-    watched_list_1, watched_list_2, user_mapping=None, library_mapping=None
-):
-    modified_watched_list_1 = copy.deepcopy(watched_list_1)
-
-    # remove entries from plex_watched that are in jellyfin_watched
-    for user_1 in watched_list_1:
-        user_other = None
-        if user_mapping:
-            user_other = search_mapping(user_mapping, user_1)
-        if user_1 in modified_watched_list_1:
-            if user_1 in watched_list_2:
-                user_2 = user_1
-            elif user_other in watched_list_2:
-                user_2 = user_other
-            else:
-                logger(f"User {user_1} and {user_other} not found in watched list 2", 1)
-                continue
-
-            for library_1 in watched_list_1[user_1]:
-                library_other = None
-                if library_mapping:
-                    library_other = search_mapping(library_mapping, library_1)
-                if library_1 in modified_watched_list_1[user_1]:
-                    if library_1 in watched_list_2[user_2]:
-                        library_2 = library_1
-                    elif library_other in watched_list_2[user_2]:
-                        library_2 = library_other
-                    else:
-                        logger(
-                            f"library {library_1} and {library_other} not found in watched list 2",
-                            1,
-                        )
-                        continue
-
-                    (
-                        _,
-                        episode_watched_list_2_keys_dict,
-                        movies_watched_list_2_keys_dict,
-                    ) = generate_library_guids_dict(watched_list_2[user_2][library_2])
-
-                    # Movies
-                    if isinstance(watched_list_1[user_1][library_1], list):
-                        for movie in watched_list_1[user_1][library_1]:
-                            movie_found = False
-                            for movie_key, movie_value in movie.items():
-                                if movie_key == "locations":
-                                    if (
-                                        "locations"
-                                        in movies_watched_list_2_keys_dict.keys()
-                                    ):
-                                        for location in movie_value:
-                                            if (
-                                                location
-                                                in movies_watched_list_2_keys_dict[
-                                                    "locations"
-                                                ]
-                                            ):
-                                                movie_found = True
-                                                break
-                                else:
-                                    if (
-                                        movie_key
-                                        in movies_watched_list_2_keys_dict.keys()
-                                    ):
-                                        if (
-                                            movie_value
-                                            in movies_watched_list_2_keys_dict[
-                                                movie_key
-                                            ]
-                                        ):
-                                            movie_found = True
-
-                                if movie_found:
-                                    logger(f"Removing {movie} from {library_1}", 3)
-                                    modified_watched_list_1[user_1][library_1].remove(
-                                        movie
-                                    )
-                                    break
-
-                    # TV Shows
-                    elif isinstance(watched_list_1[user_1][library_1], dict):
-                        # Generate full list of provider ids for episodes in watch_list_2 to easily compare if they exist in watch_list_1
-
-                        for show_key_1 in watched_list_1[user_1][library_1].keys():
-                            show_key_dict = dict(show_key_1)
-                            for season in watched_list_1[user_1][library_1][show_key_1]:
-                                for episode in watched_list_1[user_1][library_1][
-                                    show_key_1
-                                ][season]:
-                                    episode_found = False
-                                    for episode_key, episode_value in episode.items():
-                                        # If episode_key and episode_value are in episode_watched_list_2_keys_dict exactly, then remove from watch_list_1
-                                        if episode_key == "locations":
-                                            if (
-                                                "locations"
-                                                in episode_watched_list_2_keys_dict.keys()
-                                            ):
-                                                for location in episode_value:
-                                                    if (
-                                                        location
-                                                        in episode_watched_list_2_keys_dict[
-                                                            "locations"
-                                                        ]
-                                                    ):
-                                                        episode_found = True
-                                                        break
-
-                                        else:
-                                            if (
-                                                episode_key
-                                                in episode_watched_list_2_keys_dict.keys()
-                                            ):
-                                                if (
-                                                    episode_value
-                                                    in episode_watched_list_2_keys_dict[
-                                                        episode_key
-                                                    ]
-                                                ):
-                                                    episode_found = True
-
-                                        if episode_found:
-                                            if (
-                                                episode
-                                                in modified_watched_list_1[user_1][
-                                                    library_1
-                                                ][show_key_1][season]
-                                            ):
-                                                logger(
-                                                    f"Removing {episode} from {show_key_dict['title']}",
-                                                    3,
-                                                )
-                                                modified_watched_list_1[user_1][
-                                                    library_1
-                                                ][show_key_1][season].remove(episode)
-                                                break
-
-                                # Remove empty seasons
-                                if (
-                                    len(
-                                        modified_watched_list_1[user_1][library_1][
-                                            show_key_1
-                                        ][season]
-                                    )
-                                    == 0
-                                ):
-                                    if (
-                                        season
-                                        in modified_watched_list_1[user_1][library_1][
-                                            show_key_1
-                                        ]
-                                    ):
-                                        logger(
-                                            f"Removing {season} from {show_key_dict['title']} because it is empty",
-                                            3,
-                                        )
-                                        del modified_watched_list_1[user_1][library_1][
-                                            show_key_1
-                                        ][season]
-
-                            # If the show is empty, remove the show
-                            if (
-                                len(
-                                    modified_watched_list_1[user_1][library_1][
-                                        show_key_1
-                                    ]
-                                )
-                                == 0
-                            ):
-                                if (
-                                    show_key_1
-                                    in modified_watched_list_1[user_1][library_1]
-                                ):
-                                    logger(
-                                        f"Removing {show_key_dict['title']} from {library_1} because it is empty",
-                                        1,
-                                    )
-                                    del modified_watched_list_1[user_1][library_1][
-                                        show_key_1
-                                    ]
-
-    for user_1 in watched_list_1:
-        for library_1 in watched_list_1[user_1]:
-            if library_1 in modified_watched_list_1[user_1]:
-                # If library is empty then remove it
-                if len(modified_watched_list_1[user_1][library_1]) == 0:
-                    logger(f"Removing {library_1} from {user_1} because it is empty", 1)
-                    del modified_watched_list_1[user_1][library_1]
-
-        if user_1 in modified_watched_list_1:
-            # If user is empty delete user
-            if len(modified_watched_list_1[user_1]) == 0:
-                logger(f"Removing {user_1} from watched list 1 because it is empty", 1)
-                del modified_watched_list_1[user_1]
-
-    return modified_watched_list_1
-
-
-def setup_black_white_lists(
-    blacklist_library: str,
-    whitelist_library: str,
-    blacklist_library_type: str,
-    whitelist_library_type: str,
-    blacklist_users: str,
-    whitelist_users: str,
-    library_mapping=None,
-    user_mapping=None,
-):
-    if blacklist_library:
-        if len(blacklist_library) > 0:
-            blacklist_library = blacklist_library.split(",")
-            blacklist_library = [x.strip() for x in blacklist_library]
-            if library_mapping:
-                temp_library = []
-                for library in blacklist_library:
-                    library_other = search_mapping(library_mapping, library)
-                    if library_other:
-                        temp_library.append(library_other)
-
-                blacklist_library = blacklist_library + temp_library
-    else:
-        blacklist_library = []
-    logger(f"Blacklist Library: {blacklist_library}", 1)
-
-    if whitelist_library:
-        if len(whitelist_library) > 0:
-            whitelist_library = whitelist_library.split(",")
-            whitelist_library = [x.strip() for x in whitelist_library]
-            if library_mapping:
-                temp_library = []
-                for library in whitelist_library:
-                    library_other = search_mapping(library_mapping, library)
-                    if library_other:
-                        temp_library.append(library_other)
-
-                whitelist_library = whitelist_library + temp_library
-    else:
-        whitelist_library = []
-    logger(f"Whitelist Library: {whitelist_library}", 1)
-
-    if blacklist_library_type:
-        if len(blacklist_library_type) > 0:
-            blacklist_library_type = blacklist_library_type.split(",")
-            blacklist_library_type = [x.lower().strip() for x in blacklist_library_type]
-    else:
-        blacklist_library_type = []
-    logger(f"Blacklist Library Type: {blacklist_library_type}", 1)
-
-    if whitelist_library_type:
-        if len(whitelist_library_type) > 0:
-            whitelist_library_type = whitelist_library_type.split(",")
-            whitelist_library_type = [x.lower().strip() for x in whitelist_library_type]
-    else:
-        whitelist_library_type = []
-    logger(f"Whitelist Library Type: {whitelist_library_type}", 1)
-
-    if blacklist_users:
-        if len(blacklist_users) > 0:
-            blacklist_users = blacklist_users.split(",")
-            blacklist_users = [x.lower().strip() for x in blacklist_users]
-            if user_mapping:
-                temp_users = []
-                for user in blacklist_users:
-                    user_other = search_mapping(user_mapping, user)
-                    if user_other:
-                        temp_users.append(user_other)
-
-                blacklist_users = blacklist_users + temp_users
-    else:
-        blacklist_users = []
-    logger(f"Blacklist Users: {blacklist_users}", 1)
-
-    if whitelist_users:
-        if len(whitelist_users) > 0:
-            whitelist_users = whitelist_users.split(",")
-            whitelist_users = [x.lower().strip() for x in whitelist_users]
-            if user_mapping:
-                temp_users = []
-                for user in whitelist_users:
-                    user_other = search_mapping(user_mapping, user)
-                    if user_other:
-                        temp_users.append(user_other)
-
-                whitelist_users = whitelist_users + temp_users
-        else:
-            whitelist_users = []
-    else:
-        whitelist_users = []
-    logger(f"Whitelist Users: {whitelist_users}", 1)
-
-    return (
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        blacklist_users,
-        whitelist_users,
-    )
 
 
 def setup_users(
@@ -323,8 +24,8 @@ def setup_users(
     server_1_connection = server_1[1]
     server_2_type = server_2[0]
     server_2_connection = server_2[1]
-    print(f"Server 1: {server_1_type} {server_1_connection}")
-    print(f"Server 2: {server_2_type} {server_2_connection}")
+    logger(f"Server 1: {server_1_type} {server_1_connection}", 0)
+    logger(f"Server 2: {server_2_type} {server_2_connection}", 0)
 
     server_1_users = []
     if server_1_type == "plex":
@@ -500,14 +201,67 @@ def generate_server_connections():
             )
 
         for i, baseurl in enumerate(jellyfin_baseurl):
+            baseurl = baseurl.strip()
+            if baseurl[-1] == "/":
+                baseurl = baseurl[:-1]
             servers.append(
                 (
                     "jellyfin",
-                    Jellyfin(baseurl=baseurl.strip(), token=jellyfin_token[i].strip()),
+                    Jellyfin(baseurl=baseurl, token=jellyfin_token[i].strip()),
                 )
             )
 
     return servers
+
+
+def get_server_watched(
+    server_connection: list,
+    users: dict,
+    blacklist_library: list,
+    whitelist_library: list,
+    blacklist_library_type: list,
+    whitelist_library_type: list,
+    library_mapping: dict,
+):
+    if server_connection[0] == "plex":
+        return server_connection[1].get_watched(
+            users,
+            blacklist_library,
+            whitelist_library,
+            blacklist_library_type,
+            whitelist_library_type,
+            library_mapping,
+        )
+    elif server_connection[0] == "jellyfin":
+        return asyncio.run(
+            server_connection[1].get_watched(
+                users,
+                blacklist_library,
+                whitelist_library,
+                blacklist_library_type,
+                whitelist_library_type,
+                library_mapping,
+            )
+        )
+
+
+def update_server_watched(
+    server_connection: list,
+    server_watched_filtered: dict,
+    user_mapping: dict,
+    library_mapping: dict,
+    dryrun: bool,
+):
+    if server_connection[0] == "plex":
+        server_connection[1].update_watched(
+            server_watched_filtered, user_mapping, library_mapping, dryrun
+        )
+    elif server_connection[0] == "jellyfin":
+        asyncio.run(
+            server_connection[1].update_watched(
+                server_watched_filtered, user_mapping, library_mapping, dryrun
+            )
+        )
 
 
 def main_loop():
@@ -567,10 +321,6 @@ def main_loop():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
-
-            server_1_connection = server_1[1]
-            server_2_connection = server_2[1]
-
             # Create users list
             logger("Creating users list", 1)
             server_1_users, server_2_users = setup_users(
@@ -578,7 +328,8 @@ def main_loop():
             )
 
             logger("Creating watched lists", 1)
-            server_1_watched = server_1_connection.get_watched(
+            server_1_watched = get_server_watched(
+                server_1,
                 server_1_users,
                 blacklist_library,
                 whitelist_library,
@@ -587,15 +338,14 @@ def main_loop():
                 library_mapping,
             )
             logger("Finished creating watched list server 1", 1)
-            server_2_watched = asyncio.run(
-                server_2_connection.get_watched(
-                    server_2_users,
-                    blacklist_library,
-                    whitelist_library,
-                    blacklist_library_type,
-                    whitelist_library_type,
-                    library_mapping,
-                )
+            server_2_watched = get_server_watched(
+                server_2,
+                server_2_users,
+                blacklist_library,
+                whitelist_library,
+                blacklist_library_type,
+                whitelist_library_type,
+                library_mapping,
             )
             logger("Finished creating watched list server 2", 1)
             logger(f"Server 1 watched: {server_1_watched}", 3)
@@ -620,13 +370,20 @@ def main_loop():
                 1,
             )
 
-            server_1_connection.update_watched(
-                server_2_watched_filtered, user_mapping, library_mapping, dryrun
+            update_server_watched(
+                server_1,
+                server_2_watched_filtered,
+                user_mapping,
+                library_mapping,
+                dryrun,
             )
-            asyncio.run(
-                server_2_connection.update_watched(
-                    server_1_watched_filtered, user_mapping, library_mapping, dryrun
-                )
+
+            update_server_watched(
+                server_2,
+                server_1_watched_filtered,
+                user_mapping,
+                library_mapping,
+                dryrun,
             )
 
 
@@ -654,6 +411,7 @@ def main():
                 logger(error, log_type=2)
 
             logger(traceback.format_exc(), 2)
+
             logger(f"Retrying in {sleep_duration}", log_type=0)
             sleep(sleep_duration)
 
