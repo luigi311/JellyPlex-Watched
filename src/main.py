@@ -323,9 +323,6 @@ def main_loop():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
-            server_1_connection = server_1[1]
-            server_2_connection = server_2[1]
-
             # Create users list
             logger("Creating users list", 1)
             server_1_users, server_2_users = setup_users(

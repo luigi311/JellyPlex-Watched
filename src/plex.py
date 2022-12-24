@@ -1,4 +1,4 @@
-import re, requests, json
+import re, requests
 from urllib3.poolmanager import PoolManager
 
 from plexapi.server import PlexServer
@@ -106,7 +106,7 @@ def get_user_library_watched(user, user_plex, library):
         logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
         if library.title in user_watched[user_name]:
             logger(f"Plex: {user_watched[user_name][library.title]}", 3)
-        
+
         return user_watched
     except Exception as e:
         logger(

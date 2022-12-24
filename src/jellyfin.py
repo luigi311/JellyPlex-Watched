@@ -286,7 +286,7 @@ class Jellyfin:
                 logger(
                     f"Jellyfin: {user_watched[user_name][library_title]}", 3
                 )
-            
+
             return user_watched
         except Exception as e:
             logger(
