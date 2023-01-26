@@ -339,7 +339,7 @@ class Jellyfin:
                     task = asyncio.ensure_future(
                         self.query(
                             f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&limit=10000",
+                            + f"?ParentId={library_id}&Filters=IsPlayed&excludeItemTypes=Folder&limit=100",
                             "get",
                             session,
                             identifiers=identifiers,
