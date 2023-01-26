@@ -459,8 +459,8 @@ class Jellyfin:
                 if videos_movies_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources",
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&excludeItemTypes=Folder",
                         "get",
                         session,
                     )
@@ -514,7 +514,7 @@ class Jellyfin:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
                         + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path",
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path&excludeItemTypes=Folder",
                         "get",
                         session,
                     )
