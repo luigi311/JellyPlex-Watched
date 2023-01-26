@@ -358,15 +358,20 @@ class Jellyfin:
                     library_id = watched["Identifiers"]["library_id"]
                     library_title = watched["Identifiers"]["library_title"]
                     # Get all library types excluding "Folder"
-                    types = set([x["Type"] for x in watched["Items"] if x["Type"] not in ["Folder"]])
+                    types = set(
+                        [
+                            x["Type"]
+                            for x in watched["Items"]
+                            if x["Type"] not in ["Folder"]
+                        ]
+                    )
 
                     # If there are multiple types in library raise error
                     if len(types) > 1:
                         raise Exception(
                             f"Jellyfin: Library {library_title} has multiple types: {types}"
-                        )   
+                        )
                     library_type = types.pop()
-
 
                     skip_reason = check_skip_logic(
                         library_title,
