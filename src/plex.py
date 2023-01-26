@@ -262,6 +262,7 @@ class Plex:
         password=None,
         servername=None,
         ssl_bypass=False,
+        session=None,
     ):
         self.baseurl = baseurl
         self.token = token
@@ -269,21 +270,20 @@ class Plex:
         self.password = password
         self.servername = servername
         self.ssl_bypass = ssl_bypass
-        self.plex = self.login(self.baseurl, self.token, ssl_bypass)
+        if ssl_bypass:
+            # Session for ssl bypass
+            session = requests.Session()
+            # By pass ssl hostname check https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
+            session.mount("https://", HostNameIgnoringAdapter())
+        self.session = session
+        self.plex = self.login(self.baseurl, self.token)
         self.admin_user = self.plex.myPlexAccount()
         self.users = self.get_users()
 
-    def login(self, baseurl, token, ssl_bypass=False):
+    def login(self, baseurl, token):
         try:
             if baseurl and token:
-                # Login via token
-                if ssl_bypass:
-                    session = requests.Session()
-                    # By pass ssl hostname check https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
-                    session.mount("https://", HostNameIgnoringAdapter())
-                    plex = PlexServer(baseurl, token, session=session)
-                else:
-                    plex = PlexServer(baseurl, token)
+                plex = PlexServer(baseurl, token, session=self.session)
             elif self.username and self.password and self.servername:
                 # Login via plex account
                 account = MyPlexAccount(self.username, self.password)
@@ -333,7 +333,6 @@ class Plex:
                     user_plex = self.login(
                         self.plex._baseurl,
                         user.get_token(self.plex.machineIdentifier),
-                        self.ssl_bypass,
                     )
 
                 libraries = user_plex.library.sections()
@@ -398,7 +397,9 @@ class Plex:
                     user_plex = self.plex
                 else:
                     user_plex = PlexServer(
-                        self.plex._baseurl, user.get_token(self.plex.machineIdentifier)
+                        self.plex._baseurl,
+                        user.get_token(self.plex.machineIdentifier),
+                        session=self.session,
                     )
 
                 for library, videos in libraries.items():
