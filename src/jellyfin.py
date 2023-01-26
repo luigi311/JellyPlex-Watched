@@ -339,7 +339,7 @@ class Jellyfin:
                     task = asyncio.ensure_future(
                         self.query(
                             f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&limit=1",
+                            + f"?ParentId={library_id}&Filters=IsPlayed&limit=10000",
                             "get",
                             session,
                             identifiers=identifiers,
@@ -357,7 +357,16 @@ class Jellyfin:
 
                     library_id = watched["Identifiers"]["library_id"]
                     library_title = watched["Identifiers"]["library_title"]
-                    library_type = watched["Items"][0]["Type"]
+                    # Get all library types excluding "Folder"
+                    types = set([x["Type"] for x in watched["Items"] if x["Type"] not in ["Folder"]])
+
+                    # If there are multiple types in library raise error
+                    if len(types) > 1:
+                        raise Exception(
+                            f"Jellyfin: Library {library_title} has multiple types: {types}"
+                        )   
+                    library_type = types.pop()
+
 
                     skip_reason = check_skip_logic(
                         library_title,
