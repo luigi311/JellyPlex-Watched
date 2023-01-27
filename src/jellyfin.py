@@ -385,9 +385,12 @@ class Jellyfin:
 
                     # If there are multiple types in library raise error
                     if len(types) > 1:
-                        raise Exception(
-                            f"Jellyfin: Library {library_title} has multiple types: {types}"
+                        logger(
+                            f"Jellyfin: Skipping Library {library_title} due to multiple types: {types}",
+                            1,
                         )
+                        continue
+
                     library_type = types.pop()
 
                     # Get watched for user
