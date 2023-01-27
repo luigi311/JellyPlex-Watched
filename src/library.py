@@ -17,14 +17,28 @@ def check_skip_logic(
     library_other = None
     if library_mapping:
         library_other = search_mapping(library_mapping, library_title)
-    
-    skip_reason_black = check_blacklist_logic(library_title, library_type, blacklist_library, blacklist_library_type, library_mapping, library_other)
-    skip_reason_white = check_whitelist_logic(library_title, library_type, whitelist_library, whitelist_library_type, library_mapping, library_other)
-    
+
+    skip_reason_black = check_blacklist_logic(
+        library_title,
+        library_type,
+        blacklist_library,
+        blacklist_library_type,
+        library_mapping,
+        library_other,
+    )
+    skip_reason_white = check_whitelist_logic(
+        library_title,
+        library_type,
+        whitelist_library,
+        whitelist_library_type,
+        library_mapping,
+        library_other,
+    )
+
     # Combine skip reasons
     if skip_reason_black:
         skip_reason = skip_reason_black
-    
+
     if skip_reason_white:
         if skip_reason:
             skip_reason = skip_reason + " and " + skip_reason_white
@@ -33,7 +47,15 @@ def check_skip_logic(
 
     return skip_reason
 
-def check_blacklist_logic(library_title, library_type, blacklist_library, blacklist_library_type, library_mapping=None, library_other=None):
+
+def check_blacklist_logic(
+    library_title,
+    library_type,
+    blacklist_library,
+    blacklist_library_type,
+    library_mapping=None,
+    library_other=None,
+):
     skip_reason = None
     if isinstance(library_type, (list, tuple, set)):
         for library_type_item in library_type:
@@ -45,26 +67,40 @@ def check_blacklist_logic(library_title, library_type, blacklist_library, blackl
 
     if library_title.lower() in [x.lower() for x in blacklist_library]:
         if skip_reason:
-            skip_reason = skip_reason + " and " + f"{library_title} is in blacklist_library"
+            skip_reason = (
+                skip_reason + " and " + f"{library_title} is in blacklist_library"
+            )
         else:
             skip_reason = f"{library_title} is in blacklist_library"
-    
+
     if library_other:
         if library_other.lower() in [x.lower() for x in blacklist_library]:
             if skip_reason:
-                skip_reason = skip_reason + " and " + f"{library_other} is in blacklist_library"
+                skip_reason = (
+                    skip_reason + " and " + f"{library_other} is in blacklist_library"
+                )
             else:
                 skip_reason = f"{library_other} is in blacklist_library"
-    
+
     return skip_reason
 
-def check_whitelist_logic(library_title, library_type, whitelist_library, whitelist_library_type, library_mapping=None, library_other=None):
+
+def check_whitelist_logic(
+    library_title,
+    library_type,
+    whitelist_library,
+    whitelist_library_type,
+    library_mapping=None,
+    library_other=None,
+):
     skip_reason = None
     if len(whitelist_library_type) > 0:
         if isinstance(library_type, (list, tuple, set)):
             for library_type_item in library_type:
                 if library_type_item.lower() not in whitelist_library_type:
-                    skip_reason = f"{library_type_item} is not in whitelist_library_type"
+                    skip_reason = (
+                        f"{library_type_item} is not in whitelist_library_type"
+                    )
         else:
             if library_type.lower() not in whitelist_library_type:
                 skip_reason = f"{library_type} is not in whitelist_library_type"
@@ -73,29 +109,31 @@ def check_whitelist_logic(library_title, library_type, whitelist_library, whitel
     if len(whitelist_library) > 0:
         if library_title.lower() not in [x.lower() for x in whitelist_library]:
             if skip_reason:
-                skip_reason = skip_reason + " and " + f"{library_title} is not in whitelist_library"
+                skip_reason = (
+                    skip_reason
+                    + " and "
+                    + f"{library_title} is not in whitelist_library"
+                )
             else:
                 skip_reason = f"{library_title} is not in whitelist_library"
-        
+
         if library_other:
-            if library_other.lower() not in [x.lower() for x in whitelist_library]:                
+            if library_other.lower() not in [x.lower() for x in whitelist_library]:
                 if skip_reason:
-                    skip_reason = skip_reason + " and " + f"{library_other} is not in whitelist_library"
+                    skip_reason = (
+                        skip_reason
+                        + " and "
+                        + f"{library_other} is not in whitelist_library"
+                    )
                 else:
                     skip_reason = f"{library_other} is not in whitelist_library"
-    
+
     return skip_reason
 
-def generate_library_guids_dict(user_list: dict):
-    show_output_dict = {}
-    episode_output_dict = {}
-    movies_output_dict = {}
-
-    # Handle the case where user_list is empty or does not contain the expected keys and values
-    if not user_list:
-        return show_output_dict, episode_output_dict, movies_output_dict
-
+def show_title_dict(user_list: dict):
     try:
+        show_output_dict = {}
+
         show_output_keys = user_list.keys()
         show_output_keys = [dict(x) for x in list(show_output_keys)]
         for show_key in show_output_keys:
@@ -112,10 +150,15 @@ def generate_library_guids_dict(user_list: dict):
                     show_output_dict[provider_key.lower()].append(
                         provider_value.lower()
                     )
+        
+        return show_output_dict
     except Exception:
         logger("Generating show_output_dict failed, skipping", 1)
-
+        return {}
+    
+def episode_title_dict(user_list: dict):
     try:
+        episode_output_dict = {}
         for show in user_list:
             for season in user_list[show]:
                 for episode in user_list[show][season]:
@@ -131,10 +174,15 @@ def generate_library_guids_dict(user_list: dict):
                             episode_output_dict[episode_key.lower()].append(
                                 episode_value.lower()
                             )
+        
+        return episode_output_dict
     except Exception:
         logger("Generating episode_output_dict failed, skipping", 1)
+        return {}
 
+def movies_title_dict(user_list: dict):
     try:
+        movies_output_dict = {}
         for movie in user_list:
             for movie_key, movie_value in movie.items():
                 if movie_key.lower() not in movies_output_dict:
@@ -144,7 +192,19 @@ def generate_library_guids_dict(user_list: dict):
                         movies_output_dict[movie_key.lower()].append(movie_location)
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
+        
+        return movies_output_dict
     except Exception:
         logger("Generating movies_output_dict failed, skipping", 1)
+        return {}
+
+def generate_library_guids_dict(user_list: dict):
+    # Handle the case where user_list is empty or does not contain the expected keys and values
+    if not user_list:
+        return {}, {}, {}
+
+    show_output_dict = show_title_dict(user_list)
+    episode_output_dict = episode_title_dict(user_list)
+    movies_output_dict = movies_title_dict(user_list)    
 
     return show_output_dict, episode_output_dict, movies_output_dict
