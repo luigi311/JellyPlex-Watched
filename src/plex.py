@@ -396,6 +396,13 @@ class Plex:
                 if self.admin_user == user:
                     user_plex = self.plex
                 else:
+                    if type(user) is str:
+                        logger(
+                            f"Plex: {user} is not a plex object, attempting to get object for user",
+                            4,
+                        )
+                        user = self.plex.myPlexAccount().user(user)
+
                     user_plex = PlexServer(
                         self.plex._baseurl,
                         user.get_token(self.plex.machineIdentifier),
