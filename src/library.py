@@ -3,6 +3,7 @@ from src.functions import (
     search_mapping,
 )
 
+
 def check_skip_logic(
     library_title,
     library_type,
@@ -115,4 +116,3 @@ def generate_library_guids_dict(user_list: dict):
         logger("Generating movies_output_dict failed, skipping", 1)
 
     return show_output_dict, episode_output_dict, movies_output_dict
-    

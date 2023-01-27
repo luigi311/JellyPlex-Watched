@@ -5,8 +5,6 @@ from time import sleep, perf_counter
 from src.functions import (
     logger,
     str_to_bool,
-    setup_black_white_lists,
-    
 )
 from src.users import (
     generate_user_list,
@@ -17,13 +15,12 @@ from src.users import (
 from src.watched import (
     cleanup_watched,
 )
+from src.black_white import setup_black_white_lists
 
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
 load_dotenv(override=True)
-
-
 
 
 def setup_users(

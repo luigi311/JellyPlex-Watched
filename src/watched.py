@@ -5,9 +5,8 @@ from src.functions import (
     search_mapping,
 )
 
-from src.library import (
-    generate_library_guids_dict
-)
+from src.library import generate_library_guids_dict
+
 
 def combine_watched_dicts(dicts: list):
     combined_dict = {}

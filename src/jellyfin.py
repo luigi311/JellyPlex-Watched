@@ -12,6 +12,7 @@ from src.watched import (
     combine_watched_dicts,
 )
 
+
 class Jellyfin:
     def __init__(self, baseurl, token):
         self.baseurl = baseurl

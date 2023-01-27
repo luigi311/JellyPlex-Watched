@@ -3,11 +3,12 @@ from src.functions import (
     search_mapping,
 )
 
+
 def generate_user_list(server):
     # generate list of users from server 1 and server 2
     server_type = server[0]
     server_connection = server[1]
-    
+
     server_users = []
     if server_type == "plex":
         server_users = [x.title.lower() for x in server_connection.users]
@@ -15,6 +16,7 @@ def generate_user_list(server):
         server_users = [key.lower() for key in server_connection.users.keys()]
 
     return server_users
+
 
 def combine_user_lists(server_1_users, server_2_users, user_mapping):
     # combined list of overlapping users from plex and jellyfin
@@ -42,6 +44,7 @@ def combine_user_lists(server_1_users, server_2_users, user_mapping):
 
     return users
 
+
 def filter_user_lists(users, blacklist_users, whitelist_users):
     users_filtered = {}
     for user in users:
@@ -55,6 +58,7 @@ def filter_user_lists(users, blacklist_users, whitelist_users):
             users_filtered[user] = users[user]
 
     return users_filtered
+
 
 def generate_server_users(server, users):
     server_users = None
@@ -75,5 +79,5 @@ def generate_server_users(server, users):
                 or jellyfin_user.lower() in users.values()
             ):
                 server_users[jellyfin_user] = jellyfin_id
-    
+
     return server_users
