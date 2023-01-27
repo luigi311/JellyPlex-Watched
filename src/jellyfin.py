@@ -366,16 +366,9 @@ class Jellyfin:
                         ]
                     )
 
-                    # If there are multiple types in library raise error
-                    if len(types) > 1:
-                        raise Exception(
-                            f"Jellyfin: Library {library_title} has multiple types: {types}"
-                        )
-                    library_type = types.pop()
-
                     skip_reason = check_skip_logic(
                         library_title,
-                        library_type,
+                        types,
                         blacklist_library,
                         whitelist_library,
                         blacklist_library_type,
@@ -389,6 +382,13 @@ class Jellyfin:
                             1,
                         )
                         continue
+
+                    # If there are multiple types in library raise error
+                    if len(types) > 1:
+                        raise Exception(
+                            f"Jellyfin: Library {library_title} has multiple types: {types}"
+                        )
+                    library_type = types.pop()
 
                     # Get watched for user
                     task = asyncio.ensure_future(
