@@ -1,12 +1,16 @@
 import asyncio, aiohttp, traceback
+
 from src.functions import (
     logger,
     search_mapping,
+)
+from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
+)
+from src.watched import (
     combine_watched_dicts,
 )
-
 
 class Jellyfin:
     def __init__(self, baseurl, token):

@@ -7,10 +7,13 @@ from plexapi.myplex import MyPlexAccount
 from src.functions import (
     logger,
     search_mapping,
-    check_skip_logic,
-    generate_library_guids_dict,
     future_thread_executor,
 )
+from src.library import (
+    check_skip_logic,
+    generate_library_guids_dict,
+)
+
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186

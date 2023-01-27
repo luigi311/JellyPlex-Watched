@@ -5,14 +5,19 @@ from time import sleep, perf_counter
 from src.functions import (
     logger,
     str_to_bool,
-    search_mapping,
-    cleanup_watched,
     setup_black_white_lists,
+    
+)
+from src.users import (
     generate_user_list,
     combine_user_lists,
     filter_user_lists,
     generate_server_users,
 )
+from src.watched import (
+    cleanup_watched,
+)
+
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
