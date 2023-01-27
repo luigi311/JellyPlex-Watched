@@ -130,6 +130,7 @@ def check_whitelist_logic(
 
     return skip_reason
 
+
 def show_title_dict(user_list: dict):
     try:
         show_output_dict = {}
@@ -150,12 +151,13 @@ def show_title_dict(user_list: dict):
                     show_output_dict[provider_key.lower()].append(
                         provider_value.lower()
                     )
-        
+
         return show_output_dict
     except Exception:
         logger("Generating show_output_dict failed, skipping", 1)
         return {}
-    
+
+
 def episode_title_dict(user_list: dict):
     try:
         episode_output_dict = {}
@@ -174,11 +176,12 @@ def episode_title_dict(user_list: dict):
                             episode_output_dict[episode_key.lower()].append(
                                 episode_value.lower()
                             )
-        
+
         return episode_output_dict
     except Exception:
         logger("Generating episode_output_dict failed, skipping", 1)
         return {}
+
 
 def movies_title_dict(user_list: dict):
     try:
@@ -192,11 +195,12 @@ def movies_title_dict(user_list: dict):
                         movies_output_dict[movie_key.lower()].append(movie_location)
                 else:
                     movies_output_dict[movie_key.lower()].append(movie_value.lower())
-        
+
         return movies_output_dict
     except Exception:
         logger("Generating movies_output_dict failed, skipping", 1)
         return {}
+
 
 def generate_library_guids_dict(user_list: dict):
     # Handle the case where user_list is empty or does not contain the expected keys and values
@@ -205,6 +209,6 @@ def generate_library_guids_dict(user_list: dict):
 
     show_output_dict = show_title_dict(user_list)
     episode_output_dict = episode_title_dict(user_list)
-    movies_output_dict = movies_title_dict(user_list)    
+    movies_output_dict = movies_title_dict(user_list)
 
     return show_output_dict, episode_output_dict, movies_output_dict
