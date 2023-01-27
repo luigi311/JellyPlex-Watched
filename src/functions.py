@@ -168,7 +168,7 @@ def check_skip_logic(
 ):
     skip_reason = None
 
-    if type(library_type) in [list, tuple, set]:
+    if isinstance(library_type, (list, tuple, set)):
         for library_type_item in library_type:
             if library_type_item.lower() in blacklist_library_type:
                 skip_reason = "is blacklist_library_type"
@@ -187,7 +187,7 @@ def check_skip_logic(
             skip_reason = "is blacklist_library"
 
     if len(whitelist_library_type) > 0:
-        if type(library_type) in [list, tuple, set]:
+        if isinstance(library_type, (list, tuple, set)):
             for library_type_item in library_type:
                 if library_type_item.lower() not in whitelist_library_type:
                     skip_reason = "is not whitelist_library_type"
