@@ -11,48 +11,81 @@ def check_skip_logic(
     whitelist_library,
     blacklist_library_type,
     whitelist_library_type,
-    library_mapping,
+    library_mapping=None,
 ):
     skip_reason = None
-
-    if isinstance(library_type, (list, tuple, set)):
-        for library_type_item in library_type:
-            if library_type_item.lower() in blacklist_library_type:
-                skip_reason = "is blacklist_library_type"
-    else:
-        if library_type.lower() in blacklist_library_type:
-            skip_reason = "is blacklist_library_type"
-
-    if library_title.lower() in [x.lower() for x in blacklist_library]:
-        skip_reason = "is blacklist_library"
-
     library_other = None
     if library_mapping:
         library_other = search_mapping(library_mapping, library_title)
+    
+    skip_reason_black = check_blacklist_logic(library_title, library_type, blacklist_library, blacklist_library_type, library_mapping, library_other)
+    skip_reason_white = check_whitelist_logic(library_title, library_type, whitelist_library, whitelist_library_type, library_mapping, library_other)
+    
+    # Combine skip reasons
+    if skip_reason_black:
+        skip_reason = skip_reason_black
+    
+    if skip_reason_white:
+        if skip_reason:
+            skip_reason = skip_reason + " and " + skip_reason_white
+        else:
+            skip_reason = skip_reason_white
+
+    return skip_reason
+
+def check_blacklist_logic(library_title, library_type, blacklist_library, blacklist_library_type, library_mapping=None, library_other=None):
+    skip_reason = None
+    if isinstance(library_type, (list, tuple, set)):
+        for library_type_item in library_type:
+            if library_type_item.lower() in blacklist_library_type:
+                skip_reason = "is in blacklist_library_type"
+    else:
+        if library_type.lower() in blacklist_library_type:
+            skip_reason = "is in blacklist_library_type"
+
+    if library_title.lower() in [x.lower() for x in blacklist_library]:
+        if skip_reason:
+            skip_reason = skip_reason + " and " + "is in blacklist_library"
+        else:
+            skip_reason = "is in blacklist_library"
+
+    
     if library_other:
         if library_other.lower() in [x.lower() for x in blacklist_library]:
-            skip_reason = "is blacklist_library"
+            if skip_reason:
+                skip_reason = skip_reason + " and " + "is in blacklist_library"
+            else:
+                skip_reason = "is in blacklist_library"
+    
+    return skip_reason
 
+def check_whitelist_logic(library_title, library_type, whitelist_library, whitelist_library_type, library_mapping=None, library_other=None):
+    skip_reason = None
     if len(whitelist_library_type) > 0:
         if isinstance(library_type, (list, tuple, set)):
             for library_type_item in library_type:
                 if library_type_item.lower() not in whitelist_library_type:
-                    skip_reason = "is not whitelist_library_type"
+                    skip_reason = "is not in whitelist_library_type"
         else:
             if library_type.lower() not in whitelist_library_type:
-                skip_reason = "is not whitelist_library_type"
+                skip_reason = "is not in whitelist_library_type"
 
     # if whitelist is not empty and library is not in whitelist
     if len(whitelist_library) > 0:
         if library_title.lower() not in [x.lower() for x in whitelist_library]:
-            skip_reason = "is not whitelist_library"
+            if skip_reason:
+                skip_reason = skip_reason + " and " + "is not in whitelist_library"
+            else:
+                skip_reason = "is not in whitelist_library"
 
         if library_other:
             if library_other.lower() not in [x.lower() for x in whitelist_library]:
-                skip_reason = "is not whitelist_library"
-
+                if skip_reason:
+                    skip_reason = skip_reason + " and " + "is not in whitelist_library"
+                else:
+                    skip_reason = "is not in whitelist_library"
+    
     return skip_reason
-
 
 def generate_library_guids_dict(user_list: dict):
     show_output_dict = {}

@@ -138,10 +138,10 @@ def cleanup_watched(
     return modified_watched_list_1
 
 
-def get_other(watched_list_2, object_1, object_2):
-    if object_1 in watched_list_2:
+def get_other(watched_list, object_1, object_2):
+    if object_1 in watched_list:
         return object_1
-    elif object_2 in watched_list_2:
+    elif object_2 in watched_list:
         return object_2
     else:
         logger(f"{object_1} and {object_2} not found in watched list 2", 1)
