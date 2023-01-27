@@ -388,7 +388,7 @@ class Plex:
 
                     if skip_reason:
                         logger(
-                            f"Plex: Skipping library {library_title} {skip_reason}", 1
+                            f"Plex: Skipping library {library_title}: {skip_reason}", 1
                         )
                         continue
 

@@ -38,24 +38,23 @@ def check_blacklist_logic(library_title, library_type, blacklist_library, blackl
     if isinstance(library_type, (list, tuple, set)):
         for library_type_item in library_type:
             if library_type_item.lower() in blacklist_library_type:
-                skip_reason = "is in blacklist_library_type"
+                skip_reason = f"{library_type_item} is in blacklist_library_type"
     else:
         if library_type.lower() in blacklist_library_type:
-            skip_reason = "is in blacklist_library_type"
+            skip_reason = f"{library_type} is in blacklist_library_type"
 
     if library_title.lower() in [x.lower() for x in blacklist_library]:
         if skip_reason:
-            skip_reason = skip_reason + " and " + "is in blacklist_library"
+            skip_reason = skip_reason + " and " + f"{library_title} is in blacklist_library"
         else:
-            skip_reason = "is in blacklist_library"
-
+            skip_reason = f"{library_title} is in blacklist_library"
     
     if library_other:
         if library_other.lower() in [x.lower() for x in blacklist_library]:
             if skip_reason:
-                skip_reason = skip_reason + " and " + "is in blacklist_library"
+                skip_reason = skip_reason + " and " + f"{library_other} is in blacklist_library"
             else:
-                skip_reason = "is in blacklist_library"
+                skip_reason = f"{library_other} is in blacklist_library"
     
     return skip_reason
 
@@ -65,25 +64,25 @@ def check_whitelist_logic(library_title, library_type, whitelist_library, whitel
         if isinstance(library_type, (list, tuple, set)):
             for library_type_item in library_type:
                 if library_type_item.lower() not in whitelist_library_type:
-                    skip_reason = "is not in whitelist_library_type"
+                    skip_reason = f"{library_type_item} is not in whitelist_library_type"
         else:
             if library_type.lower() not in whitelist_library_type:
-                skip_reason = "is not in whitelist_library_type"
+                skip_reason = f"{library_type} is not in whitelist_library_type"
 
     # if whitelist is not empty and library is not in whitelist
     if len(whitelist_library) > 0:
         if library_title.lower() not in [x.lower() for x in whitelist_library]:
             if skip_reason:
-                skip_reason = skip_reason + " and " + "is not in whitelist_library"
+                skip_reason = skip_reason + " and " + f"{library_title} is not in whitelist_library"
             else:
-                skip_reason = "is not in whitelist_library"
-
+                skip_reason = f"{library_title} is not in whitelist_library"
+        
         if library_other:
-            if library_other.lower() not in [x.lower() for x in whitelist_library]:
+            if library_other.lower() not in [x.lower() for x in whitelist_library]:                
                 if skip_reason:
-                    skip_reason = skip_reason + " and " + "is not in whitelist_library"
+                    skip_reason = skip_reason + " and " + f"{library_other} is not in whitelist_library"
                 else:
-                    skip_reason = "is not in whitelist_library"
+                    skip_reason = f"{library_other} is not in whitelist_library"
     
     return skip_reason
 

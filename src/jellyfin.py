@@ -398,7 +398,7 @@ class Jellyfin:
 
                     if skip_reason:
                         logger(
-                            f"Jellyfin: Skipping library {library_title} {skip_reason}",
+                            f"Jellyfin: Skipping library {library_title}: {skip_reason}",
                             1,
                         )
                         continue
