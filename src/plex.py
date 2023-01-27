@@ -396,7 +396,7 @@ class Plex:
                 if self.admin_user == user:
                     user_plex = self.plex
                 else:
-                    if type(user) is str:
+                    if isinstance(user, str):
                         logger(
                             f"Plex: {user} is not a plex object, attempting to get object for user",
                             4,
