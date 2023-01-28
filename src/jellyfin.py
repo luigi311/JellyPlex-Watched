@@ -384,9 +384,9 @@ class Jellyfin:
                         continue
 
                     # If there are multiple types in library raise error
-                    if len(types) > 1:
+                    if types is None or len(types) != 1:
                         logger(
-                            f"Jellyfin: Skipping Library {library_title} due to multiple types: {types}",
+                            f"Jellyfin: Skipping Library {library_title} not a single type: {types}",
                             1,
                         )
                         continue
