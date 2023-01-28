@@ -92,7 +92,7 @@ class Jellyfin:
                     user_watched[user_name][library_title] = []
                     watched = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources",
+                        + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
                         "get",
                         session,
                     )
@@ -155,7 +155,7 @@ class Jellyfin:
                     # Retrieve a list of watched TV shows
                     watched_shows = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&isPlaceHolder=false&Fields=ProviderIds,Path,RecursiveItemCount",
+                        + f"?ParentId={library_id}&isPlaceHolder=false&IncludeItemTypes=Series&Recursive=True&Fields=ProviderIds,Path,RecursiveItemCount",
                         "get",
                         session,
                     )
@@ -362,7 +362,7 @@ class Jellyfin:
                         [
                             x["Type"]
                             for x in watched["Items"]
-                            if x["Type"] not in ["Folder"]
+                            if x["Type"] in ["Movie", "Series"]
                         ]
                     )
 
@@ -384,24 +384,28 @@ class Jellyfin:
                         continue
 
                     # If there are multiple types in library raise error
-                    if types is None or len(types) != 1:
+                    if types is None or len(types) < 1:
                         logger(
                             f"Jellyfin: Skipping Library {library_title} not a single type: {types}",
                             1,
                         )
                         continue
 
-                    library_type = types.pop()
-
-                    # Get watched for user
-                    task = asyncio.ensure_future(
-                        self.get_user_library_watched(
-                            user_name, user_id, library_type, library_id, library_title
+                    for library_type in types:
+                        # Get watched for user
+                        task = asyncio.ensure_future(
+                            self.get_user_library_watched(
+                                user_name,
+                                user_id,
+                                library_type,
+                                library_id,
+                                library_title,
+                            )
                         )
-                    )
-                    tasks_watched.append(task)
+                        tasks_watched.append(task)
 
             watched = await asyncio.gather(*tasks_watched, return_exceptions=True)
+
             return watched
         except Exception as e:
             logger(f"Jellyfin: Failed to get users watched, Error: {e}", 2)
