@@ -339,7 +339,7 @@ class Jellyfin:
                     task = asyncio.ensure_future(
                         self.query(
                             f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&excludeItemTypes=Folder&limit=100",
+                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
                             "get",
                             session,
                             identifiers=identifiers,
@@ -471,8 +471,8 @@ class Jellyfin:
                 if videos_movies_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=true&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&excludeItemTypes=Folder",
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
                         "get",
                         session,
                     )
@@ -525,8 +525,8 @@ class Jellyfin:
                 if videos_shows_ids and videos_episodes_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path&excludeItemTypes=Folder",
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                         "get",
                         session,
                     )
