@@ -92,7 +92,7 @@ class Jellyfin:
                     user_watched[user_name][library_title] = []
                     watched = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&Filters=IsPlayed&Fields=ItemCounts,ProviderIds,MediaSources",
+                        + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
                         "get",
                         session,
                     )
@@ -155,7 +155,7 @@ class Jellyfin:
                     # Retrieve a list of watched TV shows
                     watched_shows = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&isPlaceHolder=false&Fields=ProviderIds,Path,RecursiveItemCount",
+                        + f"?ParentId={library_id}&isPlaceHolder=false&IncludeItemTypes=Series&Recursive=True&Fields=ProviderIds,Path,RecursiveItemCount",
                         "get",
                         session,
                     )
@@ -339,7 +339,7 @@ class Jellyfin:
                     task = asyncio.ensure_future(
                         self.query(
                             f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&limit=1",
+                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
                             "get",
                             session,
                             identifiers=identifiers,
@@ -357,11 +357,18 @@ class Jellyfin:
 
                     library_id = watched["Identifiers"]["library_id"]
                     library_title = watched["Identifiers"]["library_title"]
-                    library_type = watched["Items"][0]["Type"]
+                    # Get all library types excluding "Folder"
+                    types = set(
+                        [
+                            x["Type"]
+                            for x in watched["Items"]
+                            if x["Type"] in ["Movie", "Series"]
+                        ]
+                    )
 
                     skip_reason = check_skip_logic(
                         library_title,
-                        library_type,
+                        types,
                         blacklist_library,
                         whitelist_library,
                         blacklist_library_type,
@@ -376,15 +383,29 @@ class Jellyfin:
                         )
                         continue
 
-                    # Get watched for user
-                    task = asyncio.ensure_future(
-                        self.get_user_library_watched(
-                            user_name, user_id, library_type, library_id, library_title
+                    # If there are multiple types in library raise error
+                    if types is None or len(types) < 1:
+                        logger(
+                            f"Jellyfin: Skipping Library {library_title} not a single type: {types}",
+                            1,
                         )
-                    )
-                    tasks_watched.append(task)
+                        continue
+
+                    for library_type in types:
+                        # Get watched for user
+                        task = asyncio.ensure_future(
+                            self.get_user_library_watched(
+                                user_name,
+                                user_id,
+                                library_type,
+                                library_id,
+                                library_title,
+                            )
+                        )
+                        tasks_watched.append(task)
 
             watched = await asyncio.gather(*tasks_watched, return_exceptions=True)
+
             return watched
         except Exception as e:
             logger(f"Jellyfin: Failed to get users watched, Error: {e}", 2)
@@ -450,8 +471,8 @@ class Jellyfin:
                 if videos_movies_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources",
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
                         "get",
                         session,
                     )
@@ -504,8 +525,8 @@ class Jellyfin:
                 if videos_shows_ids and videos_episodes_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=false&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path",
+                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                         "get",
                         session,
                     )
