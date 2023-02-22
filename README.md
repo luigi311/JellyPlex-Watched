@@ -6,7 +6,7 @@ Sync watched between jellyfin and plex locally
 
 ## Description
 
-Keep in sync all your users watched history between jellyfin and plex servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by enterying multiple options in the .env plex/jellyfin section seperated by commas.
+Keep in sync all your users watched history between jellyfin and plex servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by entering multiple options in the .env plex/jellyfin section separated by commas.
 
 ## Configuration
 
@@ -29,15 +29,15 @@ SLEEP_DURATION = "3600"
 LOGFILE = "log.log"
 
 ## Map usernames between servers in the event that they are different, order does not matter
-## Comma seperated for multiple options
+## Comma separated for multiple options
 USER_MAPPING = { "testuser2": "testuser3", "testuser1":"testuser4" }
 
 ## Map libraries between servers in the even that they are different, order does not matter
-## Comma seperated for multiple options
+## Comma separated for multiple options
 LIBRARY_MAPPING = { "Shows": "TV Shows", "Movie": "Movies" }
 
 ## Blacklisting/Whitelisting libraries, library types such as Movies/TV Shows, and users. Mappings apply so if the mapping for the user or library exist then both will be excluded.
-## Comma seperated for multiple options
+## Comma separated for multiple options
 BLACKLIST_LIBRARY = ""
 WHITELIST_LIBRARY = ""
 BLACKLIST_LIBRARY_TYPE = "" 
@@ -51,15 +51,15 @@ WHITELIST_USERS = "testuser1,testuser2"
 
 ## Recommended to use token as it is faster to connect as it is direct to the server instead of going through the plex servers
 ## URL of the plex server, use hostname or IP address if the hostname is not resolving correctly
-## Comma seperated list for multiple servers
+## Comma separated list for multiple servers
 PLEX_BASEURL = "http://localhost:32400, https://nas:32400"
 
 ## Plex token https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
-## Comma seperated list for multiple servers
+## Comma separated list for multiple servers
 PLEX_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 ## If not using plex token then use username and password of the server admin along with the servername
-## Comma seperated for multiple options
+## Comma separated for multiple options
 #PLEX_USERNAME = "PlexUser, PlexUser2"
 #PLEX_PASSWORD = "SuperSecret, SuperSecret2"
 #PLEX_SERVERNAME = "Plex Server1, Plex Server2"
@@ -73,11 +73,11 @@ SSL_BYPASS = "False"
 # Jellyfin
 
 ## Jellyfin server URL, use hostname or IP address if the hostname is not resolving correctly
-## Comma seperated list for multiple servers
+## Comma separated list for multiple servers
 JELLYFIN_BASEURL = "http://localhost:8096, http://nas:8096"
 
 ## Jellyfin api token, created manually by logging in to the jellyfin server admin dashboard and creating an api key
-## Comma seperated list for multiple servers
+## Comma separated list for multiple servers
 JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 ```
 
@@ -136,7 +136,7 @@ JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 ## Contributing
 
-I am open to recieving pull requests. If you are submitting a pull request, please make sure run it locally for a day or two to make sure it is working as expected and stable. Make all pull requests against the dev branch and nothing will be merged into the main without going through the lower branches.
+I am open to receiving pull requests. If you are submitting a pull request, please make sure run it locally for a day or two to make sure it is working as expected and stable. Make all pull requests against the dev branch and nothing will be merged into the main without going through the lower branches.
 
 ## License
 
