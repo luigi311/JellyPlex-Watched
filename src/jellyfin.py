@@ -63,7 +63,7 @@ class Jellyfin:
             async with aiohttp.ClientSession() as session:
                 response = await self.query(query_string, "get", session)
 
-            # If reponse is not empty
+            # If response is not empty
             if response:
                 for user in response:
                     users[user["Name"]] = user["Id"]
