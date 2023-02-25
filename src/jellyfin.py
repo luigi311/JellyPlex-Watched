@@ -309,7 +309,7 @@ class Jellyfin:
                 f"Jellyfin: Failed to get watched for {user_name} in library {library_title}, Error: {e}",
                 2,
             )
-            raise Exception(e)
+            return {}
 
     async def get_users_watched(
         self,

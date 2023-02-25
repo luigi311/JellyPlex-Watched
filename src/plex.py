@@ -80,20 +80,19 @@ def get_user_library_watched(user, user_plex, library):
                 # Get all watched episodes for show
                 episode_guids = {}
                 for episode in show.watched():
-                    if episode.viewCount > 0:
-                        episode_guids_temp = {}
-                        for guid in episode.guids:
-                            # Extract after :// from guid.id
-                            m = re.match(r"(.*)://(.*)", guid.id)
-                            guid_source, guid_id = m.group(1).lower(), m.group(2)
-                            episode_guids_temp[guid_source] = guid_id
+                    episode_guids_temp = {}
+                    for guid in episode.guids:
+                        # Extract after :// from guid.id
+                        m = re.match(r"(.*)://(.*)", guid.id)
+                        guid_source, guid_id = m.group(1).lower(), m.group(2)
+                        episode_guids_temp[guid_source] = guid_id
 
-                        episode_guids_temp["locations"] = tuple(
-                            [x.split("/")[-1] for x in episode.locations]
-                        )
-                        if episode.parentTitle not in episode_guids:
-                            episode_guids[episode.parentTitle] = []
-                        episode_guids[episode.parentTitle].append(episode_guids_temp)
+                    episode_guids_temp["locations"] = tuple(
+                        [x.split("/")[-1] for x in episode.locations]
+                    )
+                    if episode.parentTitle not in episode_guids:
+                        episode_guids[episode.parentTitle] = []
+                    episode_guids[episode.parentTitle].append(episode_guids_temp)
 
                 if episode_guids:
                     # append show, season, episode
@@ -116,7 +115,7 @@ def get_user_library_watched(user, user_plex, library):
             f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
             2,
         )
-        raise Exception(e)
+        return {}
 
 
 def update_user_watched(user, user_plex, library, videos, dryrun):
