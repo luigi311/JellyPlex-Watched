@@ -1,4 +1,4 @@
-import re, requests, os
+import re, requests, os, traceback
 from urllib3.poolmanager import PoolManager
 
 from plexapi.server import PlexServer
@@ -52,7 +52,7 @@ def get_user_library_watched_show(show):
             except:
                 logger(
                     f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
-                    4,
+                    1,
                 )
 
             episode_guids_temp["locations"] = tuple(
@@ -223,24 +223,30 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                 break
 
                         if not episode_found:
-                            for episode_guid in episode_search.guids:
-                                episode_guid_source = (
-                                    re.search(r"(.*)://", episode_guid.id)
-                                    .group(1)
-                                    .lower()
-                                )
-                                episode_guid_id = re.search(
-                                    r"://(.*)", episode_guid.id
-                                ).group(1)
+                            try:
+                                for episode_guid in episode_search.guids:
+                                    episode_guid_source = (
+                                        re.search(r"(.*)://", episode_guid.id)
+                                        .group(1)
+                                        .lower()
+                                    )
+                                    episode_guid_id = re.search(
+                                        r"://(.*)", episode_guid.id
+                                    ).group(1)
 
-                                # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
-                                if episode_guid_source in videos_episodes_ids.keys():
-                                    if (
-                                        episode_guid_id
-                                        in videos_episodes_ids[episode_guid_source]
-                                    ):
-                                        episode_found = True
-                                        break
+                                    # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
+                                    if episode_guid_source in videos_episodes_ids.keys():
+                                        if (
+                                            episode_guid_id
+                                            in videos_episodes_ids[episode_guid_source]
+                                        ):
+                                            episode_found = True
+                                            break
+                            except Exception as e:
+                                logger(
+                                    f"Plex: Failed to get episode guid for {episode_search.title}, Error: {e}",
+                                    1,
+                                )
 
                         if episode_found:
                             msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
@@ -271,7 +277,7 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
             f"Plex: Failed to update watched for {user.title} in library {library}, Error: {e}",
             2,
         )
-        raise Exception(e)
+        logger(traceback.format_exc(), 2)
 
 
 # class plex accept base url and token and username and password but default with none
