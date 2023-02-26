@@ -1,4 +1,4 @@
-import asyncio, aiohttp
+import asyncio, aiohttp, traceback
 from src.functions import (
     logger,
     search_mapping,
@@ -46,9 +46,14 @@ class Jellyfin:
                 ) as response:
                     results = await response.json()
 
+            if type(results) is str:
+                logger(f"Jellyfin: Query {query_type} {query} {results}", 2)
+                raise Exception(results)
+
             # append identifiers to results
             if identifiers:
                 results["Identifiers"] = identifiers
+
             return results
 
         except Exception as e:
@@ -63,7 +68,7 @@ class Jellyfin:
             async with aiohttp.ClientSession() as session:
                 response = await self.query(query_string, "get", session)
 
-            # If reponse is not empty
+            # If response is not empty
             if response:
                 for user in response:
                     users[user["Name"]] = user["Id"]
@@ -148,7 +153,7 @@ class Jellyfin:
                             )
 
                 # TV Shows
-                if library_type == "Series":
+                if library_type in ["Series", "Episode"]:
                     # Initialize an empty dictionary for the given user and library
                     user_watched[user_name][library_title] = {}
 
@@ -184,6 +189,7 @@ class Jellyfin:
                             "show_guids": show_guids,
                             "show_id": show["Id"],
                         }
+
                         season_task = asyncio.ensure_future(
                             self.query(
                                 f"/Shows/{show['Id']}/Seasons"
@@ -309,7 +315,9 @@ class Jellyfin:
                 f"Jellyfin: Failed to get watched for {user_name} in library {library_title}, Error: {e}",
                 2,
             )
-            raise Exception(e)
+
+            logger(traceback.format_exc(), 2)
+            return {}
 
     async def get_users_watched(
         self,
@@ -362,7 +370,7 @@ class Jellyfin:
                         [
                             x["Type"]
                             for x in watched["Items"]
-                            if x["Type"] in ["Movie", "Series"]
+                            if x["Type"] in ["Movie", "Series", "Episode"]
                         ]
                     )
 
@@ -385,8 +393,14 @@ class Jellyfin:
 
                     # If there are multiple types in library raise error
                     if types is None or len(types) < 1:
+                        all_types = set(
+                            [
+                                x["Type"]
+                                for x in watched["Items"]
+                            ]
+                        )
                         logger(
-                            f"Jellyfin: Skipping Library {library_title} not a single type: {types}",
+                            f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}",
                             1,
                         )
                         continue

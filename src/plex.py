@@ -1,4 +1,4 @@
-import re, requests
+import re, requests, os, traceback
 from urllib3.poolmanager import PoolManager
 
 from plexapi.server import PlexServer
@@ -22,6 +22,52 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
             assert_hostname=False,
             **pool_kwargs,
         )
+
+
+def get_user_library_watched_show(show):
+    try:
+        show_guids = {}
+        for show_guid in show.guids:
+            # Extract source and id from guid.id
+            m = re.match(r"(.*)://(.*)", show_guid.id)
+            show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
+            show_guids[show_guid_source] = show_guid_id
+
+        show_guids["title"] = show.title
+        show_guids["locations"] = tuple([x.split("/")[-1] for x in show.locations])
+        show_guids = frozenset(show_guids.items())
+
+        # Get all watched episodes for show
+        episode_guids = {}
+        watched_episodes = show.watched()
+        for episode in watched_episodes:
+            episode_guids_temp = {}
+            try:
+                if len(episode.guids) > 0:
+                    for guid in episode.guids:
+                        # Extract after :// from guid.id
+                        m = re.match(r"(.*)://(.*)", guid.id)
+                        guid_source, guid_id = m.group(1).lower(), m.group(2)
+                        episode_guids_temp[guid_source] = guid_id
+            except:
+                logger(
+                    f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
+                    1,
+                )
+
+            episode_guids_temp["locations"] = tuple(
+                [x.split("/")[-1] for x in episode.locations]
+            )
+
+            if episode.parentTitle not in episode_guids:
+                episode_guids[episode.parentTitle] = []
+
+            episode_guids[episode.parentTitle].append(episode_guids_temp)
+
+        return show_guids, episode_guids
+
+    except Exception as e:
+        return {}, {}
 
 
 def get_user_library_watched(user, user_plex, library):
@@ -61,41 +107,17 @@ def get_user_library_watched(user, user_plex, library):
 
         elif library.type == "show":
             user_watched[user_name][library.title] = {}
+            shows = library_videos.search(unwatched=False)
 
-            for show in library_videos.search(unwatched=False):
-                logger(f"Plex: Adding {show.title} to {user_name} watched list", 3)
-                show_guids = {}
-                for show_guid in show.guids:
-                    # Extract source and id from guid.id
-                    m = re.match(r"(.*)://(.*)", show_guid.id)
-                    show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
-                    show_guids[show_guid_source] = show_guid_id
+            # Parallelize show processing
+            args = []
+            for show in shows:
+                args.append([get_user_library_watched_show, show])
 
-                show_guids["title"] = show.title
-                show_guids["locations"] = tuple(
-                    [x.split("/")[-1] for x in show.locations]
-                )
-                show_guids = frozenset(show_guids.items())
-
-                # Get all watched episodes for show
-                episode_guids = {}
-                for episode in show.watched():
-                    if episode.viewCount > 0:
-                        episode_guids_temp = {}
-                        for guid in episode.guids:
-                            # Extract after :// from guid.id
-                            m = re.match(r"(.*)://(.*)", guid.id)
-                            guid_source, guid_id = m.group(1).lower(), m.group(2)
-                            episode_guids_temp[guid_source] = guid_id
-
-                        episode_guids_temp["locations"] = tuple(
-                            [x.split("/")[-1] for x in episode.locations]
-                        )
-                        if episode.parentTitle not in episode_guids:
-                            episode_guids[episode.parentTitle] = []
-                        episode_guids[episode.parentTitle].append(episode_guids_temp)
-
-                if episode_guids:
+            for show_guids, episode_guids in future_thread_executor(
+                args, workers=min(os.cpu_count(), 4)
+            ):
+                if show_guids and episode_guids:
                     # append show, season, episode
                     if show_guids not in user_watched[user_name][library.title]:
                         user_watched[user_name][library.title][show_guids] = {}
@@ -116,7 +138,7 @@ def get_user_library_watched(user, user_plex, library):
             f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
             2,
         )
-        raise Exception(e)
+        return {}
 
 
 def update_user_watched(user, user_plex, library, videos, dryrun):
@@ -201,24 +223,30 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                 break
 
                         if not episode_found:
-                            for episode_guid in episode_search.guids:
-                                episode_guid_source = (
-                                    re.search(r"(.*)://", episode_guid.id)
-                                    .group(1)
-                                    .lower()
-                                )
-                                episode_guid_id = re.search(
-                                    r"://(.*)", episode_guid.id
-                                ).group(1)
+                            try:
+                                for episode_guid in episode_search.guids:
+                                    episode_guid_source = (
+                                        re.search(r"(.*)://", episode_guid.id)
+                                        .group(1)
+                                        .lower()
+                                    )
+                                    episode_guid_id = re.search(
+                                        r"://(.*)", episode_guid.id
+                                    ).group(1)
 
-                                # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
-                                if episode_guid_source in videos_episodes_ids.keys():
-                                    if (
-                                        episode_guid_id
-                                        in videos_episodes_ids[episode_guid_source]
-                                    ):
-                                        episode_found = True
-                                        break
+                                    # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
+                                    if episode_guid_source in videos_episodes_ids.keys():
+                                        if (
+                                            episode_guid_id
+                                            in videos_episodes_ids[episode_guid_source]
+                                        ):
+                                            episode_found = True
+                                            break
+                            except Exception as e:
+                                logger(
+                                    f"Plex: Failed to get episode guid for {episode_search.title}, Error: {e}",
+                                    1,
+                                )
 
                         if episode_found:
                             msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
@@ -249,7 +277,7 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
             f"Plex: Failed to update watched for {user.title} in library {library}, Error: {e}",
             2,
         )
-        raise Exception(e)
+        logger(traceback.format_exc(), 2)
 
 
 # class plex accept base url and token and username and password but default with none
