@@ -5,10 +5,18 @@ from time import sleep, perf_counter
 from src.functions import (
     logger,
     str_to_bool,
-    search_mapping,
-    cleanup_watched,
-    setup_black_white_lists,
 )
+from src.users import (
+    generate_user_list,
+    combine_user_lists,
+    filter_user_lists,
+    generate_server_users,
+)
+from src.watched import (
+    cleanup_watched,
+)
+from src.black_white import setup_black_white_lists
+
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 
@@ -18,106 +26,27 @@ load_dotenv(override=True)
 def setup_users(
     server_1, server_2, blacklist_users, whitelist_users, user_mapping=None
 ):
-    # generate list of users from server 1 and server 2
-    server_1_type = server_1[0]
-    server_1_connection = server_1[1]
-    server_2_type = server_2[0]
-    server_2_connection = server_2[1]
-    logger(f"Server 1: {server_1_type} {server_1_connection}", 0)
-    logger(f"Server 2: {server_2_type} {server_2_connection}", 0)
+    server_1_users = generate_user_list(server_1)
+    server_2_users = generate_user_list(server_2)
 
-    server_1_users = []
-    if server_1_type == "plex":
-        server_1_users = [x.title.lower() for x in server_1_connection.users]
-    elif server_1_type == "jellyfin":
-        server_1_users = [key.lower() for key in server_1_connection.users.keys()]
-
-    server_2_users = []
-    if server_2_type == "plex":
-        server_2_users = [x.title.lower() for x in server_2_connection.users]
-    elif server_2_type == "jellyfin":
-        server_2_users = [key.lower() for key in server_2_connection.users.keys()]
-
-    # combined list of overlapping users from plex and jellyfin
-    users = {}
-
-    for server_1_user in server_1_users:
-        if user_mapping:
-            jellyfin_plex_mapped_user = search_mapping(user_mapping, server_1_user)
-            if jellyfin_plex_mapped_user:
-                users[server_1_user] = jellyfin_plex_mapped_user
-                continue
-
-        if server_1_user in server_2_users:
-            users[server_1_user] = server_1_user
-
-    for server_2_user in server_2_users:
-        if user_mapping:
-            plex_jellyfin_mapped_user = search_mapping(user_mapping, server_2_user)
-            if plex_jellyfin_mapped_user:
-                users[plex_jellyfin_mapped_user] = server_2_user
-                continue
-
-        if server_2_user in server_1_users:
-            users[server_2_user] = server_2_user
-
+    users = combine_user_lists(server_1_users, server_2_users, user_mapping)
     logger(f"User list that exist on both servers {users}", 1)
 
-    users_filtered = {}
-    for user in users:
-        # whitelist_user is not empty and user lowercase is not in whitelist lowercase
-        if len(whitelist_users) > 0:
-            if user not in whitelist_users and users[user] not in whitelist_users:
-                logger(f"{user} or {users[user]} is not in whitelist", 1)
-                continue
-
-        if user not in blacklist_users and users[user] not in blacklist_users:
-            users_filtered[user] = users[user]
-
+    users_filtered = filter_user_lists(users, blacklist_users, whitelist_users)
     logger(f"Filtered user list {users_filtered}", 1)
 
-    if server_1_type == "plex":
-        output_server_1_users = []
-        for plex_user in server_1_connection.users:
-            if (
-                plex_user.title.lower() in users_filtered.keys()
-                or plex_user.title.lower() in users_filtered.values()
-            ):
-                output_server_1_users.append(plex_user)
-    elif server_1_type == "jellyfin":
-        output_server_1_users = {}
-        for jellyfin_user, jellyfin_id in server_1_connection.users.items():
-            if (
-                jellyfin_user.lower() in users_filtered.keys()
-                or jellyfin_user.lower() in users_filtered.values()
-            ):
-                output_server_1_users[jellyfin_user] = jellyfin_id
+    output_server_1_users = generate_server_users(server_1, users_filtered)
+    output_server_2_users = generate_server_users(server_2, users_filtered)
 
-    if server_2_type == "plex":
-        output_server_2_users = []
-        for plex_user in server_2_connection.users:
-            if (
-                plex_user.title.lower() in users_filtered.keys()
-                or plex_user.title.lower() in users_filtered.values()
-            ):
-                output_server_2_users.append(plex_user)
-    elif server_2_type == "jellyfin":
-        output_server_2_users = {}
-        for jellyfin_user, jellyfin_id in server_2_connection.users.items():
-            if (
-                jellyfin_user.lower() in users_filtered.keys()
-                or jellyfin_user.lower() in users_filtered.values()
-            ):
-                output_server_2_users[jellyfin_user] = jellyfin_id
-
-    if len(output_server_1_users) == 0:
+    # Check if users is none or empty
+    if output_server_1_users is None or len(output_server_1_users) == 0:
         raise Exception(
-            f"No users found for server 1 {server_1_type}, users found {users}, filtered users {users_filtered}, server 1 users {server_1_connection.users}"
+            f"No users found for server 1 {server_1[0]}, users found {users}, filtered users {users_filtered}, server 1 users {server_1[1].users}"
         )
 
-    if len(output_server_2_users) == 0:
+    if output_server_2_users is None or len(output_server_2_users) == 0:
         raise Exception(
-            f"No users found for server 2 {server_2_type}, users found {users} filtered users {users_filtered}, server 2 users {server_2_connection.users}"
+            f"No users found for server 2 {server_2[0]}, users found {users} filtered users {users_filtered}, server 2 users {server_2[1].users}"
         )
 
     logger(f"Server 1 users: {output_server_1_users}", 1)

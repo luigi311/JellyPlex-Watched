@@ -81,7 +81,6 @@ JELLYFIN_BASEURL = "http://localhost:8096, http://nas:8096"
 JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 ```
 
-
 ## Installation
 
 ### Baremetal

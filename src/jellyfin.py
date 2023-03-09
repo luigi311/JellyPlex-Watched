@@ -1,9 +1,14 @@
 import asyncio, aiohttp, traceback
+
 from src.functions import (
     logger,
     search_mapping,
+)
+from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
+)
+from src.watched import (
     combine_watched_dicts,
 )
 
@@ -393,7 +398,7 @@ class Jellyfin:
 
                     if skip_reason:
                         logger(
-                            f"Jellyfin: Skipping library {library_title} {skip_reason}",
+                            f"Jellyfin: Skipping library {library_title}: {skip_reason}",
                             1,
                         )
                         continue

@@ -7,9 +7,11 @@ from plexapi.myplex import MyPlexAccount
 from src.functions import (
     logger,
     search_mapping,
+    future_thread_executor,
+)
+from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
-    future_thread_executor,
 )
 
 
@@ -50,7 +52,7 @@ def get_user_library_watched_show(show):
                         m = re.match(r"(.*)://(.*)", guid.id)
                         guid_source, guid_id = m.group(1).lower(), m.group(2)
                         episode_guids_temp[guid_source] = guid_id
-            except:
+            except Exception:
                 logger(
                     f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
                     1,
@@ -67,7 +69,7 @@ def get_user_library_watched_show(show):
 
         return show_guids, episode_guids
 
-    except Exception as e:
+    except Exception:
         return {}, {}
 
 
@@ -385,7 +387,7 @@ class Plex:
 
                     if skip_reason:
                         logger(
-                            f"Plex: Skipping library {library_title} {skip_reason}", 1
+                            f"Plex: Skipping library {library_title}: {skip_reason}", 1
                         )
                         continue
 
