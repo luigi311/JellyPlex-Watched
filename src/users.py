@@ -24,9 +24,9 @@ def combine_user_lists(server_1_users, server_2_users, user_mapping):
 
     for server_1_user in server_1_users:
         if user_mapping:
-            jellyfin_plex_mapped_user = search_mapping(user_mapping, server_1_user)
-            if jellyfin_plex_mapped_user:
-                users[server_1_user] = jellyfin_plex_mapped_user
+            mapped_user = search_mapping(user_mapping, server_1_user)
+            if mapped_user in server_2_users:
+                users[server_1_user] = mapped_user
                 continue
 
         if server_1_user in server_2_users:
@@ -34,9 +34,9 @@ def combine_user_lists(server_1_users, server_2_users, user_mapping):
 
     for server_2_user in server_2_users:
         if user_mapping:
-            plex_jellyfin_mapped_user = search_mapping(user_mapping, server_2_user)
-            if plex_jellyfin_mapped_user:
-                users[plex_jellyfin_mapped_user] = server_2_user
+            mapped_user = search_mapping(user_mapping, server_2_user)
+            if mapped_user in server_1_users:
+                users[mapped_user] = server_2_user
                 continue
 
         if server_2_user in server_1_users:
