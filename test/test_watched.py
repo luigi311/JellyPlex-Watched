@@ -302,7 +302,7 @@ def test_mapping_cleanup_watched():
 
 
 def test_combine_watched_dicts():
-    input = [
+    input_watched = [
         {
             "test3": {
                 "Anime Movies": [
@@ -407,4 +407,4 @@ def test_combine_watched_dicts():
         }
     }
 
-    assert combine_watched_dicts(input) == expected
+    assert combine_watched_dicts(input_watched) == expected

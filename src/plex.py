@@ -53,7 +53,7 @@ def get_user_library_watched_show(show):
                         m = re.match(r"(.*)://(.*)", guid.id)
                         guid_source, guid_id = m.group(1).lower(), m.group(2)
                         episode_guids_temp[guid_source] = guid_id
-            except:
+            except Exception:
                 logger(
                     f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
                     1,
@@ -70,7 +70,7 @@ def get_user_library_watched_show(show):
 
         return show_guids, episode_guids
 
-    except Exception as e:
+    except Exception:
         return {}, {}
 
 
