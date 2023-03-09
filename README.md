@@ -69,6 +69,13 @@ PLEX_TOKEN = "SuperSecretToken, SuperSecretToken2"
 SSL_BYPASS = "False"
 
 
+## control the direction of syncing. e.g. SYNC_FROM_PLEX_TO_JELLYFIN set to true will cause the updates from plex
+## to be updated in jellyfin. SYNC_FROM_PLEX_TO_PLEX set to true will sync updates between multiple plex servers
+SYNC_FROM_PLEX_TO_JELLYFIN = "True"
+SYNC_FROM_JELLYFIN_TO_PLEX = "True"
+SYNC_FROM_PLEX_TO_PLEX = "True"
+SYNC_FROM_JELLYFIN_TO_JELLYFIN = "True"
+
 
 # Jellyfin
 
@@ -80,7 +87,6 @@ JELLYFIN_BASEURL = "http://localhost:8096, http://nas:8096"
 ## Comma separated list for multiple servers
 JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 ```
-
 
 ## Installation
 

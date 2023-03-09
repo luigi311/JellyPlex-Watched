@@ -13,7 +13,7 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.main import setup_black_white_lists
+from src.black_white import setup_black_white_lists
 
 
 def test_setup_black_white_lists():

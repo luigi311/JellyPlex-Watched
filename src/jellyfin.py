@@ -1,9 +1,14 @@
 import asyncio, aiohttp, traceback
+
 from src.functions import (
     logger,
     search_mapping,
+)
+from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
+)
+from src.watched import (
     combine_watched_dicts,
 )
 
@@ -38,17 +43,24 @@ class Jellyfin:
                 async with session.get(
                     self.baseurl + query, headers=headers
                 ) as response:
+                    if response.status != 200:
+                        raise Exception(
+                            f"Query failed with status {response.status} {response.reason}"
+                        )
                     results = await response.json()
 
             elif query_type == "post":
                 async with session.post(
                     self.baseurl + query, headers=headers
                 ) as response:
+                    if response.status != 200:
+                        raise Exception(
+                            f"Query failed with status {response.status} {response.reason}"
+                        )
                     results = await response.json()
 
-            if type(results) is str:
-                logger(f"Jellyfin: Query {query_type} {query} {results}", 2)
-                raise Exception(results)
+            if not isinstance(results, list) and not isinstance(results, dict):
+                raise Exception("Query result is not of type list or dict")
 
             # append identifiers to results
             if identifiers:
@@ -57,7 +69,7 @@ class Jellyfin:
             return results
 
         except Exception as e:
-            logger(f"Jellyfin: Query failed {e}", 2)
+            logger(f"Jellyfin: Query {query_type} {query}\nResults {results}\n{e}", 2)
             raise Exception(e)
 
     async def get_users(self):
@@ -386,19 +398,14 @@ class Jellyfin:
 
                     if skip_reason:
                         logger(
-                            f"Jellyfin: Skipping library {library_title} {skip_reason}",
+                            f"Jellyfin: Skipping library {library_title}: {skip_reason}",
                             1,
                         )
                         continue
 
                     # If there are multiple types in library raise error
                     if types is None or len(types) < 1:
-                        all_types = set(
-                            [
-                                x["Type"]
-                                for x in watched["Items"]
-                            ]
-                        )
+                        all_types = set([x["Type"] for x in watched["Items"]])
                         logger(
                             f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}",
                             1,
