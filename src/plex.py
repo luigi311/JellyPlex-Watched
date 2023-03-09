@@ -150,18 +150,15 @@ def find_video(plex_search, video_ids):
             if location.split("/")[-1] in video_ids["locations"]:
                 return True
 
-    
         for guid in plex_search.guids:
-            guid_source = (
-                re.search(r"(.*)://", guid.id).group(1).lower()
-            )
+            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
             guid_id = re.search(r"://(.*)", guid.id).group(1)
 
             # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
             if guid_source in video_ids.keys():
                 if guid_id in video_ids[guid_source]:
                     return True
-        
+
         return False
     except Exception:
         return False
