@@ -41,12 +41,12 @@ def setup_users(
     # Check if users is none or empty
     if output_server_1_users is None or len(output_server_1_users) == 0:
         raise Exception(
-            f"No users found for server 1 {server_1_type}, users found {users}, filtered users {users_filtered}, server 1 users {server_1_connection.users}"
+            f"No users found for server 1 {server_1[0]}, users found {users}, filtered users {users_filtered}, server 1 users {server_1[1].users}"
         )
 
     if output_server_2_users is None or len(output_server_2_users) == 0:
         raise Exception(
-            f"No users found for server 2 {server_2_type}, users found {users} filtered users {users_filtered}, server 2 users {server_2_connection.users}"
+            f"No users found for server 2 {server_2[0]}, users found {users} filtered users {users_filtered}, server 2 users {server_2[1].users}"
         )
 
     logger(f"Server 1 users: {output_server_1_users}", 1)
