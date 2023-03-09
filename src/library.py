@@ -23,7 +23,6 @@ def check_skip_logic(
         library_type,
         blacklist_library,
         blacklist_library_type,
-        library_mapping,
         library_other,
     )
     skip_reason_white = check_whitelist_logic(
@@ -31,7 +30,6 @@ def check_skip_logic(
         library_type,
         whitelist_library,
         whitelist_library_type,
-        library_mapping,
         library_other,
     )
 
@@ -53,7 +51,6 @@ def check_blacklist_logic(
     library_type,
     blacklist_library,
     blacklist_library_type,
-    library_mapping=None,
     library_other=None,
 ):
     skip_reason = None
@@ -90,7 +87,6 @@ def check_whitelist_logic(
     library_type,
     whitelist_library,
     whitelist_library_type,
-    library_mapping=None,
     library_other=None,
 ):
     skip_reason = None
@@ -107,26 +103,28 @@ def check_whitelist_logic(
 
     # if whitelist is not empty and library is not in whitelist
     if len(whitelist_library) > 0:
-        if library_title.lower() not in [x.lower() for x in whitelist_library]:
-            if skip_reason:
-                skip_reason = (
-                    skip_reason
-                    + " and "
-                    + f"{library_title} is not in whitelist_library"
-                )
-            else:
-                skip_reason = f"{library_title} is not in whitelist_library"
-
         if library_other:
-            if library_other.lower() not in [x.lower() for x in whitelist_library]:
+            if library_title.lower() not in [
+                x.lower() for x in whitelist_library
+            ] and library_other.lower() not in [x.lower() for x in whitelist_library]:
                 if skip_reason:
                     skip_reason = (
                         skip_reason
                         + " and "
-                        + f"{library_other} is not in whitelist_library"
+                        + f"{library_title} is not in whitelist_library"
                     )
                 else:
-                    skip_reason = f"{library_other} is not in whitelist_library"
+                    skip_reason = f"{library_title} is not in whitelist_library"
+        else:
+            if library_title.lower() not in [x.lower() for x in whitelist_library]:
+                if skip_reason:
+                    skip_reason = (
+                        skip_reason
+                        + " and "
+                        + f"{library_title} is not in whitelist_library"
+                    )
+                else:
+                    skip_reason = f"{library_title} is not in whitelist_library"
 
     return skip_reason
 

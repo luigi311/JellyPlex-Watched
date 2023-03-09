@@ -15,7 +15,6 @@ from src.library import (
 )
 
 
-
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
 class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):

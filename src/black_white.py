@@ -11,7 +11,6 @@ def setup_black_white_lists(
     library_mapping=None,
     user_mapping=None,
 ):
-
     blacklist_library, blacklist_library_type, blacklist_users = setup_black_lists(
         blacklist_library,
         blacklist_library_type,
