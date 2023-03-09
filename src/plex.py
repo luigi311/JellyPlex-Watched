@@ -144,6 +144,29 @@ def get_user_library_watched(user, user_plex, library):
         return {}
 
 
+def find_video(plex_search, video_ids):
+    try:
+        for location in plex_search.locations:
+            if location.split("/")[-1] in video_ids["locations"]:
+                return True
+
+    
+        for guid in plex_search.guids:
+            guid_source = (
+                re.search(r"(.*)://", guid.id).group(1).lower()
+            )
+            guid_id = re.search(r"://(.*)", guid.id).group(1)
+
+            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+            if guid_source in video_ids.keys():
+                if guid_id in video_ids[guid_source]:
+                    return True
+        
+        return False
+    except Exception:
+        return False
+
+
 def update_user_watched(user, user_plex, library, videos, dryrun):
     try:
         logger(f"Plex: Updating watched for {user.title} in library {library}", 1)
@@ -160,26 +183,7 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
         library_videos = user_plex.library.section(library)
         if videos_movies_ids:
             for movies_search in library_videos.search(unwatched=True):
-                movie_found = False
-                for movie_location in movies_search.locations:
-                    if movie_location.split("/")[-1] in videos_movies_ids["locations"]:
-                        movie_found = True
-                        break
-
-                if not movie_found:
-                    for movie_guid in movies_search.guids:
-                        movie_guid_source = (
-                            re.search(r"(.*)://", movie_guid.id).group(1).lower()
-                        )
-                        movie_guid_id = re.search(r"://(.*)", movie_guid.id).group(1)
-
-                        # If movie provider source and movie provider id are in videos_movie_ids exactly, then the movie is in the list
-                        if movie_guid_source in videos_movies_ids.keys():
-                            if movie_guid_id in videos_movies_ids[movie_guid_source]:
-                                movie_found = True
-                                break
-
-                if movie_found:
+                if find_video(movies_search, videos_movies_ids):
                     msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
                     if not dryrun:
                         logger(f"Marked {msg}", 0)
@@ -194,67 +198,9 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
 
         if videos_shows_ids and videos_episodes_ids:
             for show_search in library_videos.search(unwatched=True):
-                show_found = False
-                for show_location in show_search.locations:
-                    if show_location.split("/")[-1] in videos_shows_ids["locations"]:
-                        show_found = True
-                        break
-
-                if not show_found:
-                    for show_guid in show_search.guids:
-                        show_guid_source = (
-                            re.search(r"(.*)://", show_guid.id).group(1).lower()
-                        )
-                        show_guid_id = re.search(r"://(.*)", show_guid.id).group(1)
-
-                        # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
-                        if show_guid_source in videos_shows_ids.keys():
-                            if show_guid_id in videos_shows_ids[show_guid_source]:
-                                show_found = True
-                                break
-
-                if show_found:
+                if find_video(show_search, videos_shows_ids):
                     for episode_search in show_search.episodes():
-                        episode_found = False
-
-                        for episode_location in episode_search.locations:
-                            if (
-                                episode_location.split("/")[-1]
-                                in videos_episodes_ids["locations"]
-                            ):
-                                episode_found = True
-                                break
-
-                        if not episode_found:
-                            try:
-                                for episode_guid in episode_search.guids:
-                                    episode_guid_source = (
-                                        re.search(r"(.*)://", episode_guid.id)
-                                        .group(1)
-                                        .lower()
-                                    )
-                                    episode_guid_id = re.search(
-                                        r"://(.*)", episode_guid.id
-                                    ).group(1)
-
-                                    # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
-                                    if (
-                                        episode_guid_source
-                                        in videos_episodes_ids.keys()
-                                    ):
-                                        if (
-                                            episode_guid_id
-                                            in videos_episodes_ids[episode_guid_source]
-                                        ):
-                                            episode_found = True
-                                            break
-                            except Exception as e:
-                                logger(
-                                    f"Plex: Failed to get episode guid for {episode_search.title}, Error: {e}",
-                                    1,
-                                )
-
-                        if episode_found:
+                        if find_video(episode_search, videos_episodes_ids):
                             msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
                             if not dryrun:
                                 logger(f"Marked {msg}", 0)
