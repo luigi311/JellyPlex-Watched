@@ -12,6 +12,7 @@ from src.functions import (
     future_thread_executor,
 )
 
+
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
 class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
@@ -235,7 +236,10 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     ).group(1)
 
                                     # If episode provider source and episode provider id are in videos_episodes_ids exactly, then the episode is in the list
-                                    if episode_guid_source in videos_episodes_ids.keys():
+                                    if (
+                                        episode_guid_source
+                                        in videos_episodes_ids.keys()
+                                    ):
                                         if (
                                             episode_guid_id
                                             in videos_episodes_ids[episode_guid_source]
