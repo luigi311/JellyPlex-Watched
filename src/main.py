@@ -264,6 +264,35 @@ def update_server_watched(
         )
 
 
+def should_sync_server(server_1_type, server_2_type):
+    sync_from_plex_to_jellyfin = str_to_bool(
+        os.getenv("SYNC_FROM_PLEX_TO_JELLYFIN", "True"))
+    sync_from_jelly_to_plex = str_to_bool(
+        os.getenv("SYNC_FROM_JELLYFIN_TO_PLEX", "True"))
+    sync_from_plex_to_plex = str_to_bool(
+        os.getenv("SYNC_FROM_PLEX_TO_PLEX", "True"))
+    sync_from_jelly_to_jellyfin = str_to_bool(
+        os.getenv("SYNC_FROM_JELLYFIN_TO_JELLYFIN", "True"))
+
+    if server_1_type == "plex" and server_2_type == "plex" and not sync_from_plex_to_plex:
+        logger("Sync between plex and plex is disabled", 1)
+        return False
+
+    if server_1_type == "plex" and server_2_type == "jellyfin" and not sync_from_jelly_to_plex:
+        logger("Sync from jellyfin to plex disabled", 1)
+        return False
+
+    if server_1_type == "jellyfin" and server_2_type == "jellyfin" and not sync_from_jelly_to_jellyfin:
+        logger("Sync between jellyfin and jellyfin is disabled", 1)
+        return False
+
+    if server_1_type == "jellyfin" and server_2_type == "plex" and not sync_from_plex_to_jellyfin:
+        logger("Sync from plex to jellyfin is disabled", 1)
+        return False
+
+    return True
+
+
 def main_loop():
     logfile = os.getenv("LOGFILE", "log.log")
     # Delete logfile if it exists
@@ -370,21 +399,23 @@ def main_loop():
                 1,
             )
 
-            update_server_watched(
-                server_1,
-                server_2_watched_filtered,
-                user_mapping,
-                library_mapping,
-                dryrun,
-            )
+            if should_sync_server(server_1[0], server_2[0]):
+                update_server_watched(
+                    server_1,
+                    server_2_watched_filtered,
+                    user_mapping,
+                    library_mapping,
+                    dryrun,
+                )
 
-            update_server_watched(
-                server_2,
-                server_1_watched_filtered,
-                user_mapping,
-                library_mapping,
-                dryrun,
-            )
+            if should_sync_server(server_2[0], server_1[0]):
+                update_server_watched(
+                    server_2,
+                    server_1_watched_filtered,
+                    user_mapping,
+                    library_mapping,
+                    dryrun,
+                )
 
 
 def main():
