@@ -24,8 +24,8 @@ A clear and concise description of what you expected to happen.
 If applicable, add logs to help explain your problem ideally with DEBUG set to true, be sure to remove sensitive information
 
 **Type:**
- [ ] Docker 
- [ ] Native
+- [ ] Docker 
+- [ ] Native
 
 **Additional context**
 Add any other context about the problem here.
