@@ -460,8 +460,8 @@ class Jellyfin:
 
             watched = await asyncio.gather(*watched, return_exceptions=True)
             for user_watched in watched:
-                user_watched_temp = combine_watched_dicts(user_watched)
-                for user, user_watched_temp in user_watched_temp.items():
+                user_watched_combine = combine_watched_dicts(user_watched)
+                for user, user_watched_temp in user_watched_combine.items():
                     if user not in users_watched:
                         users_watched[user] = {}
                     users_watched[user].update(user_watched_temp)
