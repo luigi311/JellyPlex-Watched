@@ -307,10 +307,19 @@ class Plex:
                 if self.admin_user == user:
                     user_plex = self.plex
                 else:
-                    user_plex = self.login(
-                        self.plex._baseurl,
-                        user.get_token(self.plex.machineIdentifier),
-                    )
+                    token = user.get_token(self.plex.machineIdentifier)
+                    if token:
+                        user_plex = self.login(
+                            self.plex._baseurl,
+                            user.get_token(self.plex.machineIdentifier),
+                        )
+                    else:
+                        logger(
+                            f"Plex: Failed to get token for {user.title}, skipping",
+                            2,
+                        )
+                        users_watched[user.title] = {}
+                        continue
 
                 libraries = user_plex.library.sections()
 
