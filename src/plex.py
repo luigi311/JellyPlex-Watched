@@ -307,10 +307,19 @@ class Plex:
                 if self.admin_user == user:
                     user_plex = self.plex
                 else:
-                    user_plex = self.login(
-                        self.plex._baseurl,
-                        user.get_token(self.plex.machineIdentifier),
-                    )
+                    token = user.get_token(self.plex.machineIdentifier)
+                    if token:
+                        user_plex = self.login(
+                            self.plex._baseurl,
+                            token,
+                        )
+                    else:
+                        logger(
+                            f"Plex: Failed to get token for {user.title}, skipping",
+                            2,
+                        )
+                        users_watched[user.title] = {}
+                        continue
 
                 libraries = user_plex.library.sections()
 
@@ -380,11 +389,19 @@ class Plex:
                         )
                         user = self.plex.myPlexAccount().user(user)
 
-                    user_plex = PlexServer(
-                        self.plex._baseurl,
-                        user.get_token(self.plex.machineIdentifier),
-                        session=self.session,
-                    )
+                    token = user.get_token(self.plex.machineIdentifier)
+                    if token:
+                        user_plex = PlexServer(
+                            self.plex._baseurl,
+                            token,
+                            session=self.session,
+                        )
+                    else:
+                        logger(
+                            f"Plex: Failed to get token for {user.title}, skipping",
+                            2,
+                        )
+                        continue
 
                 for library, videos in libraries.items():
                     library_other = None
