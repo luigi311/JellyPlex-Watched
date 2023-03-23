@@ -163,17 +163,18 @@ def episode_title_dict(user_list: dict):
             for season in user_list[show]:
                 for episode in user_list[show][season]:
                     for episode_key, episode_value in episode.items():
-                        if episode_key.lower() not in episode_output_dict:
-                            episode_output_dict[episode_key.lower()] = []
-                        if episode_key == "locations":
-                            for episode_location in episode_value:
+                        if episode_key != "status":
+                            if episode_key.lower() not in episode_output_dict:
+                                episode_output_dict[episode_key.lower()] = []
+                            if episode_key == "locations":
+                                for episode_location in episode_value:
+                                    episode_output_dict[episode_key.lower()].append(
+                                        episode_location
+                                    )
+                            else:
                                 episode_output_dict[episode_key.lower()].append(
-                                    episode_location
+                                    episode_value.lower()
                                 )
-                        else:
-                            episode_output_dict[episode_key.lower()].append(
-                                episode_value.lower()
-                            )
 
         return episode_output_dict
     except Exception:
@@ -186,13 +187,16 @@ def movies_title_dict(user_list: dict):
         movies_output_dict = {}
         for movie in user_list:
             for movie_key, movie_value in movie.items():
-                if movie_key.lower() not in movies_output_dict:
-                    movies_output_dict[movie_key.lower()] = []
-                if movie_key == "locations":
-                    for movie_location in movie_value:
-                        movies_output_dict[movie_key.lower()].append(movie_location)
-                else:
-                    movies_output_dict[movie_key.lower()].append(movie_value.lower())
+                if movie_key != "status":
+                    if movie_key.lower() not in movies_output_dict:
+                        movies_output_dict[movie_key.lower()] = []
+                    if movie_key == "locations":
+                        for movie_location in movie_value:
+                            movies_output_dict[movie_key.lower()].append(movie_location)
+                    else:
+                        movies_output_dict[movie_key.lower()].append(
+                            movie_value.lower()
+                        )
 
         return movies_output_dict
     except Exception:
