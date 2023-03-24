@@ -66,6 +66,7 @@ def get_episode_guids(episode, show, completed=True):
             1,
         )
 
+    episode_guids_temp["title"] = episode.title
     episode_guids_temp["locations"] = tuple(
         [x.split("/")[-1] for x in episode.locations]
     )
