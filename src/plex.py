@@ -291,12 +291,10 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                         else:
                             logger(f"Dryrun {msg}", 0)
                     elif video_status["time"] > 60_000:
-                        # Only mark partially watched if watched for more than 1 minute
-                        # TODO add support for partially watched movies
                         msg = f"{movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
                         if not dryrun:
                             logger(f"Marked {msg}", 0)
-
+                            movies_search.updateProgress(video_status["time"])
                         else:
                             logger(f"Dryrun {msg}", 0)
                 else:
@@ -324,10 +322,10 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                 else:
                                     logger(f"Dryrun {msg}", 0)
                             else:
-                                # TODO add support for partially watched episodes
                                 msg = f"{show_search.title} {episode_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
                                 if not dryrun:
                                     logger(f"Marked {msg}", 0)
+                                    episode_search.updateProgress(video_status["time"])
                                 else:
                                     logger(f"Dryrun {msg}", 0)
                         else:
