@@ -1,5 +1,6 @@
 import re, requests, os, traceback
 from urllib3.poolmanager import PoolManager
+from math import floor
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
@@ -27,14 +28,70 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
         )
 
 
+def get_movie_guids(video, completed=True):
+    logger(f"Plex: {video.title} {video.guids} {video.locations}", 3)
+
+    movie_guids = {}
+    try:
+        for guid in video.guids:
+            # Extract source and id from guid.id
+            m = re.match(r"(.*)://(.*)", guid.id)
+            guid_source, guid_id = m.group(1).lower(), m.group(2)
+            movie_guids[guid_source] = guid_id
+    except Exception:
+        logger(f"Plex: Failed to get guids for {video.title}, Using location only", 1)
+
+    movie_guids["title"] = video.title
+    movie_guids["locations"] = tuple([x.split("/")[-1] for x in video.locations])
+
+    movie_guids["status"] = {
+        "completed": completed,
+        "time": video.viewOffset,
+    }
+
+    return movie_guids
+
+
+def get_episode_guids(episode, show, completed=True):
+    episode_guids_temp = {}
+    try:
+        for guid in episode.guids:
+            # Extract after :// from guid.id
+            m = re.match(r"(.*)://(.*)", guid.id)
+            guid_source, guid_id = m.group(1).lower(), m.group(2)
+            episode_guids_temp[guid_source] = guid_id
+    except Exception:
+        logger(
+            f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
+            1,
+        )
+
+    episode_guids_temp["title"] = episode.title
+    episode_guids_temp["locations"] = tuple(
+        [x.split("/")[-1] for x in episode.locations]
+    )
+
+    episode_guids_temp["status"] = {
+        "completed": completed,
+        "time": episode.viewOffset,
+    }
+
+    return episode_guids_temp
+
+
 def get_user_library_watched_show(show):
     try:
         show_guids = {}
-        for show_guid in show.guids:
-            # Extract source and id from guid.id
-            m = re.match(r"(.*)://(.*)", show_guid.id)
-            show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
-            show_guids[show_guid_source] = show_guid_id
+        try:
+            for show_guid in show.guids:
+                # Extract source and id from guid.id
+                m = re.match(r"(.*)://(.*)", show_guid.id)
+                show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
+                show_guids[show_guid_source] = show_guid_id
+        except Exception:
+            logger(
+                f"Plex: Failed to get guids for {show.title}, Using location only", 1
+            )
 
         show_guids["title"] = show.title
         show_guids["locations"] = tuple([x.split("/")[-1] for x in show.locations])
@@ -42,30 +99,23 @@ def get_user_library_watched_show(show):
 
         # Get all watched episodes for show
         episode_guids = {}
-        watched_episodes = show.watched()
-        for episode in watched_episodes:
-            episode_guids_temp = {}
-            try:
-                if len(episode.guids) > 0:
-                    for guid in episode.guids:
-                        # Extract after :// from guid.id
-                        m = re.match(r"(.*)://(.*)", guid.id)
-                        guid_source, guid_id = m.group(1).lower(), m.group(2)
-                        episode_guids_temp[guid_source] = guid_id
-            except Exception:
-                logger(
-                    f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
-                    1,
+        watched = show.watched()
+
+        for episode in show.episodes():
+            if episode in watched:
+                if episode.parentTitle not in episode_guids:
+                    episode_guids[episode.parentTitle] = []
+
+                episode_guids[episode.parentTitle].append(
+                    get_episode_guids(episode, show, completed=True)
                 )
+            elif episode.viewOffset > 0:
+                if episode.parentTitle not in episode_guids:
+                    episode_guids[episode.parentTitle] = []
 
-            episode_guids_temp["locations"] = tuple(
-                [x.split("/")[-1] for x in episode.locations]
-            )
-
-            if episode.parentTitle not in episode_guids:
-                episode_guids[episode.parentTitle] = []
-
-            episode_guids[episode.parentTitle].append(episode_guids_temp)
+                episode_guids[episode.parentTitle].append(
+                    get_episode_guids(episode, show, completed=False)
+                )
 
         return show_guids, episode_guids
 
@@ -89,32 +139,37 @@ def get_user_library_watched(user, user_plex, library):
         if library.type == "movie":
             user_watched[user_name][library.title] = []
 
+            # Get all watched movies
             for video in library_videos.search(unwatched=False):
                 logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
-                logger(f"Plex: {video.title} {video.guids} {video.locations}", 3)
 
-                movie_guids = {}
-                for guid in video.guids:
-                    # Extract source and id from guid.id
-                    m = re.match(r"(.*)://(.*)", guid.id)
-                    guid_source, guid_id = m.group(1).lower(), m.group(2)
-                    movie_guids[guid_source] = guid_id
-
-                movie_guids["title"] = video.title
-                movie_guids["locations"] = tuple(
-                    [x.split("/")[-1] for x in video.locations]
-                )
+                movie_guids = get_movie_guids(video, completed=True)
 
                 user_watched[user_name][library.title].append(movie_guids)
-                logger(f"Plex: Added {movie_guids} to {user_name} watched list", 3)
+
+            # Get all partially watched movies greater than 1 minute
+            for video in library_videos.search(inProgress=True):
+                if video.viewOffset < 60000:
+                    continue
+
+                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
+
+                movie_guids = get_movie_guids(video, completed=False)
+
+                user_watched[user_name][library.title].append(movie_guids)
 
         elif library.type == "show":
             user_watched[user_name][library.title] = {}
-            shows = library_videos.search(unwatched=False)
 
             # Parallelize show processing
             args = []
-            for show in shows:
+
+            # Get all watched shows
+            for show in library_videos.search(unwatched=False):
+                args.append([get_user_library_watched_show, show])
+
+            # Get all partially watched shows
+            for show in library_videos.search(inProgress=True):
                 args.append([get_user_library_watched_show, show])
 
             for show_guids, episode_guids in future_thread_executor(
@@ -144,11 +199,20 @@ def get_user_library_watched(user, user_plex, library):
         return {}
 
 
-def find_video(plex_search, video_ids):
+def find_video(plex_search, video_ids, videos=None):
     try:
         for location in plex_search.locations:
             if location.split("/")[-1] in video_ids["locations"]:
-                return True
+                episode_videos = []
+                if videos:
+                    for show, seasons in videos.items():
+                        show = {k: v for k, v in show}
+                        if location.split("/")[-1] in show["locations"]:
+                            for season in seasons.values():
+                                for episode in season:
+                                    episode_videos.append(episode)
+
+                return True, episode_videos
 
         for guid in plex_search.guids:
             guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
@@ -157,11 +221,46 @@ def find_video(plex_search, video_ids):
             # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
             if guid_source in video_ids.keys():
                 if guid_id in video_ids[guid_source]:
-                    return True
+                    episode_videos = []
+                    if videos:
+                        for show, seasons in videos.items():
+                            show = {k: v for k, v in show}
+                            if guid_source in show["ids"].keys():
+                                if guid_id in show["ids"][guid_source]:
+                                    for season in seasons:
+                                        for episode in season:
+                                            episode_videos.append(episode)
 
-        return False
+                    return True, episode_videos
+
+        return False, []
     except Exception:
-        return False
+        return False, []
+
+
+def get_video_status(plex_search, video_ids, videos):
+    try:
+        for location in plex_search.locations:
+            if location.split("/")[-1] in video_ids["locations"]:
+                for video in videos:
+                    if location.split("/")[-1] in video["locations"]:
+                        return video["status"]
+
+        for guid in plex_search.guids:
+            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
+            guid_id = re.search(r"://(.*)", guid.id).group(1)
+
+            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+            if guid_source in video_ids.keys():
+                if guid_id in video_ids[guid_source]:
+                    for video in videos:
+                        if guid_source in video["ids"].keys():
+                            if guid_id in video["ids"][guid_source]:
+                                return video["status"]
+
+        return None
+    except Exception:
+        return None
 
 
 def update_user_watched(user, user_plex, library, videos, dryrun):
@@ -180,13 +279,24 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
         library_videos = user_plex.library.section(library)
         if videos_movies_ids:
             for movies_search in library_videos.search(unwatched=True):
-                if find_video(movies_search, videos_movies_ids):
-                    msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
-                    if not dryrun:
-                        logger(f"Marked {msg}", 0)
-                        movies_search.markWatched()
-                    else:
-                        logger(f"Dryrun {msg}", 0)
+                video_status = get_video_status(
+                    movies_search, videos_movies_ids, videos
+                )
+                if video_status:
+                    if video_status["completed"]:
+                        msg = f"{movies_search.title} as watched for {user.title} in {library} for Plex"
+                        if not dryrun:
+                            logger(f"Marked {msg}", 0)
+                            movies_search.markWatched()
+                        else:
+                            logger(f"Dryrun {msg}", 0)
+                    elif video_status["time"] > 60_000:
+                        msg = f"{movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
+                        if not dryrun:
+                            logger(f"Marked {msg}", 0)
+                            movies_search.updateProgress(video_status["time"])
+                        else:
+                            logger(f"Dryrun {msg}", 0)
                 else:
                     logger(
                         f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user.title}",
@@ -195,15 +305,29 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
 
         if videos_shows_ids and videos_episodes_ids:
             for show_search in library_videos.search(unwatched=True):
-                if find_video(show_search, videos_shows_ids):
+                show_found, episode_videos = find_video(
+                    show_search, videos_shows_ids, videos
+                )
+                if show_found:
                     for episode_search in show_search.episodes():
-                        if find_video(episode_search, videos_episodes_ids):
-                            msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
-                            if not dryrun:
-                                logger(f"Marked {msg}", 0)
-                                episode_search.markWatched()
+                        video_status = get_video_status(
+                            episode_search, videos_episodes_ids, episode_videos
+                        )
+                        if video_status:
+                            if video_status["completed"]:
+                                msg = f"{show_search.title} {episode_search.title} as watched for {user.title} in {library} for Plex"
+                                if not dryrun:
+                                    logger(f"Marked {msg}", 0)
+                                    episode_search.markWatched()
+                                else:
+                                    logger(f"Dryrun {msg}", 0)
                             else:
-                                logger(f"Dryrun {msg}", 0)
+                                msg = f"{show_search.title} {episode_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
+                                if not dryrun:
+                                    logger(f"Marked {msg}", 0)
+                                    episode_search.updateProgress(video_status["time"])
+                                else:
+                                    logger(f"Dryrun {msg}", 0)
                         else:
                             logger(
                                 f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user.title}",
