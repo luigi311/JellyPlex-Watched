@@ -581,9 +581,7 @@ class Jellyfin:
                                         for video in videos:
                                             if (
                                                 movie_provider_id.lower()
-                                                in video["ids"][
-                                                    movie_provider_source.lower()
-                                                ]
+                                                in video[movie_provider_source.lower()]
                                             ):
                                                 movie_status = video["status"]
                                                 break
@@ -667,9 +665,7 @@ class Jellyfin:
                                             show = {k: v for k, v in show}
                                             if (
                                                 show_provider_id.lower()
-                                                in show["ids"][
-                                                    show_provider_source.lower()
-                                                ]
+                                                in show[show_provider_source.lower()]
                                             ):
                                                 for season in seasons.values():
                                                     for episode in season:
