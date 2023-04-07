@@ -8,6 +8,35 @@ Sync watched between jellyfin and plex locally
 
 Keep in sync all your users watched history between jellyfin and plex servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by entering multiple options in the .env plex/jellyfin section separated by commas.
 
+## Features
+
+### Plex
+- [x] Match via Filenames
+- [x] Match via provider ids
+- [x] Map usersnames
+- [x] Use single login
+- [x] One Way/Multi Way sync
+- [x] Sync Watched
+- [x] Sync Inprogress
+
+### Jellyfin
+- [x] Match via Filenames
+- [x] Match via provider ids
+- [x] Map usersnames
+- [x] Use single login
+- [x] One Way/Multi Way sync
+- [x] Sync Watched
+- [ ] Sync Inprogress
+
+### Emby
+- [ ] Match via Filenames
+- [ ] Match via provider ids
+- [ ] Map usersnames
+- [ ] Use single login
+- [ ] One Way/Multi Way sync
+- [ ] Sync Watched
+- [ ] Sync Inprogress
+
 ## Configuration
 
 ```bash
