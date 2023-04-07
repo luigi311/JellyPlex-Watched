@@ -607,9 +607,11 @@ class Jellyfin:
                                 jellyfin_video_id = jellyfin_video["Id"]
                                 msg = f"{jellyfin_video['Name']} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
-                                    logger(f"Marking {msg}", 0)
+                                    pass
+                                    # logger(f"Marked {msg}", 0)
                                 else:
-                                    logger(f"Dryrun {msg}", 0)
+                                    pass
+                                    # logger(f"Dryrun {msg}", 0)
                         else:
                             logger(
                                 f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}",
@@ -637,6 +639,7 @@ class Jellyfin:
                             ):
                                 show_found = True
                                 episode_videos = []
+
                                 for show, seasons in videos.items():
                                     show = {k: v for k, v in show}
                                     if (
@@ -725,7 +728,7 @@ class Jellyfin:
                                                 for episode in episode_videos:
                                                     if (
                                                         episode_provider_id.lower()
-                                                        in episode["ids"][
+                                                        in episode[
                                                             episode_provider_source.lower()
                                                         ]
                                                     ):
@@ -759,9 +762,11 @@ class Jellyfin:
                                             + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
-                                            logger(f"Marked {msg}", 0)
+                                            pass
+                                            # logger(f"Marked {msg}", 0)
                                         else:
-                                            logger(f"Dryrun {msg}", 0)
+                                            pass
+                                            # logger(f"Dryrun {msg}", 0)
                                 else:
                                     logger(
                                         f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}",
