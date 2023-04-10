@@ -1,9 +1,6 @@
 import copy
 
-from src.functions import (
-    logger,
-    search_mapping,
-)
+from src.functions import logger, search_mapping, contains_nested
 
 from src.library import generate_library_guids_dict
 
@@ -118,6 +115,7 @@ def cleanup_watched(
             elif isinstance(watched_list_1[user_1][library_1], dict):
                 for show_key_1 in watched_list_1[user_1][library_1].keys():
                     show_key_dict = dict(show_key_1)
+
                     for season in watched_list_1[user_1][library_1][show_key_1]:
                         for episode in watched_list_1[user_1][library_1][show_key_1][
                             season
@@ -204,10 +202,9 @@ def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
                 # Iterate through the locations in the movie dictionary
                 for location in movie_value:
                     # If the location is in the movies_watched_list_2_keys_dict dictionary, return index of the key
-                    if location in movies_watched_list_2_keys_dict["locations"]:
-                        return movies_watched_list_2_keys_dict["locations"].index(
-                            location
-                        )
+                    return contains_nested(
+                        location, movies_watched_list_2_keys_dict["locations"]
+                    )
 
         # If the key is not "locations", check if the movie_key is present in the movies_watched_list_2_keys_dict dictionary
         else:
@@ -223,19 +220,16 @@ def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
 def get_episode_index_in_dict(episode, episode_watched_list_2_keys_dict):
     # Iterate through the keys and values of the episode dictionary
     for episode_key, episode_value in episode.items():
-        # If the key is "locations", check if the "locations" key is present in the episode_watched_list_2_keys_dict dictionary
-        if episode_key == "locations":
-            if "locations" in episode_watched_list_2_keys_dict.keys():
+        if episode_key in episode_watched_list_2_keys_dict.keys():
+            if episode_key == "locations":
                 # Iterate through the locations in the episode dictionary
                 for location in episode_value:
                     # If the location is in the episode_watched_list_2_keys_dict dictionary, return index of the key
-                    if location in episode_watched_list_2_keys_dict["locations"]:
-                        return episode_watched_list_2_keys_dict["locations"].index(
-                            location
-                        )
-        # If the key is not "locations", check if the episode_key is present in the episode_watched_list_2_keys_dict dictionary
-        else:
-            if episode_key in episode_watched_list_2_keys_dict.keys():
+                    return contains_nested(
+                        location, episode_watched_list_2_keys_dict["locations"]
+                    )
+
+            else:
                 # If the episode_value is in the episode_watched_list_2_keys_dict dictionary, return True
                 if episode_value in episode_watched_list_2_keys_dict[episode_key]:
                     return episode_watched_list_2_keys_dict[episode_key].index(

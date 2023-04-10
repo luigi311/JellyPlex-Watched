@@ -1,10 +1,7 @@
 import asyncio, aiohttp, traceback
 from math import floor
 
-from src.functions import (
-    logger,
-    search_mapping,
-)
+from src.functions import logger, search_mapping, contains_nested
 from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
@@ -554,13 +551,19 @@ class Jellyfin:
                         if "MediaSources" in jellyfin_video:
                             for movie_location in jellyfin_video["MediaSources"]:
                                 if (
-                                    movie_location["Path"].split("/")[-1]
-                                    in videos_movies_ids["locations"]
+                                    contains_nested(
+                                        movie_location["Path"].split("/")[-1],
+                                        videos_movies_ids["locations"],
+                                    )
+                                    is not None
                                 ):
                                     for video in videos:
                                         if (
-                                            movie_location["Path"].split("/")[-1]
-                                            in video["locations"]
+                                            contains_nested(
+                                                movie_location["Path"].split("/")[-1],
+                                                video["locations"],
+                                            )
+                                            is not None
                                         ):
                                             movie_status = video["status"]
                                             break
@@ -632,8 +635,11 @@ class Jellyfin:
 
                         if "Path" in jellyfin_show:
                             if (
-                                jellyfin_show["Path"].split("/")[-1]
-                                in videos_shows_ids["locations"]
+                                contains_nested(
+                                    jellyfin_show["Path"].split("/")[-1],
+                                    videos_shows_ids["locations"],
+                                )
+                                is not None
                             ):
                                 show_found = True
                                 episode_videos = []
@@ -641,8 +647,11 @@ class Jellyfin:
                                 for show, seasons in videos.items():
                                     show = {k: v for k, v in show}
                                     if (
-                                        jellyfin_show["Path"].split("/")[-1]
-                                        in show["locations"]
+                                        contains_nested(
+                                            jellyfin_show["Path"].split("/")[-1],
+                                            show["locations"],
+                                        )
+                                        is not None
                                     ):
                                         for season in seasons.values():
                                             for episode in season:
@@ -692,15 +701,21 @@ class Jellyfin:
                                         "MediaSources"
                                     ]:
                                         if (
-                                            episode_location["Path"].split("/")[-1]
-                                            in videos_episodes_ids["locations"]
+                                            contains_nested(
+                                                episode_location["Path"].split("/")[-1],
+                                                videos_episodes_ids["locations"],
+                                            )
+                                            is not None
                                         ):
                                             for episode in episode_videos:
                                                 if (
-                                                    episode_location["Path"].split("/")[
-                                                        -1
-                                                    ]
-                                                    in episode["locations"]
+                                                    contains_nested(
+                                                        episode_location["Path"].split(
+                                                            "/"
+                                                        )[-1],
+                                                        episode["locations"],
+                                                    )
+                                                    is not None
                                                 ):
                                                     episode_status = episode["status"]
                                                     break

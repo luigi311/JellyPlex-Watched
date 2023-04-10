@@ -9,6 +9,7 @@ from src.functions import (
     logger,
     search_mapping,
     future_thread_executor,
+    contains_nested,
 )
 from src.library import (
     check_skip_logic,
@@ -202,12 +203,18 @@ def get_user_library_watched(user, user_plex, library):
 def find_video(plex_search, video_ids, videos=None):
     try:
         for location in plex_search.locations:
-            if location.split("/")[-1] in video_ids["locations"]:
+            if (
+                contains_nested(location.split("/")[-1], video_ids["locations"])
+                is not None
+            ):
                 episode_videos = []
                 if videos:
                     for show, seasons in videos.items():
                         show = {k: v for k, v in show}
-                        if location.split("/")[-1] in show["locations"]:
+                        if (
+                            contains_nested(location.split("/")[-1], show["locations"])
+                            is not None
+                        ):
                             for season in seasons.values():
                                 for episode in season:
                                     episode_videos.append(episode)
@@ -241,9 +248,15 @@ def find_video(plex_search, video_ids, videos=None):
 def get_video_status(plex_search, video_ids, videos):
     try:
         for location in plex_search.locations:
-            if location.split("/")[-1] in video_ids["locations"]:
+            if (
+                contains_nested(location.split("/")[-1], video_ids["locations"])
+                is not None
+            ):
                 for video in videos:
-                    if location.split("/")[-1] in video["locations"]:
+                    if (
+                        contains_nested(location.split("/")[-1], video["locations"])
+                        is not None
+                    ):
                         return video["status"]
 
         for guid in plex_search.guids:
