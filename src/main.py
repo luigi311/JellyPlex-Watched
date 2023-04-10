@@ -365,6 +365,7 @@ def main_loop():
 
 
 def main():
+    should_loop = not str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     times = []
     while True:
@@ -377,8 +378,11 @@ def main():
             if len(times) > 0:
                 logger(f"Average time: {sum(times) / len(times)}", 0)
 
-            logger(f"Looping in {sleep_duration}")
-            sleep(sleep_duration)
+            if should_loop:
+                logger(f"Looping in {sleep_duration}")
+                sleep(sleep_duration)
+            else:
+                break
 
         except Exception as error:
             if isinstance(error, list):
@@ -389,8 +393,11 @@ def main():
 
             logger(traceback.format_exc(), 2)
 
-            logger(f"Retrying in {sleep_duration}", log_type=0)
-            sleep(sleep_duration)
+            if should_loop:
+                logger(f"Retrying in {sleep_duration}", log_type=0)
+                sleep(sleep_duration)
+            else:
+                break
 
         except KeyboardInterrupt:
             logger("Exiting", log_type=0)
