@@ -1,12 +1,44 @@
 # JellyPlex-Watched
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=luigi311/JellyPlex-Watched&amp;utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com\&utm_medium=referral\&utm_content=luigi311/JellyPlex-Watched\&utm_campaign=Badge_Grade)
 
 Sync watched between jellyfin and plex locally
 
 ## Description
 
 Keep in sync all your users watched history between jellyfin and plex servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by entering multiple options in the .env plex/jellyfin section separated by commas.
+
+## Features
+
+### Plex
+
+*   \[x] Match via Filenames
+*   \[x] Match via provider ids
+*   \[x] Map usersnames
+*   \[x] Use single login
+*   \[x] One Way/Multi Way sync
+*   \[x] Sync Watched
+*   \[x] Sync Inprogress
+
+### Jellyfin
+
+*   \[x] Match via Filenames
+*   \[x] Match via provider ids
+*   \[x] Map usersnames
+*   \[x] Use single login
+*   \[x] One Way/Multi Way sync
+*   \[x] Sync Watched
+*   \[ ] Sync Inprogress
+
+### Emby
+
+*   \[ ] Match via Filenames
+*   \[ ] Match via provider ids
+*   \[ ] Map usersnames
+*   \[ ] Use single login
+*   \[ ] One Way/Multi Way sync
+*   \[ ] Sync Watched
+*   \[ ] Sync Inprogress
 
 ## Configuration
 
@@ -21,6 +53,9 @@ DEBUG = "False"
 
 ## Debugging level, "info" is default, "debug" is more verbose
 DEBUG_LEVEL = "info"
+
+## If set to true then the script will only run once and then exit
+RUN_ONLY_ONCE = "False"
 
 ## How often to run the script in seconds
 SLEEP_DURATION = "3600"
@@ -40,7 +75,7 @@ LIBRARY_MAPPING = { "Shows": "TV Shows", "Movie": "Movies" }
 ## Comma separated for multiple options
 BLACKLIST_LIBRARY = ""
 WHITELIST_LIBRARY = ""
-BLACKLIST_LIBRARY_TYPE = "" 
+BLACKLIST_LIBRARY_TYPE = ""
 WHITELIST_LIBRARY_TYPE = ""
 BLACKLIST_USERS = ""
 WHITELIST_USERS = "testuser1,testuser2"
@@ -92,17 +127,17 @@ JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 ### Baremetal
 
--   Setup virtualenv of your choice
+*   Setup virtualenv of your choice
 
--   Install dependencies
+*   Install dependencies
 
     ```bash
       pip install -r requirements.txt
     ```
 
--   Create a .env file similar to .env.sample, uncomment whitelist and blacklist if needed, fill in baseurls and tokens
+*   Create a .env file similar to .env.sample, uncomment whitelist and blacklist if needed, fill in baseurls and tokens
 
--   Run
+*   Run
 
     ```bash
     python main.py
@@ -110,13 +145,13 @@ JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 ### Docker
 
--   Build docker image
+*   Build docker image
 
     ```bash
     docker build -t jellyplex-watched .
     ```
 
--   or use pre-built image
+*   or use pre-built image
 
     ```bash
     docker pull luigi311/jellyplex-watched:latest
@@ -124,7 +159,7 @@ JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 #### With variables
 
--   Run
+*   Run
 
     ```bash
     docker run --rm -it -e PLEX_TOKEN='SuperSecretToken' luigi311/jellyplex-watched:latest
@@ -132,9 +167,9 @@ JELLYFIN_TOKEN = "SuperSecretToken, SuperSecretToken2"
 
 #### With .env
 
--   Create a .env file similar to .env.sample and set the variables to match your setup
+*   Create a .env file similar to .env.sample and set the variables to match your setup
 
--   Run
+*   Run
 
     ```bash
      docker run --rm -it -v "$(pwd)/.env:/app/.env" luigi311/jellyplex-watched:latest

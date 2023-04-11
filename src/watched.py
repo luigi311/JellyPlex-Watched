@@ -1,9 +1,6 @@
 import copy
 
-from src.functions import (
-    logger,
-    search_mapping,
-)
+from src.functions import logger, search_mapping, contains_nested
 
 from src.library import generate_library_guids_dict
 
@@ -27,6 +24,48 @@ def combine_watched_dicts(dicts: list):
                     combined_dict[key][subkey] = subvalue
 
     return combined_dict
+
+
+def check_remove_entry(video, library, video_index, library_watched_list_2):
+    if video_index is not None:
+        if (
+            library_watched_list_2["completed"][video_index]
+            == video["status"]["completed"]
+        ) and (library_watched_list_2["time"][video_index] == video["status"]["time"]):
+            logger(
+                f"Removing {video['title']} from {library} due to exact match",
+                3,
+            )
+            return True
+        elif (
+            library_watched_list_2["completed"][video_index] == True
+            and video["status"]["completed"] == False
+        ):
+            logger(
+                f"Removing {video['title']} from {library} due to being complete in one library and not the other",
+                3,
+            )
+            return True
+        elif (
+            library_watched_list_2["completed"][video_index] == False
+            and video["status"]["completed"] == False
+        ) and (video["status"]["time"] < library_watched_list_2["time"][video_index]):
+            logger(
+                f"Removing {video['title']} from {library} due to more time watched in one library than the other",
+                3,
+            )
+            return True
+        elif (
+            library_watched_list_2["completed"][video_index] == True
+            and video["status"]["completed"] == True
+        ):
+            logger(
+                f"Removing {video['title']} from {library} due to being complete in both libraries",
+                3,
+            )
+            return True
+
+    return False
 
 
 def cleanup_watched(
@@ -60,31 +99,37 @@ def cleanup_watched(
             # Movies
             if isinstance(watched_list_1[user_1][library_1], list):
                 for movie in watched_list_1[user_1][library_1]:
-                    if is_movie_in_dict(movie, movies_watched_list_2_keys_dict):
-                        logger(f"Removing {movie} from {library_1}", 3)
-                        modified_watched_list_1[user_1][library_1].remove(movie)
+                    movie_index = get_movie_index_in_dict(
+                        movie, movies_watched_list_2_keys_dict
+                    )
+                    if movie_index is not None:
+                        if check_remove_entry(
+                            movie,
+                            library_1,
+                            movie_index,
+                            movies_watched_list_2_keys_dict,
+                        ):
+                            modified_watched_list_1[user_1][library_1].remove(movie)
 
             # TV Shows
             elif isinstance(watched_list_1[user_1][library_1], dict):
                 for show_key_1 in watched_list_1[user_1][library_1].keys():
                     show_key_dict = dict(show_key_1)
+
                     for season in watched_list_1[user_1][library_1][show_key_1]:
                         for episode in watched_list_1[user_1][library_1][show_key_1][
                             season
                         ]:
-                            if is_episode_in_dict(
+                            episode_index = get_episode_index_in_dict(
                                 episode, episode_watched_list_2_keys_dict
-                            ):
-                                if (
-                                    episode
-                                    in modified_watched_list_1[user_1][library_1][
-                                        show_key_1
-                                    ][season]
+                            )
+                            if episode_index is not None:
+                                if check_remove_entry(
+                                    episode,
+                                    library_1,
+                                    episode_index,
+                                    episode_watched_list_2_keys_dict,
                                 ):
-                                    logger(
-                                        f"Removing {episode} from {show_key_dict['title']}",
-                                        3,
-                                    )
                                     modified_watched_list_1[user_1][library_1][
                                         show_key_1
                                     ][season].remove(episode)
@@ -148,7 +193,7 @@ def get_other(watched_list, object_1, object_2):
         return None
 
 
-def is_movie_in_dict(movie, movies_watched_list_2_keys_dict):
+def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
     # Iterate through the keys and values of the movie dictionary
     for movie_key, movie_value in movie.items():
         # If the key is "locations", check if the "locations" key is present in the movies_watched_list_2_keys_dict dictionary
@@ -156,37 +201,40 @@ def is_movie_in_dict(movie, movies_watched_list_2_keys_dict):
             if "locations" in movies_watched_list_2_keys_dict.keys():
                 # Iterate through the locations in the movie dictionary
                 for location in movie_value:
-                    # If the location is in the movies_watched_list_2_keys_dict dictionary, return True
-                    if location in movies_watched_list_2_keys_dict["locations"]:
-                        return True
+                    # If the location is in the movies_watched_list_2_keys_dict dictionary, return index of the key
+                    return contains_nested(
+                        location, movies_watched_list_2_keys_dict["locations"]
+                    )
+
         # If the key is not "locations", check if the movie_key is present in the movies_watched_list_2_keys_dict dictionary
         else:
             if movie_key in movies_watched_list_2_keys_dict.keys():
                 # If the movie_value is in the movies_watched_list_2_keys_dict dictionary, return True
                 if movie_value in movies_watched_list_2_keys_dict[movie_key]:
-                    return True
+                    return movies_watched_list_2_keys_dict[movie_key].index(movie_value)
 
     # If the loop completes without finding a match, return False
-    return False
+    return None
 
 
-def is_episode_in_dict(episode, episode_watched_list_2_keys_dict):
+def get_episode_index_in_dict(episode, episode_watched_list_2_keys_dict):
     # Iterate through the keys and values of the episode dictionary
     for episode_key, episode_value in episode.items():
-        # If the key is "locations", check if the "locations" key is present in the episode_watched_list_2_keys_dict dictionary
-        if episode_key == "locations":
-            if "locations" in episode_watched_list_2_keys_dict.keys():
+        if episode_key in episode_watched_list_2_keys_dict.keys():
+            if episode_key == "locations":
                 # Iterate through the locations in the episode dictionary
                 for location in episode_value:
-                    # If the location is in the episode_watched_list_2_keys_dict dictionary, return True
-                    if location in episode_watched_list_2_keys_dict["locations"]:
-                        return True
-        # If the key is not "locations", check if the episode_key is present in the episode_watched_list_2_keys_dict dictionary
-        else:
-            if episode_key in episode_watched_list_2_keys_dict.keys():
+                    # If the location is in the episode_watched_list_2_keys_dict dictionary, return index of the key
+                    return contains_nested(
+                        location, episode_watched_list_2_keys_dict["locations"]
+                    )
+
+            else:
                 # If the episode_value is in the episode_watched_list_2_keys_dict dictionary, return True
                 if episode_value in episode_watched_list_2_keys_dict[episode_key]:
-                    return True
+                    return episode_watched_list_2_keys_dict[episode_key].index(
+                        episode_value
+                    )
 
     # If the loop completes without finding a match, return False
-    return False
+    return None

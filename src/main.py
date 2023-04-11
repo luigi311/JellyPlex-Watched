@@ -365,6 +365,7 @@ def main_loop():
 
 
 def main():
+    run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     times = []
     while True:
@@ -377,6 +378,9 @@ def main():
             if len(times) > 0:
                 logger(f"Average time: {sum(times) / len(times)}", 0)
 
+            if run_only_once:
+                break
+
             logger(f"Looping in {sleep_duration}")
             sleep(sleep_duration)
 
@@ -388,6 +392,9 @@ def main():
                 logger(error, log_type=2)
 
             logger(traceback.format_exc(), 2)
+
+            if run_only_once:
+                break
 
             logger(f"Retrying in {sleep_duration}", log_type=0)
             sleep(sleep_duration)

@@ -49,8 +49,11 @@ show_list = {
                 "tmdb": "2181581",
                 "tvdb": "8444132",
                 "locations": (
-                    "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",
+                    (
+                        "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",
+                    )
                 ),
+                "status": {"completed": True, "time": 0},
             }
         ]
     }
@@ -60,29 +63,41 @@ movie_list = [
         "title": "Coco",
         "imdb": "tt2380307",
         "tmdb": "354912",
-        "locations": ("Coco (2017) Remux-2160p.mkv", "Coco (2017) Remux-1080p.mkv"),
+        "locations": [("Coco (2017) Remux-2160p.mkv", "Coco (2017) Remux-1080p.mkv")],
+        "status": {"completed": True, "time": 0},
     }
 ]
 
 show_titles = {
     "imdb": ["tt3581920"],
-    "locations": ["The Last of Us"],
+    "locations": [("The Last of Us",)],
     "tmdb": ["100088"],
     "tvdb": ["392256"],
 }
 episode_titles = {
     "imdb": ["tt11957006"],
     "locations": [
-        "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv"
+        ("The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",)
     ],
     "tmdb": ["2181581"],
     "tvdb": ["8444132"],
+    "completed": [True],
+    "time": [0],
 }
 movie_titles = {
     "imdb": ["tt2380307"],
-    "locations": ["Coco (2017) Remux-2160p.mkv", "Coco (2017) Remux-1080p.mkv"],
+    "locations": [
+        [
+            (
+                "Coco (2017) Remux-2160p.mkv",
+                "Coco (2017) Remux-1080p.mkv",
+            )
+        ]
+    ],
     "title": ["coco"],
     "tmdb": ["354912"],
+    "completed": [True],
+    "time": [0],
 }
 
 
@@ -133,7 +148,7 @@ def test_check_skip_logic():
         library_mapping,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_check_blacklist_logic():
@@ -182,7 +197,7 @@ def test_check_blacklist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
     library_title = "Movies"
     library_type = "movies"
@@ -195,7 +210,7 @@ def test_check_blacklist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_check_whitelist_logic():
@@ -244,7 +259,7 @@ def test_check_whitelist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
     library_title = "Movies"
     library_type = "movies"
@@ -257,7 +272,7 @@ def test_check_whitelist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_show_title_dict():

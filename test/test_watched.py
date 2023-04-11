@@ -30,41 +30,42 @@ tv_shows_watched_list_1 = {
                 "imdb": "tt0550489",
                 "tmdb": "282843",
                 "tvdb": "176357",
+                "title": "Extreme Aggressor",
                 "locations": (
                     "Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",
                 ),
+                "status": {"completed": True, "time": 0},
             },
             {
                 "imdb": "tt0550487",
                 "tmdb": "282861",
                 "tvdb": "300385",
+                "title": "Compulsion",
                 "locations": ("Criminal Minds S01E02 Compulsion WEBDL-720p.mkv",),
+                "status": {"completed": True, "time": 0},
             },
         ]
     },
     frozenset({("title", "Test"), ("locations", ("Test",))}): {
         "Season 1": [
-            {"locations": ("Test S01E01.mkv",)},
-            {"locations": ("Test S01E02.mkv",)},
+            {
+                "title": "S01E01",
+                "locations": ("Test S01E01.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+            {
+                "title": "S01E02",
+                "locations": ("Test S01E02.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+            {
+                "title": "S01E04",
+                "locations": ("Test S01E04.mkv",),
+                "status": {"completed": False, "time": 5},
+            },
         ]
     },
 }
-
-movies_watched_list_1 = [
-    {
-        "imdb": "tt2380307",
-        "tmdb": "354912",
-        "title": "Coco",
-        "locations": ("Coco (2017) Remux-1080p.mkv",),
-    },
-    {
-        "tmdbcollection": "448150",
-        "imdb": "tt1431045",
-        "tmdb": "293660",
-        "title": "Deadpool",
-        "locations": ("Deadpool (2016) Remux-1080p.mkv",),
-    },
-]
 
 tv_shows_watched_list_2 = {
     frozenset(
@@ -81,25 +82,138 @@ tv_shows_watched_list_2 = {
                 "imdb": "tt0550487",
                 "tmdb": "282861",
                 "tvdb": "300385",
+                "title": "Compulsion",
                 "locations": ("Criminal Minds S01E02 Compulsion WEBDL-720p.mkv",),
+                "status": {"completed": True, "time": 0},
             },
             {
                 "imdb": "tt0550498",
                 "tmdb": "282865",
                 "tvdb": "300474",
+                "title": "Won't Get Fooled Again",
                 "locations": (
                     "Criminal Minds S01E03 Won't Get Fooled Again WEBDL-720p.mkv",
                 ),
+                "status": {"completed": True, "time": 0},
             },
         ]
     },
     frozenset({("title", "Test"), ("locations", ("Test",))}): {
         "Season 1": [
-            {"locations": ("Test S01E02.mkv",)},
-            {"locations": ("Test S01E03.mkv",)},
+            {
+                "title": "S01E02",
+                "locations": ("Test S01E02.mkv",),
+                "status": {"completed": False, "time": 10},
+            },
+            {
+                "title": "S01E03",
+                "locations": ("Test S01E03.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+            {
+                "title": "S01E04",
+                "locations": ("Test S01E04.mkv",),
+                "status": {"completed": False, "time": 10},
+            },
         ]
     },
 }
+
+expected_tv_show_watched_list_1 = {
+    frozenset(
+        {
+            ("tvdb", "75710"),
+            ("title", "Criminal Minds"),
+            ("imdb", "tt0452046"),
+            ("locations", ("Criminal Minds",)),
+            ("tmdb", "4057"),
+        }
+    ): {
+        "Season 1": [
+            {
+                "imdb": "tt0550489",
+                "tmdb": "282843",
+                "tvdb": "176357",
+                "title": "Extreme Aggressor",
+                "locations": (
+                    "Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",
+                ),
+                "status": {"completed": True, "time": 0},
+            }
+        ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {
+                "title": "S01E01",
+                "locations": ("Test S01E01.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+            {
+                "title": "S01E02",
+                "locations": ("Test S01E02.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+        ]
+    },
+}
+
+expected_tv_show_watched_list_2 = {
+    frozenset(
+        {
+            ("tvdb", "75710"),
+            ("title", "Criminal Minds"),
+            ("imdb", "tt0452046"),
+            ("locations", ("Criminal Minds",)),
+            ("tmdb", "4057"),
+        }
+    ): {
+        "Season 1": [
+            {
+                "imdb": "tt0550498",
+                "tmdb": "282865",
+                "tvdb": "300474",
+                "title": "Won't Get Fooled Again",
+                "locations": (
+                    "Criminal Minds S01E03 Won't Get Fooled Again WEBDL-720p.mkv",
+                ),
+                "status": {"completed": True, "time": 0},
+            }
+        ]
+    },
+    frozenset({("title", "Test"), ("locations", ("Test",))}): {
+        "Season 1": [
+            {
+                "title": "S01E03",
+                "locations": ("Test S01E03.mkv",),
+                "status": {"completed": True, "time": 0},
+            },
+            {
+                "title": "S01E04",
+                "locations": ("Test S01E04.mkv",),
+                "status": {"completed": False, "time": 10},
+            },
+        ]
+    },
+}
+
+movies_watched_list_1 = [
+    {
+        "imdb": "tt2380307",
+        "tmdb": "354912",
+        "title": "Coco",
+        "locations": ("Coco (2017) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
+    },
+    {
+        "tmdbcollection": "448150",
+        "imdb": "tt1431045",
+        "tmdb": "293660",
+        "title": "Deadpool",
+        "locations": ("Deadpool (2016) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
+    },
+]
 
 movies_watched_list_2 = [
     {
@@ -107,6 +221,7 @@ movies_watched_list_2 = [
         "tmdb": "354912",
         "title": "Coco",
         "locations": ("Coco (2017) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
     },
     {
         "imdb": "tt0384793",
@@ -114,7 +229,31 @@ movies_watched_list_2 = [
         "tvdb": "9103",
         "title": "Accepted",
         "locations": ("Accepted (2006) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
     },
+]
+
+
+expected_movie_watched_list_1 = [
+    {
+        "tmdbcollection": "448150",
+        "imdb": "tt1431045",
+        "tmdb": "293660",
+        "title": "Deadpool",
+        "locations": ("Deadpool (2016) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
+    }
+]
+
+expected_movie_watched_list_2 = [
+    {
+        "imdb": "tt0384793",
+        "tmdb": "9788",
+        "tvdb": "9103",
+        "title": "Accepted",
+        "locations": ("Accepted (2006) Remux-1080p.mkv",),
+        "status": {"completed": True, "time": 0},
+    }
 ]
 
 # Test to see if objects get deleted all the way up to the root.
@@ -133,85 +272,15 @@ tv_shows_2_watched_list_1 = {
                 "imdb": "tt0550489",
                 "tmdb": "282843",
                 "tvdb": "176357",
+                "title": "Extreme Aggressor",
                 "locations": (
                     "Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",
                 ),
+                "status": {"completed": True, "time": 0},
             },
         ]
     }
 }
-
-expected_tv_show_watched_list_1 = {
-    frozenset(
-        {
-            ("tvdb", "75710"),
-            ("title", "Criminal Minds"),
-            ("imdb", "tt0452046"),
-            ("locations", ("Criminal Minds",)),
-            ("tmdb", "4057"),
-        }
-    ): {
-        "Season 1": [
-            {
-                "imdb": "tt0550489",
-                "tmdb": "282843",
-                "tvdb": "176357",
-                "locations": (
-                    "Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",
-                ),
-            }
-        ]
-    },
-    frozenset({("title", "Test"), ("locations", ("Test",))}): {
-        "Season 1": [{"locations": ("Test S01E01.mkv",)}]
-    },
-}
-
-expected_movie_watched_list_1 = [
-    {
-        "tmdbcollection": "448150",
-        "imdb": "tt1431045",
-        "tmdb": "293660",
-        "title": "Deadpool",
-        "locations": ("Deadpool (2016) Remux-1080p.mkv",),
-    }
-]
-
-expected_tv_show_watched_list_2 = {
-    frozenset(
-        {
-            ("tvdb", "75710"),
-            ("title", "Criminal Minds"),
-            ("imdb", "tt0452046"),
-            ("locations", ("Criminal Minds",)),
-            ("tmdb", "4057"),
-        }
-    ): {
-        "Season 1": [
-            {
-                "imdb": "tt0550498",
-                "tmdb": "282865",
-                "tvdb": "300474",
-                "locations": (
-                    "Criminal Minds S01E03 Won't Get Fooled Again WEBDL-720p.mkv",
-                ),
-            }
-        ]
-    },
-    frozenset({("title", "Test"), ("locations", ("Test",))}): {
-        "Season 1": [{"locations": ("Test S01E03.mkv",)}]
-    },
-}
-
-expected_movie_watched_list_2 = [
-    {
-        "imdb": "tt0384793",
-        "tmdb": "9788",
-        "tvdb": "9103",
-        "title": "Accepted",
-        "locations": ("Accepted (2006) Remux-1080p.mkv",),
-    }
-]
 
 
 def test_simple_cleanup_watched():
@@ -311,18 +380,21 @@ def test_combine_watched_dicts():
                         "tmdb": "12429",
                         "imdb": "tt0876563",
                         "locations": ("Ponyo (2008) Bluray-1080p.mkv",),
+                        "status": {"completed": True, "time": 0},
                     },
                     {
                         "title": "Spirited Away",
                         "tmdb": "129",
                         "imdb": "tt0245429",
                         "locations": ("Spirited Away (2001) Bluray-1080p.mkv",),
+                        "status": {"completed": True, "time": 0},
                     },
                     {
                         "title": "Castle in the Sky",
                         "tmdb": "10515",
                         "imdb": "tt0092067",
                         "locations": ("Castle in the Sky (1986) Bluray-1080p.mkv",),
+                        "status": {"completed": True, "time": 0},
                     },
                 ]
             }
@@ -349,6 +421,7 @@ def test_combine_watched_dicts():
                                 "locations": (
                                     "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
                                 ),
+                                "status": {"completed": True, "time": 0},
                             }
                         ]
                     }
@@ -365,18 +438,21 @@ def test_combine_watched_dicts():
                     "tmdb": "12429",
                     "imdb": "tt0876563",
                     "locations": ("Ponyo (2008) Bluray-1080p.mkv",),
+                    "status": {"completed": True, "time": 0},
                 },
                 {
                     "title": "Spirited Away",
                     "tmdb": "129",
                     "imdb": "tt0245429",
                     "locations": ("Spirited Away (2001) Bluray-1080p.mkv",),
+                    "status": {"completed": True, "time": 0},
                 },
                 {
                     "title": "Castle in the Sky",
                     "tmdb": "10515",
                     "imdb": "tt0092067",
                     "locations": ("Castle in the Sky (1986) Bluray-1080p.mkv",),
+                    "status": {"completed": True, "time": 0},
                 },
             ],
             "Anime Shows": {},
@@ -399,6 +475,7 @@ def test_combine_watched_dicts():
                             "locations": (
                                 "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
                             ),
+                            "status": {"completed": True, "time": 0},
                         }
                     ]
                 }
