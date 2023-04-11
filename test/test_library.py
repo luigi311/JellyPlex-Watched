@@ -148,7 +148,7 @@ def test_check_skip_logic():
         library_mapping,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_check_blacklist_logic():
@@ -197,7 +197,7 @@ def test_check_blacklist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
     library_title = "Movies"
     library_type = "movies"
@@ -210,7 +210,7 @@ def test_check_blacklist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_check_whitelist_logic():
@@ -259,7 +259,7 @@ def test_check_whitelist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
     library_title = "Movies"
     library_type = "movies"
@@ -272,7 +272,7 @@ def test_check_whitelist_logic():
         library_other,
     )
 
-    assert skip_reason == None
+    assert skip_reason is None
 
 
 def test_show_title_dict():
