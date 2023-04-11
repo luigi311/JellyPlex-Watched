@@ -170,7 +170,7 @@ class Jellyfin:
                     )
 
                     for movie in watched["Items"]:
-                        if "MediaSources" in movie and movie["MediaSources"] is not {}:
+                        if "MediaSources" in movie and movie["MediaSources"] != {}:
                             logger(
                                 f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
                                 3,
@@ -188,7 +188,7 @@ class Jellyfin:
 
                     # Get all partially watched movies greater than 1 minute
                     for movie in in_progress["Items"]:
-                        if "MediaSources" in movie and movie["MediaSources"] is not {}:
+                        if "MediaSources" in movie and movie["MediaSources"] != {}:
                             if movie["UserData"]["PlaybackPositionTicks"] < 600000000:
                                 continue
 
