@@ -174,10 +174,8 @@ def episode_title_dict(user_list: dict):
         for show in user_list:
             for season in user_list[show]:
                 for episode in user_list[show][season]:
-
                     # Iterate through the keys and values in each episode
                     for episode_key, episode_value in episode.items():
-
                         # If the key is not "status", add the key to episode_output_dict if it doesn't exist
                         if episode_key != "status":
                             if episode_key.lower() not in episode_output_dict:

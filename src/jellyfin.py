@@ -591,8 +591,8 @@ class Jellyfin:
                                         break
 
                         if movie_status:
+                            jellyfin_video_id = jellyfin_video["Id"]
                             if movie_status["completed"]:
-                                jellyfin_video_id = jellyfin_video["Id"]
                                 msg = f"{jellyfin_video['Name']} as watched for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     logger(f"Marking {msg}", 0)
@@ -605,7 +605,6 @@ class Jellyfin:
                                     logger(f"Dryrun {msg}", 0)
                             else:
                                 # TODO add support for partially watched movies
-                                jellyfin_video_id = jellyfin_video["Id"]
                                 msg = f"{jellyfin_video['Name']} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     pass
