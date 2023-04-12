@@ -64,6 +64,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build
         id: build
         if: "${{ steps.docker_meta.outcome == 'skipped' }}"
