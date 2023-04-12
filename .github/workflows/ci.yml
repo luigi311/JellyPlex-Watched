@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - dockerfile: Dockerfile
+          - dockerfile: Dockerfile.alpine
             variant: alpine
           - dockerfile: Dockerfile.slim
             variant: slim
