@@ -1,4 +1,4 @@
-FROM python:alpine
+FROM python:3-alpine
 
 ENV DRYRUN 'True'
 ENV DEBUG 'True'
