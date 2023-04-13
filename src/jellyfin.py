@@ -1,7 +1,8 @@
 import asyncio, aiohttp, traceback
 from math import floor
+from loguru import logger
 
-from src.functions import logger, search_mapping, contains_nested
+from src.functions import search_mapping, contains_nested
 from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
@@ -13,14 +14,12 @@ from src.watched import (
 
 def get_movie_guids(movie):
     if "ProviderIds" in movie:
-        logger(
-            f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}",
-            3,
+        logger.trace(
+            f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}"
         )
     else:
-        logger(
-            f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}",
-            3,
+        logger.trace(
+            f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}"
         )
 
     # Create a dictionary for the movie with its title
@@ -117,7 +116,7 @@ class Jellyfin:
             return results
 
         except Exception as e:
-            logger(f"Jellyfin: Query {query_type} {query}\nResults {results}\n{e}", 2)
+            logger.exception(f"Jellyfin: Query {query_type} {query}\nResults {results}\n{e}")
             raise Exception(e)
 
     async def get_users(self):
@@ -135,7 +134,7 @@ class Jellyfin:
 
             return users
         except Exception as e:
-            logger(f"Jellyfin: Get users failed {e}", 2)
+            logger.exception(f"Jellyfin: Get users failed {e}")
             raise Exception(e)
 
     async def get_user_library_watched(
@@ -146,9 +145,8 @@ class Jellyfin:
             user_watched = {}
             user_watched[user_name] = {}
 
-            logger(
-                f"Jellyfin: Generating watched for {user_name} in library {library_title}",
-                0,
+            logger.info(
+                f"Jellyfin: Generating watched for {user_name} in library {library_title}"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -171,9 +169,8 @@ class Jellyfin:
 
                     for movie in watched["Items"]:
                         if "MediaSources" in movie and movie["MediaSources"] != {}:
-                            logger(
-                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
-                                3,
+                            logger.trace(
+                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list"
                             )
 
                             # Get the movie's GUIDs
@@ -181,9 +178,8 @@ class Jellyfin:
 
                             # Append the movie dictionary to the list for the given user and library
                             user_watched[user_name][library_title].append(movie_guids)
-                            logger(
-                                f"Jellyfin: Added {movie_guids} to {user_name} watched list",
-                                3,
+                            logger.trace(
+                                f"Jellyfin: Added {movie_guids} to {user_name} watched list"
                             )
 
                     # Get all partially watched movies greater than 1 minute
@@ -192,9 +188,8 @@ class Jellyfin:
                             if movie["UserData"]["PlaybackPositionTicks"] < 600000000:
                                 continue
 
-                            logger(
-                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
-                                3,
+                            logger.trace(
+                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list"
                             )
 
                             # Get the movie's GUIDs
@@ -202,9 +197,8 @@ class Jellyfin:
 
                             # Append the movie dictionary to the list for the given user and library
                             user_watched[user_name][library_title].append(movie_guids)
-                            logger(
-                                f"Jellyfin: Added {movie_guids} to {user_name} watched list",
-                                3,
+                            logger.trace(
+                                f"Jellyfin: Added {movie_guids} to {user_name} watched list"
                             )
 
                 # TV Shows
@@ -230,9 +224,8 @@ class Jellyfin:
                     # Create a list of tasks to retrieve the seasons of each watched show
                     seasons_tasks = []
                     for show in watched_shows_filtered:
-                        logger(
-                            f"Jellyfin: Adding {show['Name']} to {user_name} watched list",
-                            3,
+                        logger.trace(
+                            f"Jellyfin: Adding {show['Name']} to {user_name} watched list"
                         )
                         show_guids = {
                             k.lower(): v for k, v in show["ProviderIds"].items()
@@ -346,8 +339,8 @@ class Jellyfin:
                             if (
                                 season_dict["Identifiers"]["season_name"]
                                 not in user_watched[user_name][library_title][
-                                    season_dict["Identifiers"]["show_guids"]
-                                ]
+                                season_dict["Identifiers"]["show_guids"]
+                            ]
                             ):
                                 user_watched[user_name][library_title][
                                     season_dict["Identifiers"]["show_guids"]
@@ -358,25 +351,23 @@ class Jellyfin:
                             ][season_dict["Identifiers"]["season_name"]] = season_dict[
                                 "Episodes"
                             ]
-                            logger(
-                                f"Jellyfin: Added {season_dict['Episodes']} to {user_name} {season_dict['Identifiers']['show_guids']} watched list",
-                                1,
+                            logger.debug(
+                                f"Jellyfin: Added {season_dict['Episodes']} to {user_name} {season_dict['Identifiers']['show_guids']} watched list"
                             )
 
-            logger(
-                f"Jellyfin: Got watched for {user_name} in library {library_title}", 1
+            logger.debug(
+                f"Jellyfin: Got watched for {user_name} in library {library_title}"
             )
             if library_title in user_watched[user_name]:
-                logger(f"Jellyfin: {user_watched[user_name][library_title]}", 3)
+                logger.trace(f"Jellyfin: {user_watched[user_name][library_title]}")
 
             return user_watched
         except Exception as e:
-            logger(
-                f"Jellyfin: Failed to get watched for {user_name} in library {library_title}, Error: {e}",
-                2,
+            logger.error(
+                f"Jellyfin: Failed to get watched for {user_name} in library {library_title}, Error: {e}"
             )
 
-            logger(traceback.format_exc(), 2)
+            logger.error(traceback.format_exc())
             return {}
 
     async def get_users_watched(
@@ -445,18 +436,16 @@ class Jellyfin:
                     )
 
                     if skip_reason:
-                        logger(
-                            f"Jellyfin: Skipping library {library_title}: {skip_reason}",
-                            1,
+                        logger.debug(
+                            f"Jellyfin: Skipping library {library_title}: {skip_reason}"
                         )
                         continue
 
                     # If there are multiple types in library raise error
                     if types is None or len(types) < 1:
                         all_types = set([x["Type"] for x in watched["Items"]])
-                        logger(
-                            f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}",
-                            1,
+                        logger.debug(
+                            f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}"
                         )
                         continue
 
@@ -477,7 +466,7 @@ class Jellyfin:
 
             return watched
         except Exception as e:
-            logger(f"Jellyfin: Failed to get users watched, Error: {e}", 2)
+            logger.error(f"Jellyfin: Failed to get users watched, Error: {e}")
             raise Exception(e)
 
     async def get_watched(
@@ -516,15 +505,15 @@ class Jellyfin:
 
             return users_watched
         except Exception as e:
-            logger(f"Jellyfin: Failed to get watched, Error: {e}", 2)
+            logger.error(f"Jellyfin: Failed to get watched, Error: {e}")
             raise Exception(e)
 
     async def update_user_watched(
         self, user_name, user_id, library, library_id, videos, dryrun
     ):
         try:
-            logger(
-                f"Jellyfin: Updating watched for {user_name} in library {library}", 1
+            logger.debug(
+                f"Jellyfin: Updating watched for {user_name} in library {library}"
             )
             (
                 videos_shows_ids,
@@ -532,9 +521,8 @@ class Jellyfin:
                 videos_movies_ids,
             ) = generate_library_guids_dict(videos)
 
-            logger(
-                f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
-                1,
+            logger.debug(
+                f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}"
             )
             async with aiohttp.ClientSession() as session:
                 if videos_movies_ids:
@@ -578,8 +566,8 @@ class Jellyfin:
                                     if (
                                         movie_provider_id.lower()
                                         in videos_movies_ids[
-                                            movie_provider_source.lower()
-                                        ]
+                                        movie_provider_source.lower()
+                                    ]
                                     ):
                                         for video in videos:
                                             if (
@@ -595,14 +583,14 @@ class Jellyfin:
                             if movie_status["completed"]:
                                 msg = f"{jellyfin_video['Name']} as watched for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
-                                    logger(f"Marking {msg}", 0)
+                                    logger.info(f"Marking {msg}")
                                     await self.query(
                                         f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
                                         "post",
                                         session,
                                     )
                                 else:
-                                    logger(f"Dryrun {msg}", 0)
+                                    logger.info(f"Dryrun {msg}")
                             else:
                                 # TODO add support for partially watched movies
                                 msg = f"{jellyfin_video['Name']} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
@@ -613,9 +601,8 @@ class Jellyfin:
                                     pass
                                     # logger(f"Dryrun {msg}", 0)
                         else:
-                            logger(
-                                f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}",
-                                1,
+                            logger.debug(
+                                f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}"
                             )
 
                 # TV Shows
@@ -664,8 +651,8 @@ class Jellyfin:
                                     if (
                                         show_provider_id.lower()
                                         in videos_shows_ids[
-                                            show_provider_source.lower()
-                                        ]
+                                        show_provider_source.lower()
+                                    ]
                                     ):
                                         show_found = True
                                         episode_videos = []
@@ -680,9 +667,8 @@ class Jellyfin:
                                                         episode_videos.append(episode)
 
                         if show_found:
-                            logger(
-                                f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show['Name']}",
-                                1,
+                            logger.debug(
+                                f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show['Name']}"
                             )
                             jellyfin_show_id = jellyfin_show["Id"]
                             jellyfin_episodes = await self.query(
@@ -732,15 +718,15 @@ class Jellyfin:
                                             if (
                                                 episode_provider_id.lower()
                                                 in videos_episodes_ids[
-                                                    episode_provider_source.lower()
-                                                ]
+                                                episode_provider_source.lower()
+                                            ]
                                             ):
                                                 for episode in episode_videos:
                                                     if (
                                                         episode_provider_id.lower()
                                                         in episode[
-                                                            episode_provider_source.lower()
-                                                        ]
+                                                        episode_provider_source.lower()
+                                                    ]
                                                     ):
                                                         episode_status = episode[
                                                             "status"
@@ -756,14 +742,14 @@ class Jellyfin:
                                             + f" as watched for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
-                                            logger(f"Marked {msg}", 0)
+                                            logger.info(f"Marked {msg}")
                                             await self.query(
                                                 f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
                                                 "post",
                                                 session,
                                             )
                                         else:
-                                            logger(f"Dryrun {msg}", 0)
+                                            logger.info(f"Dryrun {msg}")
                                     else:
                                         # TODO add support for partially watched episodes
                                         jellyfin_episode_id = jellyfin_episode["Id"]
@@ -778,14 +764,12 @@ class Jellyfin:
                                             pass
                                             # logger(f"Dryrun {msg}", 0)
                                 else:
-                                    logger(
-                                        f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}",
-                                        3,
+                                    logger.trace(
+                                        f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}"
                                     )
                         else:
-                            logger(
-                                f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}",
-                                3,
+                            logger.trace(
+                                f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}"
                             )
 
             if (
@@ -793,17 +777,15 @@ class Jellyfin:
                 and not videos_shows_ids
                 and not videos_episodes_ids
             ):
-                logger(
-                    f"Jellyfin: No videos to mark as watched for {user_name} in library {library}",
-                    1,
+                logger.debug(
+                    f"Jellyfin: No videos to mark as watched for {user_name} in library {library}"
                 )
 
         except Exception as e:
-            logger(
-                f"Jellyfin: Error updating watched for {user_name} in library {library}, {e}",
-                2,
+            logger.error(
+                f"Jellyfin: Error updating watched for {user_name} in library {library}, {e}"
             )
-            logger(traceback.format_exc(), 2)
+            logger.error(traceback.format_exc())
             raise Exception(e)
 
     async def update_watched(
@@ -813,7 +795,7 @@ class Jellyfin:
             tasks = []
             async with aiohttp.ClientSession() as session:
                 for user, libraries in watched_list.items():
-                    logger(f"Jellyfin: Updating for entry {user}, {libraries}", 1)
+                    logger.debug(f"Jellyfin: Updating for entry {user}, {libraries}")
                     user_other = None
                     user_name = None
                     if user_mapping:
@@ -834,7 +816,7 @@ class Jellyfin:
                             break
 
                     if not user_id:
-                        logger(f"{user} {user_other} not found in Jellyfin", 2)
+                        logger.error(f"{user} {user_other} not found in Jellyfin")
                         continue
 
                     jellyfin_libraries = await self.query(
@@ -857,21 +839,18 @@ class Jellyfin:
                                 if library_other.lower() in [
                                     x["Name"].lower() for x in jellyfin_libraries
                                 ]:
-                                    logger(
-                                        f"Jellyfin: Library {library} not found, but {library_other} found, using {library_other}",
-                                        1,
+                                    logger.debug(
+                                        f"Jellyfin: Library {library} not found, but {library_other} found, using {library_other}"
                                     )
                                     library = library_other
                                 else:
-                                    logger(
-                                        f"Jellyfin: Library {library} or {library_other} not found in library list",
-                                        1,
+                                    logger.debug(
+                                        f"Jellyfin: Library {library} or {library_other} not found in library list"
                                     )
                                     continue
                             else:
-                                logger(
-                                    f"Jellyfin: Library {library} not found in library list",
-                                    1,
+                                logger.debug(
+                                    f"Jellyfin: Library {library} not found in library list"
                                 )
                                 continue
 
@@ -889,5 +868,5 @@ class Jellyfin:
 
             await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
-            logger(f"Jellyfin: Error updating watched, {e}", 2)
+            logger.error(f"Jellyfin: Error updating watched, {e}")
             raise Exception(e)

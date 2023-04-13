@@ -1,5 +1,6 @@
+from loguru import logger
+
 from src.functions import (
-    logger,
     search_mapping,
 )
 
@@ -51,7 +52,7 @@ def filter_user_lists(users, blacklist_users, whitelist_users):
         # whitelist_user is not empty and user lowercase is not in whitelist lowercase
         if len(whitelist_users) > 0:
             if user not in whitelist_users and users[user] not in whitelist_users:
-                logger(f"{user} or {users[user]} is not in whitelist", 1)
+                logger.debug(f"{user} or {users[user]} is not in whitelist")
                 continue
 
         if user not in blacklist_users and users[user] not in blacklist_users:
