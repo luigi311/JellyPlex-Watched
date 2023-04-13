@@ -39,12 +39,11 @@ jobs:
         id: docker_meta
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        if: "${{ env.DOCKER_USERNAME != '' }}"
         uses: docker/metadata-action@v4
         with:
           images: |
-            ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched
-            ghcr.io/${{ secrets.DOCKER_USERNAME }}/jellyplex-watched
+            ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
+            ghcr.io/${{ github.repository_owner }}/jellyplex-watched
           tags: |
             type=raw,value=${{ matrix.variant }},enable={{is_default_branch}}
             type=ref,event=branch,suffix=-${{ matrix.variant }}
