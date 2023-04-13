@@ -45,7 +45,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
             ghcr.io/${{ github.repository_owner }}/jellyplex-watched
           tags: |
-            type=raw,value=latest,enable=${{ matrix.variant == 'alpine' && is_default_branch }}
+            type=raw,value=latest,enable=${{ matrix.variant == 'alpine' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
             type=ref,event=branch,suffix=-${{ matrix.variant }}
             type=ref,event=pr,suffix=-${{ matrix.variant }}
