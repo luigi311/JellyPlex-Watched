@@ -45,11 +45,12 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
             ghcr.io/${{ github.repository_owner }}/jellyplex-watched
           tags: |
-            type=raw,value=${{ matrix.variant }},enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ matrix.variant == 'alpine' }}
+            type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
             type=ref,event=branch,suffix=-${{ matrix.variant }}
             type=ref,event=pr,suffix=-${{ matrix.variant }}
-            type=semver,pattern={{version}},suffix=-${{ matrix.variant }}
-            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
             type=sha,suffix=-${{ matrix.variant }}
 
       - name: Set up QEMU
