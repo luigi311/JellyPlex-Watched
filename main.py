@@ -1,8 +1,4 @@
-import os
 import sys
-
-from dotenv import load_dotenv
-from loguru import logger
 
 if __name__ == "__main__":
     # Check python version 3.6 or higher

@@ -1,5 +1,4 @@
 from loguru import logger
-from dotenv import load_dotenv
 
 from src.functions import (
     search_mapping,
