@@ -8,7 +8,7 @@ on:
     paths-ignore:
       - .gitignore
       - "*.md"
-  
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -58,7 +58,9 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Login to DockerHub
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        if: "${{ env.DOCKER_USERNAME != '' }}"
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -82,7 +84,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: false
           tags: jellyplex-watched:action
-      
+
       - name: Build Push
         id: build_push
         if: "${{ steps.docker_meta.outcome == 'success' }}"
