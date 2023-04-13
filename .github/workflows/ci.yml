@@ -37,8 +37,6 @@ jobs:
 
       - name: Docker meta
         id: docker_meta
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         uses: docker/metadata-action@v4
         with:
           images: |
