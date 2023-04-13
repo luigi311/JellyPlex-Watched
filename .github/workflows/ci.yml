@@ -41,7 +41,8 @@ jobs:
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
-            ghcr.io/${{ github.repository }}
+            # Do not push to ghcr.io on PRs due to permission issues
+            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' }} 
           tags: |
             type=raw,value=latest,enable=${{ matrix.variant == 'alpine' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
@@ -76,7 +77,7 @@ jobs:
 
       - name: Build
         id: build
-        if: "${{ steps.docker_meta.outcome == 'skipped' }}"
+        if: "${{ steps.docker_meta.outputs.tags == '' }}"
         uses: docker/build-push-action@v3
         with:
           context: .
@@ -87,7 +88,7 @@ jobs:
 
       - name: Build Push
         id: build_push
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        if: "${{ steps.docker_meta.outputs.tags != '' }}"
         uses: docker/build-push-action@v3
         with:
           context: .
