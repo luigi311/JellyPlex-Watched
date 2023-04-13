@@ -1,4 +1,7 @@
 import re, requests, os, traceback
+from typing import Dict, Union
+
+from plexapi.video import Episode, Movie
 from urllib3.poolmanager import PoolManager
 from math import floor
 
@@ -29,55 +32,28 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
         )
 
 
-def get_movie_guids(video, completed=True):
-    logger(f"Plex: {video.title} {video.guids} {video.locations}", 3)
+def get_guids(item: Union[Movie, Episode], completed=True):
+    guids: Dict[str, str] = dict(
+        guid.id.split('://')
+        for guid
+        in item.guids
+        if guid.id is not None and len(guid.id.strip()) > 0
+    )
 
-    movie_guids = {}
-    try:
-        for guid in video.guids:
-            # Extract source and id from guid.id
-            m = re.match(r"(.*)://(.*)", guid.id)
-            guid_source, guid_id = m.group(1).lower(), m.group(2)
-            movie_guids[guid_source] = guid_id
-    except Exception:
-        logger(f"Plex: Failed to get guids for {video.title}, Using location only", 1)
-
-    movie_guids["title"] = video.title
-    movie_guids["locations"] = tuple([x.split("/")[-1] for x in video.locations])
-
-    movie_guids["status"] = {
-        "completed": completed,
-        "time": video.viewOffset,
-    }
-
-    return movie_guids
-
-
-def get_episode_guids(episode, show, completed=True):
-    episode_guids_temp = {}
-    try:
-        for guid in episode.guids:
-            # Extract after :// from guid.id
-            m = re.match(r"(.*)://(.*)", guid.id)
-            guid_source, guid_id = m.group(1).lower(), m.group(2)
-            episode_guids_temp[guid_source] = guid_id
-    except Exception:
+    if len(guids) == 0:
         logger(
-            f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
+            f"Plex: Failed to get any guids for {item.title}, Using location only",
             1,
         )
 
-    episode_guids_temp["title"] = episode.title
-    episode_guids_temp["locations"] = tuple(
-        [x.split("/")[-1] for x in episode.locations]
-    )
-
-    episode_guids_temp["status"] = {
-        "completed": completed,
-        "time": episode.viewOffset,
-    }
-
-    return episode_guids_temp
+    return {
+        'title': item.title,
+        'locations': tuple([location.split("/")[-1] for location in item.locations]),
+        'status': {
+            "completed": completed,
+            "time": item.viewOffset,
+        }
+    } | guids
 
 
 def get_user_library_watched_show(show):
@@ -108,14 +84,14 @@ def get_user_library_watched_show(show):
                     episode_guids[episode.parentTitle] = []
 
                 episode_guids[episode.parentTitle].append(
-                    get_episode_guids(episode, show, completed=True)
+                    get_guids(episode, completed=True)
                 )
             elif episode.viewOffset > 0:
                 if episode.parentTitle not in episode_guids:
                     episode_guids[episode.parentTitle] = []
 
                 episode_guids[episode.parentTitle].append(
-                    get_episode_guids(episode, show, completed=False)
+                    get_guids(episode, completed=False)
                 )
 
         return show_guids, episode_guids
@@ -144,7 +120,7 @@ def get_user_library_watched(user, user_plex, library):
             for video in library_videos.search(unwatched=False):
                 logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
 
-                movie_guids = get_movie_guids(video, completed=True)
+                movie_guids = get_guids(video, completed=True)
 
                 user_watched[user_name][library.title].append(movie_guids)
 
@@ -155,7 +131,7 @@ def get_user_library_watched(user, user_plex, library):
 
                 logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
 
-                movie_guids = get_movie_guids(video, completed=False)
+                movie_guids = get_guids(video, completed=False)
 
                 user_watched[user_name][library.title].append(movie_guids)
 
