@@ -1,9 +1,13 @@
 import re, requests, os, traceback
-from typing import Dict, Union
+from typing import Dict, Union, FrozenSet
+import operator
+from itertools import groupby as itertools_groupby
 
 from plexapi.video import Episode, Movie
 from urllib3.poolmanager import PoolManager
 from math import floor
+
+from requests.adapters import HTTPAdapter as RequestsHTTPAdapter
 
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
@@ -21,7 +25,7 @@ from src.library import (
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
-class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
+class HostNameIgnoringAdapter(RequestsHTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
         self.poolmanager = PoolManager(
             num_pools=connections,
@@ -32,7 +36,7 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
         )
 
 
-def get_guids(item: Union[Movie, Episode], completed=True):
+def extract_guids_from_item(item: Union[Movie, Episode]) -> Dict[str, str]:
     guids: Dict[str, str] = dict(
         guid.id.split('://')
         for guid
@@ -46,6 +50,10 @@ def get_guids(item: Union[Movie, Episode], completed=True):
             1,
         )
 
+    return guids
+
+
+def get_guids(item: Union[Movie, Episode], completed=True):
     return {
         'title': item.title,
         'locations': tuple([location.split("/")[-1] for location in item.locations]),
@@ -53,49 +61,41 @@ def get_guids(item: Union[Movie, Episode], completed=True):
             "completed": completed,
             "time": item.viewOffset,
         }
-    } | guids
+    } | extract_guids_from_item(item)  # Merge the metadata and guid dictionaries
 
 
 def get_user_library_watched_show(show):
     try:
-        show_guids = {}
-        try:
-            for show_guid in show.guids:
-                # Extract source and id from guid.id
-                m = re.match(r"(.*)://(.*)", show_guid.id)
-                show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
-                show_guids[show_guid_source] = show_guid_id
-        except Exception:
-            logger(
-                f"Plex: Failed to get guids for {show.title}, Using location only", 1
+        show_guids: FrozenSet = frozenset(
+            ({
+                'title': show.title,
+                'locations': tuple(
+                    [location.split("/")[-1] for location in show.locations])
+            } | extract_guids_from_item(show)).items()  # Merge the metadata and guid dictionaries
+        )
+
+        watched_episodes = show.watched()
+        episode_guids = {
+            # Offset group data because the first value will be the key
+            season: [episode[1] for episode in episodes]
+            for season, episodes
+            # Group episodes by first element of tuple (episode.parentTitle)
+            in itertools_groupby(
+                [
+                    (
+                        episode.parentTitle,
+                        get_guids(episode, completed=episode in watched_episodes)
+                    )
+                    for episode
+                    in show.episodes()
+                    # Only include watched/partially-watched episodes
+                    if episode in watched_episodes or episode.viewOffset > 0
+                ],
+                operator.itemgetter(0)
             )
-
-        show_guids["title"] = show.title
-        show_guids["locations"] = tuple([x.split("/")[-1] for x in show.locations])
-        show_guids = frozenset(show_guids.items())
-
-        # Get all watched episodes for show
-        episode_guids = {}
-        watched = show.watched()
-
-        for episode in show.episodes():
-            if episode in watched:
-                if episode.parentTitle not in episode_guids:
-                    episode_guids[episode.parentTitle] = []
-
-                episode_guids[episode.parentTitle].append(
-                    get_guids(episode, completed=True)
-                )
-            elif episode.viewOffset > 0:
-                if episode.parentTitle not in episode_guids:
-                    episode_guids[episode.parentTitle] = []
-
-                episode_guids[episode.parentTitle].append(
-                    get_guids(episode, completed=False)
-                )
+        }
 
         return show_guids, episode_guids
-
     except Exception:
         return {}, {}
 
