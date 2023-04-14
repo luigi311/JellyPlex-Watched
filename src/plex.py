@@ -145,10 +145,6 @@ def get_user_library_watched(user, user_plex, library):
 
             for show_guids, episode_guids in future_thread_executor(args, threads=4):
                 if show_guids and episode_guids:
-                    # append show, season, episode
-                    if show_guids not in watched:
-                        watched[show_guids] = {}
-
                     watched[show_guids] = episode_guids
                     logger(
                         f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
