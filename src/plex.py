@@ -101,11 +101,8 @@ def get_user_library_watched_show(show):
 
 
 def get_user_library_watched(user, user_plex, library):
+    user_name: str = user.title.lower()
     try:
-        user_name = user.title.lower()
-        user_watched = {}
-        user_watched[user_name] = {}
-
         logger(
             f"Plex: Generating watched for {user_name} in library {library.title}",
             0,
@@ -114,60 +111,61 @@ def get_user_library_watched(user, user_plex, library):
         library_videos = user_plex.library.section(library.title)
 
         if library.type == "movie":
-            user_watched[user_name][library.title] = []
+            watched = []
 
-            # Get all watched movies
-            for video in library_videos.search(unwatched=False):
-                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
+            args = [
+                       [get_guids, video, True]
+                       for video
+                       # Get all watched movies
+                       in library_videos.search(unwatched=False)
+                   ] + [
+                       [get_guids, video, False]
+                       for video
+                       # Get all partially watched movies
+                       in library_videos.search(inProgress=True)
+                       # Ignore all partially watched movies watched under 1 minute
+                       if video.viewOffset < 60000
+                   ]
 
-                movie_guids = get_guids(video, completed=True)
-
-                user_watched[user_name][library.title].append(movie_guids)
-
-            # Get all partially watched movies greater than 1 minute
-            for video in library_videos.search(inProgress=True):
-                if video.viewOffset < 60000:
-                    continue
-
-                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
-
-                movie_guids = get_guids(video, completed=False)
-
-                user_watched[user_name][library.title].append(movie_guids)
-
+            for guid in future_thread_executor(
+                args, workers=min(os.cpu_count(), 4)
+            ):
+                logger(f"Plex: Adding {guid['title']} to {user_name} watched list", 3)
+                watched.append(guid)
         elif library.type == "show":
-            user_watched[user_name][library.title] = {}
+            watched = {}
 
-            # Parallelize show processing
-            args = []
-
-            # Get all watched shows
-            for show in library_videos.search(unwatched=False):
-                args.append([get_user_library_watched_show, show])
-
-            # Get all partially watched shows
-            for show in library_videos.search(inProgress=True):
-                args.append([get_user_library_watched_show, show])
+            # Get all watched shows and partially watched shows
+            args = [
+                (get_user_library_watched_show, show)
+                for show
+                in library_videos.search(unwatched=False) + library_videos.search(inProgress=True)
+            ]
 
             for show_guids, episode_guids in future_thread_executor(
                 args, workers=min(os.cpu_count(), 4)
             ):
                 if show_guids and episode_guids:
                     # append show, season, episode
-                    if show_guids not in user_watched[user_name][library.title]:
-                        user_watched[user_name][library.title][show_guids] = {}
+                    if show_guids not in watched:
+                        watched[show_guids] = {}
 
-                    user_watched[user_name][library.title][show_guids] = episode_guids
+                    watched[show_guids] = episode_guids
                     logger(
                         f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
                         3,
                     )
+        else:
+            watched = None
 
         logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
-        if library.title in user_watched[user_name]:
-            logger(f"Plex: {user_watched[user_name][library.title]}", 3)
+        logger(f"Plex: {watched}", 3)
 
-        return user_watched
+        return {
+            user_name: {
+                library.title: watched
+            } if watched is not None else {}
+        }
     except Exception as e:
         logger(
             f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
