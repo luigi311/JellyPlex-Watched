@@ -1,8 +1,8 @@
+from loguru import logger
+
 from src.functions import (
-    logger,
     search_mapping,
 )
-
 
 def check_skip_logic(
     library_title,
@@ -158,7 +158,7 @@ def show_title_dict(user_list: dict):
 
         return show_output_dict
     except Exception:
-        logger("Generating show_output_dict failed, skipping", 1)
+        logger.debug("Generating show_output_dict failed, skipping")
         return {}
 
 
@@ -213,7 +213,7 @@ def episode_title_dict(user_list: dict):
 
         return episode_output_dict
     except Exception:
-        logger("Generating episode_output_dict failed, skipping", 1)
+        logger.debug("Generating episode_output_dict failed, skipping")
         return {}
 
 
@@ -246,7 +246,7 @@ def movies_title_dict(user_list: dict):
 
         return movies_output_dict
     except Exception:
-        logger("Generating movies_output_dict failed, skipping", 1)
+        logger.debug("Generating movies_output_dict failed, skipping")
         return {}
 
 

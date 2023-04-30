@@ -1,6 +1,7 @@
 import copy
+from loguru import logger
 
-from src.functions import logger, search_mapping, contains_nested
+from src.functions import search_mapping, contains_nested
 
 from src.library import generate_library_guids_dict
 
@@ -32,36 +33,32 @@ def check_remove_entry(video, library, video_index, library_watched_list_2):
             library_watched_list_2["completed"][video_index]
             == video["status"]["completed"]
         ) and (library_watched_list_2["time"][video_index] == video["status"]["time"]):
-            logger(
-                f"Removing {video['title']} from {library} due to exact match",
-                3,
+            logger.debug(
+                f"Removing {video['title']} from {library} due to exact match"
             )
             return True
         elif (
             library_watched_list_2["completed"][video_index] == True
             and video["status"]["completed"] == False
         ):
-            logger(
-                f"Removing {video['title']} from {library} due to being complete in one library and not the other",
-                3,
+            logger.debug(
+                f"Removing {video['title']} from {library} due to being complete in one library and not the other"
             )
             return True
         elif (
             library_watched_list_2["completed"][video_index] == False
             and video["status"]["completed"] == False
         ) and (video["status"]["time"] < library_watched_list_2["time"][video_index]):
-            logger(
-                f"Removing {video['title']} from {library} due to more time watched in one library than the other",
-                3,
+            logger.debug(
+                f"Removing {video['title']} from {library} due to more time watched in one library than the other"
             )
             return True
         elif (
             library_watched_list_2["completed"][video_index] == True
             and video["status"]["completed"] == True
         ):
-            logger(
-                f"Removing {video['title']} from {library} due to being complete in both libraries",
-                3,
+            logger.debug(
+                f"Removing {video['title']} from {library} due to being complete in both libraries"
             )
             return True
 
@@ -149,9 +146,8 @@ def cleanup_watched(
                                     show_key_1
                                 ]
                             ):
-                                logger(
-                                    f"Removing {season} from {show_key_dict['title']} because it is empty",
-                                    3,
+                                logger.debug(
+                                    f"Removing {season} from {show_key_dict['title']} because it is empty"
                                 )
                                 del modified_watched_list_1[user_1][library_1][
                                     show_key_1
@@ -160,9 +156,8 @@ def cleanup_watched(
                     # Remove empty shows
                     if len(modified_watched_list_1[user_1][library_1][show_key_1]) == 0:
                         if show_key_1 in modified_watched_list_1[user_1][library_1]:
-                            logger(
-                                f"Removing {show_key_dict['title']} because it is empty",
-                                3,
+                            logger.debug(
+                                f"Removing {show_key_dict['title']} because it is empty"
                             )
                             del modified_watched_list_1[user_1][library_1][show_key_1]
 
@@ -171,13 +166,13 @@ def cleanup_watched(
             if library_1 in modified_watched_list_1[user_1]:
                 # If library is empty then remove it
                 if len(modified_watched_list_1[user_1][library_1]) == 0:
-                    logger(f"Removing {library_1} from {user_1} because it is empty", 1)
+                    logger.info(f"Removing {library_1} from {user_1} because it is empty")
                     del modified_watched_list_1[user_1][library_1]
 
         if user_1 in modified_watched_list_1:
             # If user is empty delete user
             if len(modified_watched_list_1[user_1]) == 0:
-                logger(f"Removing {user_1} from watched list 1 because it is empty", 1)
+                logger.info(f"Removing {user_1} from watched list 1 because it is empty")
                 del modified_watched_list_1[user_1]
 
     return modified_watched_list_1
@@ -189,7 +184,7 @@ def get_other(watched_list, object_1, object_2):
     elif object_2 in watched_list:
         return object_2
     else:
-        logger(f"{object_1} and {object_2} not found in watched list 2", 1)
+        logger.info(f"{object_1} and {object_2} not found in watched list 2")
         return None
 
 
