@@ -12,10 +12,9 @@ def generate_user_list(server):
     server_users = []
     if server_type == "plex":
         for user in server_connection.users:
-            if user.username:
-                server_users.append(user.username.lower())
-            else:
-                server_users.append(user.title.lower())
+            server_users.append(
+                user.username.lower() if user.username else user.title.lower()
+            )
 
     elif server_type == "jellyfin":
         server_users = [key.lower() for key in server_connection.users.keys()]
@@ -72,7 +71,7 @@ def generate_server_users(server, users):
         server_users = []
         for plex_user in server[1].users:
             username_title = (
-                plex_user.username if plex_user.username != "" else plex_user.title
+                plex_user.username if plex_user.username else plex_user.title
             )
 
             if (

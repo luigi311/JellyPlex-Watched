@@ -126,9 +126,7 @@ def get_user_library_watched_show(show):
 
 def get_user_library_watched(user, user_plex, library):
     try:
-        user_name = user.username.lower()
-        if user_name == "":
-            user_name = user.title.lower()
+        user_name = user.username.lower() if user.username else user.title.lower()
         user_watched = {}
         user_watched[user_name] = {}
 
@@ -511,9 +509,11 @@ class Plex:
                         user_other = search_mapping(user_mapping, user)
 
                 for index, value in enumerate(self.users):
-                    username_title = value.username.lower()
-                    if username_title == "":
-                        username_title = value.title.lower()
+                    username_title = (
+                        value.username.lower()
+                        if value.username
+                        else value.title.lower()
+                    )
 
                     if user.lower() == username_title:
                         user = self.users[index]
