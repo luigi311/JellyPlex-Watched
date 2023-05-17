@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+  jellyplex-watched:
+    image: luigi311/jellyplex-watched:latest
+    container_name: jellyplex-watched
+    restart: always
+    environment:
+      - DRYRUN=True
+      - DEBUG=True
+      - DEBUG_LEVEL=info
+      - RUN_ONLY_ONCE=False
+      - SLEEP_DURATION=3600
+      - LOGFILE=/tmp/log.log
+      - USER_MAPPING=
+      - LIBRARY_MAPPING={"TV Shows":"Shows"}
+      - BLACKLIST_LIBRARY=
+      - WHITELIST_LIBRARY=
+      - BLACKLIST_LIBRARY_TYPE=
+      - WHITELIST_LIBRARY_TYPE=
+      - BLACKLIST_USERS=
+      - WHITELIST_USERS=
+      - PLEX_BASEURL=
+      - PLEX_TOKEN=
+      - JELLYFIN_BASEURL=
+      - JELLYFIN_TOKEN=
+      - SSL_BYPASS=True
+      - SYNC_FROM_PLEX_TO_JELLYFIN=True
+      - SYNC_FROM_JELLYFIN_TO_PLEX=True
+      - SYNC_FROM_PLEX_TO_PLEX=True
+      - SYNC_FROM_JELLYFIN_TO_JELLYFIN=True

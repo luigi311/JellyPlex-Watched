@@ -8,7 +8,7 @@ on:
     paths-ignore:
       - .gitignore
       - "*.md"
-  
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -24,25 +24,34 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: pytest
+    strategy:
+      matrix:
+        include:
+          - dockerfile: Dockerfile.alpine
+            variant: alpine
+          - dockerfile: Dockerfile.slim
+            variant: slim
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Docker meta
         id: docker_meta
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        if: "${{ env.DOCKER_USERNAME != '' }}"
         uses: docker/metadata-action@v4
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched # list of Docker images to use as base name for tags
+          images: |
+            ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
+            # Do not push to ghcr.io on PRs due to permission issues
+            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' }} 
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=raw,value=latest,enable=${{ matrix.variant == 'alpine' && github.ref_name == github.event.repository.default_branch }}
+            type=raw,value=dev,enable=${{ matrix.variant == 'alpine' && github.ref_name == 'dev' }}
+            type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
+            type=ref,event=branch,suffix=-${{ matrix.variant }}
+            type=ref,event=pr,suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
+            type=sha,suffix=-${{ matrix.variant }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -51,30 +60,40 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Login to DockerHub
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        if: "${{ env.DOCKER_USERNAME != '' }}"
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build
         id: build
-        if: "${{ steps.docker_meta.outcome == 'skipped' }}"
+        if: "${{ steps.docker_meta.outputs.tags == '' }}"
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: ./Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: false
           tags: jellyplex-watched:action
-      
+
       - name: Build Push
         id: build_push
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        if: "${{ steps.docker_meta.outputs.tags != '' }}"
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: ./Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
