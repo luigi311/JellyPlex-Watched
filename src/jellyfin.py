@@ -582,9 +582,8 @@ class Jellyfin:
                                         ]
                                     ):
                                         for video in videos:
-                                            if (
-                                                movie_provider_id.lower()
-                                                in video[movie_provider_source.lower()]
+                                            if movie_provider_id.lower() in video.get(
+                                                movie_provider_source.lower(), []
                                             ):
                                                 movie_status = video["status"]
                                                 break
@@ -671,9 +670,8 @@ class Jellyfin:
                                         episode_videos = []
                                         for show, seasons in videos.items():
                                             show = {k: v for k, v in show}
-                                            if (
-                                                show_provider_id.lower()
-                                                in show[show_provider_source.lower()]
+                                            if show_provider_id.lower() in show.get(
+                                                show_provider_source.lower(), []
                                             ):
                                                 for season in seasons.values():
                                                     for episode in season:
@@ -752,7 +750,7 @@ class Jellyfin:
                                     if episode_status["completed"]:
                                         jellyfin_episode_id = jellyfin_episode["Id"]
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['IndexNumber']} {jellyfin_episode['Name']}"
+                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
                                             + f" as watched for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
@@ -768,7 +766,7 @@ class Jellyfin:
                                         # TODO add support for partially watched episodes
                                         jellyfin_episode_id = jellyfin_episode["Id"]
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode['IndexNumber']} {jellyfin_episode['Name']}"
+                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
                                             + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
