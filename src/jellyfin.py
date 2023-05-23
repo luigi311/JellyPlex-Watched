@@ -747,8 +747,8 @@ class Jellyfin:
                                                 break
 
                                 if episode_status:
+                                    jellyfin_episode_id = jellyfin_episode["Id"]
                                     if episode_status["completed"]:
-                                        jellyfin_episode_id = jellyfin_episode["Id"]
                                         msg = (
                                             f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
                                             + f" as watched for {user_name} in {library} for Jellyfin"
@@ -764,7 +764,6 @@ class Jellyfin:
                                             logger(f"Dryrun {msg}", 0)
                                     else:
                                         # TODO add support for partially watched episodes
-                                        jellyfin_episode_id = jellyfin_episode["Id"]
                                         msg = (
                                             f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
                                             + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
