@@ -750,15 +750,19 @@ class Jellyfin:
                                             ):
                                                 for episode in episode_videos:
                                                     if (
-                                                        episode_provider_id.lower()
-                                                        in episode[
-                                                            episode_provider_source.lower()
-                                                        ]
+                                                        episode_provider_source.lower()
+                                                        in episode
                                                     ):
-                                                        episode_status = episode[
-                                                            "status"
-                                                        ]
-                                                        break
+                                                        if (
+                                                            episode_provider_id.lower()
+                                                            in episode[
+                                                                episode_provider_source.lower()
+                                                            ]
+                                                        ):
+                                                            episode_status = episode[
+                                                                "status"
+                                                            ]
+                                                            break
                                                 break
 
                                 if episode_status:
