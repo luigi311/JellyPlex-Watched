@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: pytest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - dockerfile: Dockerfile.alpine
