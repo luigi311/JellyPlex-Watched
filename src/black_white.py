@@ -15,7 +15,7 @@ def setup_black_white_lists(
         blacklist_library,
         blacklist_library_type,
         blacklist_users,
-        "White",
+        "Black",
         library_mapping,
         user_mapping,
     )
@@ -24,7 +24,7 @@ def setup_black_white_lists(
         whitelist_library,
         whitelist_library_type,
         whitelist_users,
-        "Black",
+        "White",
         library_mapping,
         user_mapping,
     )

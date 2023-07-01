@@ -49,8 +49,11 @@ def get_episode_guids(episode):
     # Create a dictionary for the episode with its provider IDs and media sources
     episode_dict = {k.lower(): v for k, v in episode["ProviderIds"].items()}
     episode_dict["title"] = episode["Name"]
-    episode_dict["locations"] = tuple(
-        [x["Path"].split("/")[-1] for x in episode["MediaSources"]]
+
+    episode_dict["locations"] = (
+        tuple([x["Path"].split("/")[-1] for x in ["MediaSources"] if "Path" in x])
+        if "MediaSources" in episode
+        else tuple()
     )
 
     episode_dict["status"] = {
@@ -238,7 +241,11 @@ class Jellyfin:
                             k.lower(): v for k, v in show["ProviderIds"].items()
                         }
                         show_guids["title"] = show["Name"]
-                        show_guids["locations"] = tuple([show["Path"].split("/")[-1]])
+                        show_guids["locations"] = (
+                            tuple([show["Path"].split("/")[-1]])
+                            if "Path" in show
+                            else tuple()
+                        )
                         show_guids = frozenset(show_guids.items())
                         show_identifiers = {
                             "show_guids": show_guids,
@@ -550,24 +557,27 @@ class Jellyfin:
 
                         if "MediaSources" in jellyfin_video:
                             for movie_location in jellyfin_video["MediaSources"]:
-                                if (
-                                    contains_nested(
-                                        movie_location["Path"].split("/")[-1],
-                                        videos_movies_ids["locations"],
-                                    )
-                                    is not None
-                                ):
-                                    for video in videos:
-                                        if (
-                                            contains_nested(
-                                                movie_location["Path"].split("/")[-1],
-                                                video["locations"],
-                                            )
-                                            is not None
-                                        ):
-                                            movie_status = video["status"]
-                                            break
-                                    break
+                                if "Path" in movie_location:
+                                    if (
+                                        contains_nested(
+                                            movie_location["Path"].split("/")[-1],
+                                            videos_movies_ids["locations"],
+                                        )
+                                        is not None
+                                    ):
+                                        for video in videos:
+                                            if (
+                                                contains_nested(
+                                                    movie_location["Path"].split("/")[
+                                                        -1
+                                                    ],
+                                                    video["locations"],
+                                                )
+                                                is not None
+                                            ):
+                                                movie_status = video["status"]
+                                                break
+                                        break
 
                         if not movie_status:
                             for (
@@ -697,26 +707,31 @@ class Jellyfin:
                                     for episode_location in jellyfin_episode[
                                         "MediaSources"
                                     ]:
-                                        if (
-                                            contains_nested(
-                                                episode_location["Path"].split("/")[-1],
-                                                videos_episodes_ids["locations"],
-                                            )
-                                            is not None
-                                        ):
-                                            for episode in episode_videos:
-                                                if (
-                                                    contains_nested(
-                                                        episode_location["Path"].split(
-                                                            "/"
-                                                        )[-1],
-                                                        episode["locations"],
-                                                    )
-                                                    is not None
-                                                ):
-                                                    episode_status = episode["status"]
-                                                    break
-                                            break
+                                        if "Path" in episode_location:
+                                            if (
+                                                contains_nested(
+                                                    episode_location["Path"].split("/")[
+                                                        -1
+                                                    ],
+                                                    videos_episodes_ids["locations"],
+                                                )
+                                                is not None
+                                            ):
+                                                for episode in episode_videos:
+                                                    if (
+                                                        contains_nested(
+                                                            episode_location[
+                                                                "Path"
+                                                            ].split("/")[-1],
+                                                            episode["locations"],
+                                                        )
+                                                        is not None
+                                                    ):
+                                                        episode_status = episode[
+                                                            "status"
+                                                        ]
+                                                        break
+                                                break
 
                                 if not episode_status:
                                     for (
@@ -735,15 +750,19 @@ class Jellyfin:
                                             ):
                                                 for episode in episode_videos:
                                                     if (
-                                                        episode_provider_id.lower()
-                                                        in episode[
-                                                            episode_provider_source.lower()
-                                                        ]
+                                                        episode_provider_source.lower()
+                                                        in episode
                                                     ):
-                                                        episode_status = episode[
-                                                            "status"
-                                                        ]
-                                                        break
+                                                        if (
+                                                            episode_provider_id.lower()
+                                                            in episode[
+                                                                episode_provider_source.lower()
+                                                            ]
+                                                        ):
+                                                            episode_status = episode[
+                                                                "status"
+                                                            ]
+                                                            break
                                                 break
 
                                 if episode_status:
