@@ -35,6 +35,8 @@ def get_movie_guids(movie):
         movie_guids["locations"] = tuple(
             [x["Path"].split("/")[-1] for x in movie["MediaSources"]]
         )
+    else:
+        movie_guids["locations"] = tuple()
 
     movie_guids["status"] = {
         "completed": movie["UserData"]["Played"],
@@ -50,11 +52,11 @@ def get_episode_guids(episode):
     episode_dict = {k.lower(): v for k, v in episode["ProviderIds"].items()}
     episode_dict["title"] = episode["Name"]
 
-    episode_dict["locations"] = (
-        tuple([x["Path"].split("/")[-1] for x in ["MediaSources"] if "Path" in x])
-        if "MediaSources" in episode
-        else tuple()
-    )
+    episode_dict["locations"] = tuple()
+    if "MediaSources" in episode:
+        for x in episode["MediaSources"]:
+            if "Path" in x:
+                episode_dict["locations"] += (x["Path"].split("/")[-1],)
 
     episode_dict["status"] = {
         "completed": episode["UserData"]["Played"],
