@@ -14,12 +14,12 @@ from src.watched import (
 def get_movie_guids(movie):
     if "ProviderIds" in movie:
         logger(
-            f"Jellyfin: {movie['Name']} {movie['ProviderIds']} {movie['MediaSources']}",
+            f"Jellyfin: {movie.get('Name')} {movie['ProviderIds']} {movie['MediaSources']}",
             3,
         )
     else:
         logger(
-            f"Jellyfin: {movie['Name']} {movie['MediaSources']['Path']}",
+            f"Jellyfin: {movie.get('Name')} {movie['MediaSources']['Path']}",
             3,
         )
 
@@ -177,7 +177,7 @@ class Jellyfin:
                     for movie in watched["Items"]:
                         if "MediaSources" in movie and movie["MediaSources"] != {}:
                             logger(
-                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
+                                f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
                                 3,
                             )
 
@@ -198,7 +198,7 @@ class Jellyfin:
                                 continue
 
                             logger(
-                                f"Jellyfin: Adding {movie['Name']} to {user_name} watched list",
+                                f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
                                 3,
                             )
 
@@ -236,7 +236,7 @@ class Jellyfin:
                     seasons_tasks = []
                     for show in watched_shows_filtered:
                         logger(
-                            f"Jellyfin: Adding {show['Name']} to {user_name} watched list",
+                            f"Jellyfin: Adding {show.get('Name')} to {user_name} watched list",
                             3,
                         )
                         show_guids = {
@@ -604,7 +604,7 @@ class Jellyfin:
                         if movie_status:
                             jellyfin_video_id = jellyfin_video["Id"]
                             if movie_status["completed"]:
-                                msg = f"{jellyfin_video['Name']} as watched for {user_name} in {library} for Jellyfin"
+                                msg = f"{jellyfin_video.get('Name')} as watched for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     logger(f"Marking {msg}", 0)
                                     await self.query(
@@ -616,7 +616,7 @@ class Jellyfin:
                                     logger(f"Dryrun {msg}", 0)
                             else:
                                 # TODO add support for partially watched movies
-                                msg = f"{jellyfin_video['Name']} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
+                                msg = f"{jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                 if not dryrun:
                                     pass
                                     # logger(f"Marked {msg}", 0)
@@ -625,7 +625,7 @@ class Jellyfin:
                                     # logger(f"Dryrun {msg}", 0)
                         else:
                             logger(
-                                f"Jellyfin: Skipping movie {jellyfin_video['Name']} as it is not in mark list for {user_name}",
+                                f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
                                 1,
                             )
 
@@ -634,7 +634,7 @@ class Jellyfin:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
                         + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
+                        + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                         "get",
                         session,
                     )
@@ -691,7 +691,7 @@ class Jellyfin:
 
                         if show_found:
                             logger(
-                                f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show['Name']}",
+                                f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show.get('Name')}",
                                 1,
                             )
                             jellyfin_show_id = jellyfin_show["Id"]
@@ -771,7 +771,7 @@ class Jellyfin:
                                     jellyfin_episode_id = jellyfin_episode["Id"]
                                     if episode_status["completed"]:
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
+                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                             + f" as watched for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
@@ -786,7 +786,7 @@ class Jellyfin:
                                     else:
                                         # TODO add support for partially watched episodes
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode['Name']}"
+                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                             + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                         )
                                         if not dryrun:
@@ -797,12 +797,12 @@ class Jellyfin:
                                             # logger(f"Dryrun {msg}", 0)
                                 else:
                                     logger(
-                                        f"Jellyfin: Skipping episode {jellyfin_episode['Name']} as it is not in mark list for {user_name}",
+                                        f"Jellyfin: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
                                         3,
                                     )
                         else:
                             logger(
-                                f"Jellyfin: Skipping show {jellyfin_show['Name']} as it is not in mark list for {user_name}",
+                                f"Jellyfin: Skipping show {jellyfin_show.get('Name')} as it is not in mark list for {user_name}",
                                 3,
                             )
 
