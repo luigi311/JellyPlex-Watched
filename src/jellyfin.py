@@ -74,7 +74,7 @@ class Jellyfin:
         self.baseurl = baseurl
         self.token = token
         self.timeout = aiohttp.ClientTimeout(
-            total = int(os.getenv("REQUEST_TIMEOUT", 30))
+            total = int(os.getenv("REQUEST_TIMEOUT", 300))
         )
 
         if not self.baseurl:
