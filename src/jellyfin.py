@@ -1,5 +1,6 @@
-import asyncio, aiohttp, traceback
+import asyncio, aiohttp, traceback, os
 from math import floor
+from dotenv import load_dotenv
 
 from src.functions import logger, search_mapping, contains_nested
 from src.library import (
@@ -9,6 +10,8 @@ from src.library import (
 from src.watched import (
     combine_watched_dicts,
 )
+
+load_dotenv(override=True)
 
 
 def get_movie_guids(movie):
@@ -70,6 +73,9 @@ class Jellyfin:
     def __init__(self, baseurl, token):
         self.baseurl = baseurl
         self.token = token
+        self.timeout = aiohttp.ClientTimeout(
+            total = int(os.getenv("REQUEST_TIMEOUT", 30))
+        )
 
         if not self.baseurl:
             raise Exception("Jellyfin baseurl not set")
@@ -130,7 +136,7 @@ class Jellyfin:
             users = {}
 
             query_string = "/Users"
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 response = await self.query(query_string, "get", session)
 
             # If response is not empty
@@ -156,7 +162,7 @@ class Jellyfin:
                 0,
             )
 
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 # Movies
                 if library_type == "Movie":
                     user_watched[user_name][library_title] = []
@@ -404,7 +410,7 @@ class Jellyfin:
             tasks_watched = []
 
             tasks_libraries = []
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 libraries = await self.query(f"/Users/{user_id}/Views", "get", session)
                 for library in libraries["Items"]:
                     library_id = library["Id"]
@@ -545,7 +551,7 @@ class Jellyfin:
                 f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
                 1,
             )
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 if videos_movies_ids:
                     jellyfin_search = await self.query(
                         f"/Users/{user_id}/Items"
@@ -829,7 +835,7 @@ class Jellyfin:
     ):
         try:
             tasks = []
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 for user, libraries in watched_list.items():
                     logger(f"Jellyfin: Updating for entry {user}, {libraries}", 1)
                     user_other = None
