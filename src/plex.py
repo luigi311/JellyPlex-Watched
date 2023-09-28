@@ -174,7 +174,7 @@ def get_user_library_watched(user, user_plex, library):
                 args.append([get_user_library_watched_show, show])
 
             for show_guids, episode_guids in future_thread_executor(
-                args, workers=min(os.cpu_count(), 4)
+                args, threads=4
             ):
                 if show_guids and episode_guids:
                     # append show, season, episode
