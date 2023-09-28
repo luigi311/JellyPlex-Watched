@@ -63,12 +63,11 @@ def search_mapping(dictionary: dict, key_value: str):
         return None
 
 
-def future_thread_executor(args: list, workers: int = -1):
+def future_thread_executor(args: list, threads: int = 32):
     futures_list = []
     results = []
 
-    if workers == -1:
-        workers = min(32, os.cpu_count() * 2)
+    workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2, threads)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         for arg in args:
