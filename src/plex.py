@@ -1,4 +1,4 @@
-import re, requests, os, traceback
+import re, requests, traceback
 from urllib3.poolmanager import PoolManager
 from math import floor
 
@@ -173,9 +173,7 @@ def get_user_library_watched(user, user_plex, library):
             for show in library_videos.search(inProgress=True):
                 args.append([get_user_library_watched_show, show])
 
-            for show_guids, episode_guids in future_thread_executor(
-                args, workers=min(os.cpu_count(), 4)
-            ):
+            for show_guids, episode_guids in future_thread_executor(args, threads=4):
                 if show_guids and episode_guids:
                     # append show, season, episode
                     if show_guids not in user_watched[user_name][library.title]:
@@ -413,6 +411,9 @@ class Plex:
             else:
                 logger(f"Plex: Failed to login, Error: {e}", 2)
             raise Exception(e)
+
+    def info(self) -> str:
+        return f"{self.plex.friendlyName}: {self.plex.version}"
 
     def get_users(self):
         try:
