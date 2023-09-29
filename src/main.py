@@ -304,6 +304,9 @@ def main_loop():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
+            logger(f"Server 1: {server_1[0].capitalize()}: {server_1[1].info()}", 0)
+            logger(f"Server 2: {server_2[0].capitalize()}: {server_2[1].info()}", 0)
+
             # Create users list
             logger("Creating users list", 1)
             server_1_users, server_2_users = setup_users(
