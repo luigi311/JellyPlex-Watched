@@ -74,7 +74,7 @@ class Jellyfin:
         self.baseurl = baseurl
         self.token = token
         self.timeout = aiohttp.ClientTimeout(
-            total = int(os.getenv("REQUEST_TIMEOUT", 300)),
+            total=int(os.getenv("REQUEST_TIMEOUT", 300)),
             connect=None,
             sock_connect=None,
             sock_read=None,
@@ -88,8 +88,12 @@ class Jellyfin:
 
         self.users = asyncio.run(self.get_users())
 
-    async def query(self, query, query_type, session, identifiers=None):
+    async def query(self, query, query_type, session=None, identifiers=None):
         try:
+            if not session:
+                async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                    return await self.query(query, query_type, session, identifiers)
+
             results = None
             headers = {"Accept": "application/json", "X-Emby-Token": self.token}
             authorization = (
@@ -132,6 +136,21 @@ class Jellyfin:
 
         except Exception as e:
             logger(f"Jellyfin: Query {query_type} {query}\nResults {results}\n{e}", 2)
+            raise Exception(e)
+
+    def info(self) -> str:
+        try:
+            query_string = "/System/Info/Public"
+
+            response = asyncio.run(self.query(query_string, "get"))
+
+            if response:
+                return f"{response['ServerName']}: {response['Version']}"
+            else:
+                return None
+
+        except Exception as e:
+            logger(f"Jellyfin: Get server name failed {e}", 2)
             raise Exception(e)
 
     async def get_users(self):

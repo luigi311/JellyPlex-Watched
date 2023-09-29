@@ -38,6 +38,7 @@ def setup_black_white_lists(
         whitelist_users,
     )
 
+
 def setup_x_lists(
     xlist_library,
     xlist_library_type,
@@ -89,42 +90,3 @@ def setup_x_lists(
     logger(f"{xlist_type}list Users: {xlist_users}", 1)
 
     return xlist_library, xlist_library_type, xlist_users
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
