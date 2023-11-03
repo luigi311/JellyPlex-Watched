@@ -36,7 +36,7 @@ Keep in sync all your users watched history between jellyfin and plex servers lo
 *   \[ ] Match via provider ids
 *   \[ ] Map usernames
 *   \[ ] Use single login
-*   \[ ] One way/multi Way sync
+*   \[ ] One way/multi way sync
 *   \[ ] Sync watched
 *   \[ ] Sync in progress
 
