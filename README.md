@@ -12,33 +12,33 @@ Keep in sync all your users watched history between jellyfin and plex servers lo
 
 ### Plex
 
-*   \[x] Match via Filenames
+*   \[x] Match via filenames
 *   \[x] Match via provider ids
-*   \[x] Map usersnames
+*   \[x] Map usernames
 *   \[x] Use single login
-*   \[x] One Way/Multi Way sync
-*   \[x] Sync Watched
-*   \[x] Sync Inprogress
+*   \[x] One way/multi way sync
+*   \[x] Sync watched
+*   \[x] Sync in progress
 
 ### Jellyfin
 
-*   \[x] Match via Filenames
+*   \[x] Match via filenames
 *   \[x] Match via provider ids
-*   \[x] Map usersnames
+*   \[x] Map usernames
 *   \[x] Use single login
-*   \[x] One Way/Multi Way sync
-*   \[x] Sync Watched
-*   \[ ] Sync Inprogress
+*   \[x] One way/multi way sync
+*   \[x] Sync watched
+*   \[ ] Sync in progress
 
 ### Emby
 
-*   \[ ] Match via Filenames
+*   \[ ] Match via filenames
 *   \[ ] Match via provider ids
-*   \[ ] Map usersnames
+*   \[ ] Map usernames
 *   \[ ] Use single login
-*   \[ ] One Way/Multi Way sync
-*   \[ ] Sync Watched
-*   \[ ] Sync Inprogress
+*   \[ ] One way/multi Way sync
+*   \[ ] Sync watched
+*   \[ ] Sync in progress
 
 ## Configuration
 
