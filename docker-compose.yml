@@ -12,7 +12,8 @@ services:
       - RUN_ONLY_ONCE=False
       - SLEEP_DURATION=3600
       - LOGFILE=/tmp/log.log
-      - USER_MAPPING=
+      - MARKFILE=/tmp/mark.log
+      - USER_MAPPING={"user1":"user2"}
       - LIBRARY_MAPPING={"TV Shows":"Shows"}
       - BLACKLIST_LIBRARY=
       - WHITELIST_LIBRARY=
