@@ -10,6 +10,7 @@ from src.functions import (
     search_mapping,
     future_thread_executor,
     contains_nested,
+    log_marked,
 )
 from src.library import (
     check_skip_logic,
@@ -301,6 +302,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                             movies_search.markWatched()
                         else:
                             logger(f"Dryrun {msg}", 0)
+
+                        log_marked(user.title, library, movies_search.title, None, None)
                     elif video_status["time"] > 60_000:
                         msg = f"{movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
                         if not dryrun:
@@ -308,6 +311,13 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                             movies_search.updateProgress(video_status["time"])
                         else:
                             logger(f"Dryrun {msg}", 0)
+
+                        log_marked(
+                            user.title,
+                            library,
+                            movies_search.title,
+                            duration=video_status["time"],
+                        )
                 else:
                     logger(
                         f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user.title}",
@@ -332,6 +342,13 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     episode_search.markWatched()
                                 else:
                                     logger(f"Dryrun {msg}", 0)
+
+                                log_marked(
+                                    user.title,
+                                    library,
+                                    show_search.title,
+                                    episode_search.title,
+                                )
                             else:
                                 msg = f"{show_search.title} {episode_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library} for Plex"
                                 if not dryrun:
@@ -339,6 +356,14 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     episode_search.updateProgress(video_status["time"])
                                 else:
                                     logger(f"Dryrun {msg}", 0)
+
+                                log_marked(
+                                    user.title,
+                                    library,
+                                    show_search.title,
+                                    episode_search.title,
+                                    video_status["time"],
+                                )
                         else:
                             logger(
                                 f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user.title}",

@@ -2,7 +2,12 @@ import asyncio, aiohttp, traceback, os
 from math import floor
 from dotenv import load_dotenv
 
-from src.functions import logger, search_mapping, contains_nested
+from src.functions import (
+    logger,
+    search_mapping,
+    contains_nested,
+    log_marked,
+)
 from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
@@ -642,6 +647,12 @@ class Jellyfin:
                                     )
                                 else:
                                     logger(f"Dryrun {msg}", 0)
+
+                                log_marked(
+                                    user_name,
+                                    library,
+                                    jellyfin_video.get("Name"),
+                                )
                             else:
                                 # TODO add support for partially watched movies
                                 msg = f"{jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
@@ -651,6 +662,13 @@ class Jellyfin:
                                 else:
                                     pass
                                     # logger(f"Dryrun {msg}", 0)
+
+                                log_marked(
+                                    user_name,
+                                    library,
+                                    jellyfin_video.get("Name"),
+                                    duration=floor(movie_status["time"] / 60_000),
+                                )
                         else:
                             logger(
                                 f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
@@ -811,18 +829,34 @@ class Jellyfin:
                                             )
                                         else:
                                             logger(f"Dryrun {msg}", 0)
+
+                                        log_marked(
+                                            user_name,
+                                            library,
+                                            jellyfin_episode.get("SeriesName"),
+                                            jellyfin_episode.get("Name"),
+                                        )
                                     else:
                                         # TODO add support for partially watched episodes
                                         msg = (
                                             f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                             + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
                                         )
+                                        """
                                         if not dryrun:
                                             pass
                                             # logger(f"Marked {msg}", 0)
                                         else:
                                             pass
                                             # logger(f"Dryrun {msg}", 0)
+
+                                        log_marked(
+                                            user_name,
+                                            library,
+                                            jellyfin_episode.get("SeriesName"),
+                                            jellyfin_episode.get('Name'),
+                                            duration=floor(episode_status["time"] / 60_000),
+                                        )"""
                                 else:
                                     logger(
                                         f"Jellyfin: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",

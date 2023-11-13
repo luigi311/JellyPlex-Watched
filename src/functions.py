@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 logfile = os.getenv("LOGFILE", "log.log")
+markfile = os.getenv("MARK_FILE", "mark.log")
 
 
 def logger(message: str, log_type=0):
@@ -29,6 +30,24 @@ def logger(message: str, log_type=0):
         print(output)
         file = open(logfile, "a", encoding="utf-8")
         file.write(output + "\n")
+
+
+def log_marked(
+    username: str, library: str, movie_show: str, episode: str = None, duration=None
+):
+    if markfile is None:
+        return
+
+    output = f"{username}/{library}/{movie_show}"
+
+    if episode:
+        output += f"/{episode}"
+
+    if duration:
+        output += f"/{duration}"
+
+    file = open(f"{markfile}", "a", encoding="utf-8")
+    file.write(output + "\n")
 
 
 # Reimplementation of distutils.util.strtobool due to it being deprecated
