@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 logfile = os.getenv("LOGFILE", "log.log")
-markfile = os.getenv("MARK_FILE", "mark.log")
+markfile = os.getenv("MARKFILE", "mark.log")
 
 
 def logger(message: str, log_type=0):
