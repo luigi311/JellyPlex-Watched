@@ -100,7 +100,7 @@ class Jellyfin:
                     return await self.query(query, query_type, session, identifiers)
 
             results = None
-            headers = {"Accept": "application/json", "X-Emby-Token": self.token}
+            
             authorization = (
                 "MediaBrowser , "
                 'Client="other", '
@@ -108,8 +108,8 @@ class Jellyfin:
                 'DeviceId="script", '
                 'Version="0.0.0"'
             )
-            headers["X-Emby-Authorization"] = authorization
-
+            headers = {"Accept": "application/json", "X-Emby-Token": self.token, "X-Emby-Authorization": authorization}
+            
             if query_type == "get":
                 async with session.get(
                     self.baseurl + query, headers=headers
