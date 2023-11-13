@@ -23,6 +23,10 @@ def logger(message: str, log_type=0):
         output = f"[DEBUG]: {output}"
     elif log_type == 4:
         output = f"[WARNING]: {output}"
+    elif log_type == 5:
+        output = f"[MARK]: {output}"
+    elif log_type == 6:
+        output = f"[DRYRUN]: {output}"
     else:
         output = None
 
