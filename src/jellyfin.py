@@ -637,16 +637,16 @@ class Jellyfin:
                         if movie_status:
                             jellyfin_video_id = jellyfin_video["Id"]
                             if movie_status["completed"]:
-                                msg = f"{jellyfin_video.get('Name')} as watched for {user_name} in {library} for Jellyfin"
+                                msg = f"Jellyfin: {jellyfin_video.get('Name')} as watched for {user_name} in {library}"
                                 if not dryrun:
-                                    logger(f"Marking {msg}", 0)
+                                    logger(msg, 5)
                                     await self.query(
                                         f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
                                         "post",
                                         session,
                                     )
                                 else:
-                                    logger(f"Dryrun {msg}", 0)
+                                    logger(msg, 6)
 
                                 log_marked(
                                     user_name,
@@ -655,20 +655,21 @@ class Jellyfin:
                                 )
                             else:
                                 # TODO add support for partially watched movies
-                                msg = f"{jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
+                                msg = f"Jellyfin: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
+                                """
                                 if not dryrun:
                                     pass
-                                    # logger(f"Marked {msg}", 0)
+                                    # logger(msg, 5)
                                 else:
                                     pass
-                                    # logger(f"Dryrun {msg}", 0)
+                                    # logger(msg, 6)
 
                                 log_marked(
                                     user_name,
                                     library,
                                     jellyfin_video.get("Name"),
                                     duration=floor(movie_status["time"] / 60_000),
-                                )
+                                )"""
                         else:
                             logger(
                                 f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
@@ -817,18 +818,18 @@ class Jellyfin:
                                     jellyfin_episode_id = jellyfin_episode["Id"]
                                     if episode_status["completed"]:
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                            + f" as watched for {user_name} in {library} for Jellyfin"
+                                            f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                            + f" as watched for {user_name} in {library}"
                                         )
                                         if not dryrun:
-                                            logger(f"Marked {msg}", 0)
+                                            logger(msg, 5)
                                             await self.query(
                                                 f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
                                                 "post",
                                                 session,
                                             )
                                         else:
-                                            logger(f"Dryrun {msg}", 0)
+                                            logger(msg, 6)
 
                                         log_marked(
                                             user_name,
@@ -839,8 +840,8 @@ class Jellyfin:
                                     else:
                                         # TODO add support for partially watched episodes
                                         msg = (
-                                            f"{jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                            + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library} for Jellyfin"
+                                            f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                            + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
                                         )
                                         """
                                         if not dryrun:
