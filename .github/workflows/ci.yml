@@ -24,6 +24,8 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: pytest
+    env:
+      DEFAULT_VARIANT: alpine
     strategy:
       fail-fast: false
       matrix:
@@ -45,14 +47,19 @@ jobs:
             # Do not push to ghcr.io on PRs due to permission issues
             ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' }} 
           tags: |
-            type=raw,value=latest,enable=${{ matrix.variant == 'alpine' && github.ref_name == github.event.repository.default_branch }}
-            type=raw,value=dev,enable=${{ matrix.variant == 'alpine' && github.ref_name == 'dev' }}
+            type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == github.event.repository.default_branch }}
+            type=raw,value=dev,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == 'dev' }}
             type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
             type=ref,event=branch,suffix=-${{ matrix.variant }}
+            type=ref,event=branch,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
             type=ref,event=pr,suffix=-${{ matrix.variant }}
+            type=ref,event=pr,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
             type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ version }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
             type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ major }}.{{ minor }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
             type=sha,suffix=-${{ matrix.variant }}
+            type=sha,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
