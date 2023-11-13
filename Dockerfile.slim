@@ -3,8 +3,10 @@ FROM python:3.11-slim
 ENV DRYRUN 'True'
 ENV DEBUG 'True'
 ENV DEBUG_LEVEL 'INFO'
+ENV RUN_ONLY_ONCE 'False'
 ENV SLEEP_DURATION '3600'
 ENV LOGFILE 'log.log'
+ENV MARKFILE 'mark.log'
 
 ENV USER_MAPPING ''
 ENV LIBRARY_MAPPING ''
@@ -33,6 +35,7 @@ ENV WHITELIST_USERS  ''
 WORKDIR /app
 
 COPY ./requirements.txt ./
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
