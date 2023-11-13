@@ -26,6 +26,7 @@ If applicable, add logs to help explain your problem ideally with DEBUG set to t
 **Type:**
 - [ ] Docker Compose
 - [ ] Docker
+- [ ] Unraid
 - [ ] Native
 
 **Additional context**
