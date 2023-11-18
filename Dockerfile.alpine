@@ -1,10 +1,12 @@
-FROM python:3-alpine
+FROM python:3.11-alpine
 
 ENV DRYRUN 'True'
 ENV DEBUG 'True'
 ENV DEBUG_LEVEL 'INFO'
+ENV RUN_ONLY_ONCE 'False'
 ENV SLEEP_DURATION '3600'
 ENV LOGFILE 'log.log'
+ENV MARKFILE 'mark.log'
 
 ENV USER_MAPPING ''
 ENV LIBRARY_MAPPING ''
@@ -30,12 +32,20 @@ ENV WHITELIST_LIBRARY_TYPE  ''
 ENV BLACKLIST_USERS  ''
 ENV WHITELIST_USERS  ''
 
+
+RUN addgroup --system jellyplex_user && \
+    adduser --system --no-create-home jellyplex_user --ingroup jellyplex_user && \
+    mkdir -p /app && \
+    chown -R jellyplex_user:jellyplex_user /app
+
 WORKDIR /app
 
-COPY ./requirements.txt ./
+COPY --chown=jellyplex_user:jellyplex_user ./requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY --chown=jellyplex_user:jellyplex_user . .
+
+USER jellyplex_user
 
 CMD ["python", "-u", "main.py"]

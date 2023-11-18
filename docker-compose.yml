@@ -12,7 +12,8 @@ services:
       - RUN_ONLY_ONCE=False
       - SLEEP_DURATION=3600
       - LOGFILE=/tmp/log.log
-      - USER_MAPPING=
+      - MARKFILE=/tmp/mark.log
+      - USER_MAPPING={"user1":"user2"}
       - LIBRARY_MAPPING={"TV Shows":"Shows"}
       - BLACKLIST_LIBRARY=
       - WHITELIST_LIBRARY=
@@ -20,10 +21,10 @@ services:
       - WHITELIST_LIBRARY_TYPE=
       - BLACKLIST_USERS=
       - WHITELIST_USERS=
-      - PLEX_BASEURL=
-      - PLEX_TOKEN=
-      - JELLYFIN_BASEURL=
-      - JELLYFIN_TOKEN=
+      - PLEX_BASEURL=https://localhost:32400
+      - PLEX_TOKEN=plex_token
+      - JELLYFIN_BASEURL=http://localhost:8096
+      - JELLYFIN_TOKEN=jelly_token
       - SSL_BYPASS=True
       - SYNC_FROM_PLEX_TO_JELLYFIN=True
       - SYNC_FROM_JELLYFIN_TO_PLEX=True
