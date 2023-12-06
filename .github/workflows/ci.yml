@@ -21,9 +21,50 @@ jobs:
       - name: "Run tests"
         run: pytest -vvv
   
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: "Install dependencies"
+        run: |
+          pip install -r requirements.txt
+          sudo apt update && sudo apt install -y docker-compose
+
+      - name: "Checkout JellyPlex-Watched-CI"
+        uses: actions/checkout@v2
+        with:
+          repository: luigi311/JellyPlex-Watched-CI
+          path: JellyPlex-Watched-CI
+
+      - name: "Start containers"
+        run: |
+          export PGID=$(id -g)
+          export PUID=$(id -u)
+
+          sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
+
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
+          # Wait for containers to start
+          sleep 15
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
+
+      - name: "Run tests"
+        run: |
+          # Move test/.env to root
+          mv test/ci.env .env
+          # Run script
+          python main.py
+
+          cat mark.log
+
   docker:
     runs-on: ubuntu-latest
-    needs: pytest
+    needs:
+      - pytest
+      - test
     env:
       DEFAULT_VARIANT: alpine
     strategy:
