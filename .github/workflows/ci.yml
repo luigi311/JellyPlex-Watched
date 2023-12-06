@@ -44,8 +44,8 @@ jobs:
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
-            # Do not push to ghcr.io on PRs due to permission issues
-            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' }} 
+            # Do not push to ghcr.io on PRs due to permission issues, only push if the owner is luigi311 so it doesnt fail on forks
+            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311'}}
           tags: |
             type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == github.event.repository.default_branch }}
             type=raw,value=dev,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == 'dev' }}
