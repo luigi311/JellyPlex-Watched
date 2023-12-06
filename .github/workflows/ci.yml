@@ -21,9 +21,50 @@ jobs:
       - name: "Run tests"
         run: pytest -vvv
   
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: "Install dependencies"
+        run: |
+          pip install -r requirements.txt
+          sudo apt update && sudo apt install -y docker-compose
+
+      - name: "Checkout JellyPlex-Watched-CI"
+        uses: actions/checkout@v2
+        with:
+          repository: luigi311/JellyPlex-Watched-CI
+          path: JellyPlex-Watched-CI
+
+      - name: "Start containers"
+        run: |
+          export PGID=$(id -g)
+          export PUID=$(id -u)
+
+          sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
+
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
+          # Wait for containers to start
+          sleep 15
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
+
+      - name: "Run tests"
+        run: |
+          # Move test/.env to root
+          mv test/ci.env .env
+          # Run script
+          python main.py
+
+          cat mark.log
+
   docker:
     runs-on: ubuntu-latest
-    needs: pytest
+    needs:
+      - pytest
+      - test
     env:
       DEFAULT_VARIANT: alpine
     strategy:
@@ -44,8 +85,8 @@ jobs:
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
-            # Do not push to ghcr.io on PRs due to permission issues
-            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' }} 
+            # Do not push to ghcr.io on PRs due to permission issues, only push if the owner is luigi311 so it doesnt fail on forks
+            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311'}}
           tags: |
             type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == github.event.repository.default_branch }}
             type=raw,value=dev,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == 'dev' }}
