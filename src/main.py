@@ -83,17 +83,21 @@ def generate_server_connections():
             )
 
         for i, url in enumerate(plex_baseurl):
+            server = Plex(
+                baseurl=url.strip(),
+                token=plex_token[i].strip(),
+                username=None,
+                password=None,
+                servername=None,
+                ssl_bypass=ssl_bypass,
+            )
+
+            logger(f"Plex Server {i} info: {server.info()}", 3)
+
             servers.append(
                 (
                     "plex",
-                    Plex(
-                        baseurl=url.strip(),
-                        token=plex_token[i].strip(),
-                        username=None,
-                        password=None,
-                        servername=None,
-                        ssl_bypass=ssl_bypass,
-                    ),
+                    server,
                 )
             )
 
@@ -110,17 +114,20 @@ def generate_server_connections():
             )
 
         for i, username in enumerate(plex_username):
+            server = Plex(
+                baseurl=None,
+                token=None,
+                username=username.strip(),
+                password=plex_password[i].strip(),
+                servername=plex_servername[i].strip(),
+                ssl_bypass=ssl_bypass,
+            )
+
+            logger(f"Plex Server {i} info: {server.info()}", 3)
             servers.append(
                 (
                     "plex",
-                    Plex(
-                        baseurl=None,
-                        token=None,
-                        username=username.strip(),
-                        password=plex_password[i].strip(),
-                        servername=plex_servername[i].strip(),
-                        ssl_bypass=ssl_bypass,
-                    ),
+                    server,
                 )
             )
 
@@ -140,10 +147,14 @@ def generate_server_connections():
             baseurl = baseurl.strip()
             if baseurl[-1] == "/":
                 baseurl = baseurl[:-1]
+
+            server = Jellyfin(baseurl=baseurl, token=jellyfin_token[i].strip())
+
+            logger(f"Jellyfin Server {i} info: {server.info()}", 3)
             servers.append(
                 (
                     "jellyfin",
-                    Jellyfin(baseurl=baseurl, token=jellyfin_token[i].strip()),
+                    server,
                 )
             )
 
