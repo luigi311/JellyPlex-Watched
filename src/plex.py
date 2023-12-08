@@ -308,7 +308,7 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                         msg = f"Plex: {movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
                         if not dryrun:
                             logger(msg, 5)
-                            movies_search.updateProgress(video_status["time"])
+                            movies_search.updateTimeline(video_status["time"])
                         else:
                             logger(msg, 6)
 
@@ -353,7 +353,7 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                 msg = f"Plex: {show_search.title} {episode_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
                                 if not dryrun:
                                     logger(msg, 5)
-                                    episode_search.updateProgress(video_status["time"])
+                                    episode_search.updateTimeline(video_status["time"])
                                 else:
                                     logger(msg, 6)
 
