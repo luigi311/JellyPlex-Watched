@@ -19,59 +19,23 @@ from src.watched import (
 load_dotenv(override=True)
 
 
-def get_movie_guids(movie):
-    if "ProviderIds" in movie:
-        logger(
-            f"Jellyfin: {movie.get('Name')} {movie['ProviderIds']} {movie['MediaSources']}",
-            3,
-        )
-    else:
-        logger(
-            f"Jellyfin: {movie.get('Name')} {movie['MediaSources']['Path']}",
-            3,
-        )
+def get_media_guids(media_item):
+    # Create a dictionary for the media item with its title and provider IDs
+    media_guids = {k.lower(): v for k, v in media_item["ProviderIds"].items()}
+    media_guids["title"] = media_item["Name"]
 
-    # Create a dictionary for the movie with its title
-    movie_guids = {"title": movie["Name"]}
-
-    # If the movie has provider IDs, add them to the dictionary
-    if "ProviderIds" in movie:
-        movie_guids.update({k.lower(): v for k, v in movie["ProviderIds"].items()})
-
-    # If the movie has media sources, add them to the dictionary
-    if "MediaSources" in movie:
-        movie_guids["locations"] = tuple(
-            [x["Path"].split("/")[-1] for x in movie["MediaSources"]]
-        )
-    else:
-        movie_guids["locations"] = tuple()
-
-    movie_guids["status"] = {
-        "completed": movie["UserData"]["Played"],
-        # Convert ticks to milliseconds to match Plex
-        "time": floor(movie["UserData"]["PlaybackPositionTicks"] / 10000),
-    }
-
-    return movie_guids
-
-
-def get_episode_guids(episode):
-    # Create a dictionary for the episode with its provider IDs and media sources
-    episode_dict = {k.lower(): v for k, v in episode["ProviderIds"].items()}
-    episode_dict["title"] = episode["Name"]
-
-    episode_dict["locations"] = tuple()
-    if "MediaSources" in episode:
-        for x in episode["MediaSources"]:
+    media_guids["locations"] = tuple()
+    if "MediaSources" in media_item:
+        for x in media_item["MediaSources"]:
             if "Path" in x:
-                episode_dict["locations"] += (x["Path"].split("/")[-1],)
+                media_guids["locations"] += (x["Path"].split("/")[-1],)
 
-    episode_dict["status"] = {
-        "completed": episode["UserData"]["Played"],
-        "time": floor(episode["UserData"]["PlaybackPositionTicks"] / 10000),
+    media_guids["status"] = {
+        "completed": media_item["UserData"]["Played"],
+        "time": floor(media_item["UserData"]["PlaybackPositionTicks"] / 10000),
     }
 
-    return episode_dict
+    return media_guids
 
 
 class Jellyfin:
@@ -219,7 +183,7 @@ class Jellyfin:
                             )
 
                             # Get the movie's GUIDs
-                            movie_guids = get_movie_guids(movie)
+                            movie_guids = get_media_guids(movie)
 
                             # Append the movie dictionary to the list for the given user and library
                             user_watched[user_name][library_title].append(movie_guids)
@@ -240,7 +204,7 @@ class Jellyfin:
                             )
 
                             # Get the movie's GUIDs
-                            movie_guids = get_movie_guids(movie)
+                            movie_guids = get_media_guids(movie)
 
                             # Append the movie dictionary to the list for the given user and library
                             user_watched[user_name][library_title].append(movie_guids)
@@ -331,9 +295,8 @@ class Jellyfin:
                         if len(seasons["Items"]) > 0:
                             for season in seasons["Items"]:
                                 season_identifiers = dict(seasons["Identifiers"])
-                                season_identifiers["season_index"] = season[
-                                    "IndexNumber"
-                                ]
+                                season_identifiers["season_id"] = season["Id"]
+                                season_identifiers["season_name"] = season["Name"]
                                 watched_task = asyncio.ensure_future(
                                     self.query(
                                         f"/Shows/{season_identifiers['show_id']}/Episodes"
@@ -377,7 +340,7 @@ class Jellyfin:
                                         or episode["UserData"]["PlaybackPositionTicks"]
                                         > 600000000
                                     ):
-                                        episode_dict = get_episode_guids(episode)
+                                        episode_dict = get_media_guids(episode)
                                         # Add the episode dictionary to the season's list of episodes
                                         season_dict["Episodes"].append(episode_dict)
 
@@ -391,18 +354,18 @@ class Jellyfin:
                                 ] = {}
 
                             if (
-                                season_dict["Identifiers"]["season_index"]
+                                season_dict["Identifiers"]["season_name"]
                                 not in user_watched[user_name][library_title][
                                     season_dict["Identifiers"]["show_guids"]
                                 ]
                             ):
                                 user_watched[user_name][library_title][
                                     season_dict["Identifiers"]["show_guids"]
-                                ][season_dict["Identifiers"]["season_index"]] = []
+                                ][season_dict["Identifiers"]["season_name"]] = []
 
                             user_watched[user_name][library_title][
                                 season_dict["Identifiers"]["show_guids"]
-                            ][season_dict["Identifiers"]["season_index"]] = season_dict[
+                            ][season_dict["Identifiers"]["season_name"]] = season_dict[
                                 "Episodes"
                             ]
                             logger(
