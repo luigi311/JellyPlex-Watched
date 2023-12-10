@@ -96,6 +96,15 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
      docker run --rm -it -v "$(pwd)/.env:/app/.env" luigi311/jellyplex-watched:latest
     ```
 
+## Troubleshooting/Issues
+
+*   Jellyfin
+    *   Attempt to decode JSON with unexpected mimetype, make sure you enable remote access or add your docker subnet to lan networks in jellyfin settings
+
+*   Configuration
+    *   Do not use quotes around variables in docker compose
+
+
 ## Contributing
 
 I am open to receiving pull requests. If you are submitting a pull request, please make sure run it locally for a day or two to make sure it is working as expected and stable. Make all pull requests against the dev branch and nothing will be merged into the main without going through the lower branches.
