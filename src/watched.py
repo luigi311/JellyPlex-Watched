@@ -6,11 +6,17 @@ from src.library import generate_library_guids_dict
 
 
 def combine_watched_dicts(dicts: list):
+    # Ensure that the input is a list of dictionaries
+    if not all(isinstance(d, dict) for d in dicts):
+        raise ValueError("Input must be a list of dictionaries")
+
     combined_dict = {}
+
     for single_dict in dicts:
         for key, value in single_dict.items():
             if key not in combined_dict:
                 combined_dict[key] = {}
+
             for subkey, subvalue in value.items():
                 if subkey in combined_dict[key]:
                     # If the subkey already exists in the combined dictionary,
