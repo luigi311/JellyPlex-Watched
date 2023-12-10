@@ -449,45 +449,42 @@ class Jellyfin:
             user_name = user_name.lower()
             tasks_watched = []
 
-            tasks_libraries = []
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 libraries = await self.query(f"/Users/{user_id}/Views", "get", session)
-                for library in libraries["Items"]:
-                    library_id = library["Id"]
-                    library_title = library["Name"]
-                    identifiers = {
-                        "library_id": library_id,
-                        "library_title": library_title,
-                    }
-                    task = asyncio.ensure_future(
+
+                tasks_libraries = [
+                    asyncio.ensure_future(
                         self.query(
                             f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
+                            f"?ParentId={library['Id']}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
                             "get",
                             session,
-                            identifiers=identifiers,
+                            identifiers={
+                                "library_id": library["Id"],
+                                "library_title": library["Name"],
+                            },
                         )
                     )
-                    tasks_libraries.append(task)
+                    for library in libraries["Items"]
+                ]
 
-                libraries = await asyncio.gather(
+                libraries_results = await asyncio.gather(
                     *tasks_libraries, return_exceptions=True
                 )
 
-                for watched in libraries:
-                    if len(watched["Items"]) == 0:
+                for watched in libraries_results:
+                    if not watched["Items"]:
                         continue
 
                     library_id = watched["Identifiers"]["library_id"]
                     library_title = watched["Identifiers"]["library_title"]
+
                     # Get all library types excluding "Folder"
-                    types = set(
-                        [
-                            x["Type"]
-                            for x in watched["Items"]
-                            if x["Type"] in ["Movie", "Series", "Episode"]
-                        ]
-                    )
+                    types = {
+                        x["Type"]
+                        for x in watched["Items"]
+                        if x["Type"] in {"Movie", "Series", "Episode"}
+                    }
 
                     skip_reason = check_skip_logic(
                         library_title,
@@ -506,9 +503,9 @@ class Jellyfin:
                         )
                         continue
 
-                    # If there are multiple types in library raise error
-                    if types is None or len(types) < 1:
-                        all_types = set([x["Type"] for x in watched["Items"]])
+                    # If there are multiple types in the library, raise an error
+                    if not types:
+                        all_types = {x["Type"] for x in watched["Items"]}
                         logger(
                             f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}",
                             1,
@@ -516,7 +513,7 @@ class Jellyfin:
                         continue
 
                     for library_type in types:
-                        # Get watched for user
+                        # Get watched for the user
                         task = asyncio.ensure_future(
                             self.get_user_library_watched(
                                 user_name,
@@ -531,6 +528,7 @@ class Jellyfin:
             watched = await asyncio.gather(*tasks_watched, return_exceptions=True)
 
             return watched
+
         except Exception as e:
             logger(f"Jellyfin: Failed to get users watched, Error: {e}", 2)
             raise Exception(e)
