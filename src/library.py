@@ -158,7 +158,7 @@ def show_title_dict(user_list: dict):
 
         return show_output_dict
     except Exception:
-        logger("Generating show_output_dict failed, skipping", 1)
+        logger("Skipping show_output_dict ", 1)
         return {}
 
 
@@ -213,7 +213,7 @@ def episode_title_dict(user_list: dict):
 
         return episode_output_dict
     except Exception:
-        logger("Generating episode_output_dict failed, skipping", 1)
+        logger("Skipping episode_output_dict", 1)
         return {}
 
 
@@ -246,7 +246,7 @@ def movies_title_dict(user_list: dict):
 
         return movies_output_dict
     except Exception:
-        logger("Generating movies_output_dict failed, skipping", 1)
+        logger("Skipping movies_output_dict failed", 1)
         return {}
 
 
