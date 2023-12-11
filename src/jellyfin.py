@@ -572,6 +572,311 @@ class Jellyfin:
             logger(f"Jellyfin: Failed to get watched, Error: {e}", 2)
             raise Exception(e)
 
+    async def update_user_watched_movies(
+        self,
+        videos,
+        videos_movies_ids,
+        user_name,
+        user_id,
+        library,
+        library_id,
+        session,
+        dryrun,
+    ):
+        try:
+            # Fetch movies from Jellyfin
+            jellyfin_search = await self.query(
+                f"/Users/{user_id}/Items"
+                + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+                + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
+                "get",
+                session,
+            )
+
+            # Iterate through each movie in Jellyfin
+            for jellyfin_video in jellyfin_search["Items"]:
+                movie_status = None
+
+                # Get status based on movie locations
+                if "MediaSources" in jellyfin_video:
+                    for movie_location in jellyfin_video["MediaSources"]:
+                        # Check if the movie location is in the mark list
+                        if "Path" in movie_location:
+                            if (
+                                contains_nested(
+                                    movie_location["Path"].split("/")[-1],
+                                    videos_movies_ids["locations"],
+                                )
+                                is not None
+                            ):
+                                # Set the movie status based on videos status
+                                for video in videos:
+                                    if (
+                                        contains_nested(
+                                            movie_location["Path"].split("/")[-1],
+                                            video["locations"],
+                                        )
+                                        is not None
+                                    ):
+                                        movie_status = video["status"]
+                                        break
+
+                # If the movie status is still not found, check ProviderIds
+                if not movie_status:
+                    for (
+                        movie_provider_source,
+                        movie_provider_id,
+                    ) in jellyfin_video["ProviderIds"].items():
+                        if movie_provider_source.lower() in videos_movies_ids:
+                            if (
+                                movie_provider_id.lower()
+                                in videos_movies_ids[movie_provider_source.lower()]
+                            ):
+                                # Iterate through user-provided videos to find a match
+                                for video in videos:
+                                    if movie_provider_id.lower() in video.get(
+                                        movie_provider_source.lower(), []
+                                    ):
+                                        # Get the status of the matched video
+                                        movie_status = video["status"]
+                                        break
+                                # Exit the loop if a match is found
+                                break
+
+                # If a movie status is found, process it
+                if movie_status:
+                    jellyfin_video_id = jellyfin_video["Id"]
+                    if movie_status["completed"]:
+                        msg = f"Jellyfin: {jellyfin_video.get('Name')} as watched for {user_name} in {library}"
+                        if not dryrun:
+                            logger(msg, 5)
+                            await self.query(
+                                f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
+                                "post",
+                                session,
+                            )
+                        else:
+                            logger(msg, 6)
+
+                        log_marked(user_name, library, jellyfin_video.get("Name"))
+                    else:
+                        # TODO add support for partially watched movies
+                        msg = f"Jellyfin: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
+                        """
+                        if not dryrun:
+                            pass
+                            # logger(msg, 5)
+                        else:
+                            pass
+                            # logger(msg, 6)
+
+                        log_marked(
+                            user_name,
+                            library,
+                            jellyfin_video.get("Name"),
+                            duration=floor(movie_status["time"] / 60_000),
+                        )"""
+                else:
+                    # Log that the movie is not in the mark list
+                    logger(
+                        f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
+                        1,
+                    )
+
+        except Exception as e:
+            # Log any errors that occur during the process
+            logger(
+                f"Jellyfin: Error updating watched for {user_name} in library {library}, {e}",
+                2,
+            )
+            logger(traceback.format_exc(), 2)
+            raise Exception(e)
+
+    async def update_user_watched_shows(
+        self,
+        user_id,
+        user_name,
+        library_id,
+        library,
+        videos,
+        videos_shows_ids,
+        videos_episodes_ids,
+        dryrun,
+        session,
+    ):
+        jellyfin_search = await self.query(
+            f"/Users/{user_id}/Items"
+            + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
+            + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
+            "get",
+            session,
+        )
+        jellyfin_shows = [x for x in jellyfin_search["Items"]]
+
+        for jellyfin_show in jellyfin_shows:
+            show_found = False
+
+            if "Path" in jellyfin_show:
+                if (
+                    contains_nested(
+                        jellyfin_show["Path"].split("/")[-1],
+                        videos_shows_ids["locations"],
+                    )
+                    is not None
+                ):
+                    show_found = True
+                    episode_videos = []
+
+                    for show, seasons in videos.items():
+                        show = {k: v for k, v in show}
+                        if (
+                            contains_nested(
+                                jellyfin_show["Path"].split("/")[-1],
+                                show["locations"],
+                            )
+                            is not None
+                        ):
+                            for season in seasons.values():
+                                for episode in season:
+                                    episode_videos.append(episode)
+
+            if not show_found:
+                for show_provider_source, show_provider_id in jellyfin_show[
+                    "ProviderIds"
+                ].items():
+                    if show_provider_source.lower() in videos_shows_ids:
+                        if (
+                            show_provider_id.lower()
+                            in videos_shows_ids[show_provider_source.lower()]
+                        ):
+                            show_found = True
+                            episode_videos = []
+                            for show, seasons in videos.items():
+                                show = {k: v for k, v in show}
+                                if show_provider_id.lower() in show.get(
+                                    show_provider_source.lower(), []
+                                ):
+                                    for season in seasons.values():
+                                        for episode in season:
+                                            episode_videos.append(episode)
+
+            if show_found:
+                logger(
+                    f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show.get('Name')}",
+                    1,
+                )
+                jellyfin_show_id = jellyfin_show["Id"]
+                jellyfin_episodes = await self.query(
+                    f"/Shows/{jellyfin_show_id}/Episodes"
+                    + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
+                    "get",
+                    session,
+                )
+
+                for jellyfin_episode in jellyfin_episodes["Items"]:
+                    episode_status = None
+
+                    if "MediaSources" in jellyfin_episode:
+                        for episode_location in jellyfin_episode["MediaSources"]:
+                            if "Path" in episode_location:
+                                if (
+                                    contains_nested(
+                                        episode_location["Path"].split("/")[-1],
+                                        videos_episodes_ids["locations"],
+                                    )
+                                    is not None
+                                ):
+                                    for episode in episode_videos:
+                                        if (
+                                            contains_nested(
+                                                episode_location["Path"].split("/")[-1],
+                                                episode["locations"],
+                                            )
+                                            is not None
+                                        ):
+                                            episode_status = episode["status"]
+                                            break
+                                    break
+
+                    if not episode_status:
+                        for (
+                            episode_provider_source,
+                            episode_provider_id,
+                        ) in jellyfin_episode["ProviderIds"].items():
+                            if episode_provider_source.lower() in videos_episodes_ids:
+                                if (
+                                    episode_provider_id.lower()
+                                    in videos_episodes_ids[
+                                        episode_provider_source.lower()
+                                    ]
+                                ):
+                                    for episode in episode_videos:
+                                        if episode_provider_source.lower() in episode:
+                                            if (
+                                                episode_provider_id.lower()
+                                                in episode[
+                                                    episode_provider_source.lower()
+                                                ]
+                                            ):
+                                                episode_status = episode["status"]
+                                                break
+                                    break
+
+                    if episode_status:
+                        jellyfin_episode_id = jellyfin_episode["Id"]
+                        if episode_status["completed"]:
+                            msg = (
+                                f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                + f" as watched for {user_name} in {library}"
+                            )
+                            if not dryrun:
+                                logger(msg, 5)
+                                await self.query(
+                                    f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
+                                    "post",
+                                    session,
+                                )
+                            else:
+                                logger(msg, 6)
+
+                            log_marked(
+                                user_name,
+                                library,
+                                jellyfin_episode.get("SeriesName"),
+                                jellyfin_episode.get("Name"),
+                            )
+                        else:
+                            # TODO add support for partially watched episodes
+                            msg = (
+                                f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
+                            )
+                            """
+                            if not dryrun:
+                                pass
+                                # logger(f"Marked {msg}", 0)
+                            else:
+                                pass
+                                # logger(f"Dryrun {msg}", 0)
+
+                            log_marked(
+                                user_name,
+                                library,
+                                jellyfin_episode.get("SeriesName"),
+                                jellyfin_episode.get('Name'),
+                                duration=floor(episode_status["time"] / 60_000),
+                            )"""
+                    else:
+                        logger(
+                            f"Jellyfin: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
+                            3,
+                        )
+            else:
+                logger(
+                    f"Jellyfin: Skipping show {jellyfin_show.get('Name')} as it is not in mark list for {user_name}",
+                    3,
+                )
+
     async def update_user_watched(
         self, user_name, user_id, library, library_id, videos, dryrun
     ):
@@ -585,301 +890,6 @@ class Jellyfin:
                 videos_movies_ids,
             ) = generate_library_guids_dict(videos)
 
-            logger(
-                f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
-                1,
-            )
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                if videos_movies_ids:
-                    jellyfin_search = await self.query(
-                        f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                        + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
-                        "get",
-                        session,
-                    )
-                    for jellyfin_video in jellyfin_search["Items"]:
-                        movie_status = None
-
-                        if "MediaSources" in jellyfin_video:
-                            for movie_location in jellyfin_video["MediaSources"]:
-                                if "Path" in movie_location:
-                                    if (
-                                        contains_nested(
-                                            movie_location["Path"].split("/")[-1],
-                                            videos_movies_ids["locations"],
-                                        )
-                                        is not None
-                                    ):
-                                        for video in videos:
-                                            if (
-                                                contains_nested(
-                                                    movie_location["Path"].split("/")[
-                                                        -1
-                                                    ],
-                                                    video["locations"],
-                                                )
-                                                is not None
-                                            ):
-                                                movie_status = video["status"]
-                                                break
-                                        break
-
-                        if not movie_status:
-                            for (
-                                movie_provider_source,
-                                movie_provider_id,
-                            ) in jellyfin_video["ProviderIds"].items():
-                                if movie_provider_source.lower() in videos_movies_ids:
-                                    if (
-                                        movie_provider_id.lower()
-                                        in videos_movies_ids[
-                                            movie_provider_source.lower()
-                                        ]
-                                    ):
-                                        for video in videos:
-                                            if movie_provider_id.lower() in video.get(
-                                                movie_provider_source.lower(), []
-                                            ):
-                                                movie_status = video["status"]
-                                                break
-                                        break
-
-                        if movie_status:
-                            jellyfin_video_id = jellyfin_video["Id"]
-                            if movie_status["completed"]:
-                                msg = f"Jellyfin: {jellyfin_video.get('Name')} as watched for {user_name} in {library}"
-                                if not dryrun:
-                                    logger(msg, 5)
-                                    await self.query(
-                                        f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
-                                        "post",
-                                        session,
-                                    )
-                                else:
-                                    logger(msg, 6)
-
-                                log_marked(
-                                    user_name,
-                                    library,
-                                    jellyfin_video.get("Name"),
-                                )
-                            else:
-                                # TODO add support for partially watched movies
-                                msg = f"Jellyfin: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
-                                """
-                                if not dryrun:
-                                    pass
-                                    # logger(msg, 5)
-                                else:
-                                    pass
-                                    # logger(msg, 6)
-
-                                log_marked(
-                                    user_name,
-                                    library,
-                                    jellyfin_video.get("Name"),
-                                    duration=floor(movie_status["time"] / 60_000),
-                                )"""
-                        else:
-                            logger(
-                                f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
-                                1,
-                            )
-
-                # TV Shows
-                if videos_shows_ids and videos_episodes_ids:
-                    jellyfin_search = await self.query(
-                        f"/Users/{user_id}/Items"
-                        + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                        + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
-                        "get",
-                        session,
-                    )
-                    jellyfin_shows = [x for x in jellyfin_search["Items"]]
-
-                    for jellyfin_show in jellyfin_shows:
-                        show_found = False
-
-                        if "Path" in jellyfin_show:
-                            if (
-                                contains_nested(
-                                    jellyfin_show["Path"].split("/")[-1],
-                                    videos_shows_ids["locations"],
-                                )
-                                is not None
-                            ):
-                                show_found = True
-                                episode_videos = []
-
-                                for show, seasons in videos.items():
-                                    show = {k: v for k, v in show}
-                                    if (
-                                        contains_nested(
-                                            jellyfin_show["Path"].split("/")[-1],
-                                            show["locations"],
-                                        )
-                                        is not None
-                                    ):
-                                        for season in seasons.values():
-                                            for episode in season:
-                                                episode_videos.append(episode)
-
-                        if not show_found:
-                            for show_provider_source, show_provider_id in jellyfin_show[
-                                "ProviderIds"
-                            ].items():
-                                if show_provider_source.lower() in videos_shows_ids:
-                                    if (
-                                        show_provider_id.lower()
-                                        in videos_shows_ids[
-                                            show_provider_source.lower()
-                                        ]
-                                    ):
-                                        show_found = True
-                                        episode_videos = []
-                                        for show, seasons in videos.items():
-                                            show = {k: v for k, v in show}
-                                            if show_provider_id.lower() in show.get(
-                                                show_provider_source.lower(), []
-                                            ):
-                                                for season in seasons.values():
-                                                    for episode in season:
-                                                        episode_videos.append(episode)
-
-                        if show_found:
-                            logger(
-                                f"Jellyfin: Updating watched for {user_name} in library {library} for show {jellyfin_show.get('Name')}",
-                                1,
-                            )
-                            jellyfin_show_id = jellyfin_show["Id"]
-                            jellyfin_episodes = await self.query(
-                                f"/Shows/{jellyfin_show_id}/Episodes"
-                                + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
-                                "get",
-                                session,
-                            )
-
-                            for jellyfin_episode in jellyfin_episodes["Items"]:
-                                episode_status = None
-
-                                if "MediaSources" in jellyfin_episode:
-                                    for episode_location in jellyfin_episode[
-                                        "MediaSources"
-                                    ]:
-                                        if "Path" in episode_location:
-                                            if (
-                                                contains_nested(
-                                                    episode_location["Path"].split("/")[
-                                                        -1
-                                                    ],
-                                                    videos_episodes_ids["locations"],
-                                                )
-                                                is not None
-                                            ):
-                                                for episode in episode_videos:
-                                                    if (
-                                                        contains_nested(
-                                                            episode_location[
-                                                                "Path"
-                                                            ].split("/")[-1],
-                                                            episode["locations"],
-                                                        )
-                                                        is not None
-                                                    ):
-                                                        episode_status = episode[
-                                                            "status"
-                                                        ]
-                                                        break
-                                                break
-
-                                if not episode_status:
-                                    for (
-                                        episode_provider_source,
-                                        episode_provider_id,
-                                    ) in jellyfin_episode["ProviderIds"].items():
-                                        if (
-                                            episode_provider_source.lower()
-                                            in videos_episodes_ids
-                                        ):
-                                            if (
-                                                episode_provider_id.lower()
-                                                in videos_episodes_ids[
-                                                    episode_provider_source.lower()
-                                                ]
-                                            ):
-                                                for episode in episode_videos:
-                                                    if (
-                                                        episode_provider_source.lower()
-                                                        in episode
-                                                    ):
-                                                        if (
-                                                            episode_provider_id.lower()
-                                                            in episode[
-                                                                episode_provider_source.lower()
-                                                            ]
-                                                        ):
-                                                            episode_status = episode[
-                                                                "status"
-                                                            ]
-                                                            break
-                                                break
-
-                                if episode_status:
-                                    jellyfin_episode_id = jellyfin_episode["Id"]
-                                    if episode_status["completed"]:
-                                        msg = (
-                                            f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                            + f" as watched for {user_name} in {library}"
-                                        )
-                                        if not dryrun:
-                                            logger(msg, 5)
-                                            await self.query(
-                                                f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
-                                                "post",
-                                                session,
-                                            )
-                                        else:
-                                            logger(msg, 6)
-
-                                        log_marked(
-                                            user_name,
-                                            library,
-                                            jellyfin_episode.get("SeriesName"),
-                                            jellyfin_episode.get("Name"),
-                                        )
-                                    else:
-                                        # TODO add support for partially watched episodes
-                                        msg = (
-                                            f"Jellyfin: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                            + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
-                                        )
-                                        """
-                                        if not dryrun:
-                                            pass
-                                            # logger(f"Marked {msg}", 0)
-                                        else:
-                                            pass
-                                            # logger(f"Dryrun {msg}", 0)
-
-                                        log_marked(
-                                            user_name,
-                                            library,
-                                            jellyfin_episode.get("SeriesName"),
-                                            jellyfin_episode.get('Name'),
-                                            duration=floor(episode_status["time"] / 60_000),
-                                        )"""
-                                else:
-                                    logger(
-                                        f"Jellyfin: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
-                                        3,
-                                    )
-                        else:
-                            logger(
-                                f"Jellyfin: Skipping show {jellyfin_show.get('Name')} as it is not in mark list for {user_name}",
-                                3,
-                            )
-
             if (
                 not videos_movies_ids
                 and not videos_shows_ids
@@ -889,6 +899,47 @@ class Jellyfin:
                     f"Jellyfin: No videos to mark as watched for {user_name} in library {library}",
                     1,
                 )
+
+                return
+
+            logger(
+                f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
+                1,
+            )
+
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                tasks = []
+                if videos_movies_ids:
+                    tasks.append(
+                        self.update_user_watched_movies(
+                            videos,
+                            videos_movies_ids,
+                            user_name,
+                            user_id,
+                            library,
+                            library_id,
+                            session,
+                            dryrun,
+                        )
+                    )
+
+                # TV Shows
+                if videos_shows_ids and videos_episodes_ids:
+                    tasks.append(
+                        self.update_user_watched_shows(
+                            user_id,
+                            user_name,
+                            library_id,
+                            library,
+                            videos,
+                            videos_shows_ids,
+                            videos_episodes_ids,
+                            dryrun,
+                            session,
+                        )
+                    )
+
+                await asyncio.gather(*tasks, return_exceptions=True)
 
         except Exception as e:
             logger(
