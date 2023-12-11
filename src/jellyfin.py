@@ -331,8 +331,9 @@ class Jellyfin:
                         if len(seasons["Items"]) > 0:
                             for season in seasons["Items"]:
                                 season_identifiers = dict(seasons["Identifiers"])
-                                season_identifiers["season_id"] = season["Id"]
-                                season_identifiers["season_name"] = season["Name"]
+                                season_identifiers["season_index"] = season[
+                                    "IndexNumber"
+                                ]
                                 watched_task = asyncio.ensure_future(
                                     self.query(
                                         f"/Shows/{season_identifiers['show_id']}/Episodes"
@@ -390,18 +391,18 @@ class Jellyfin:
                                 ] = {}
 
                             if (
-                                season_dict["Identifiers"]["season_name"]
+                                season_dict["Identifiers"]["season_index"]
                                 not in user_watched[user_name][library_title][
                                     season_dict["Identifiers"]["show_guids"]
                                 ]
                             ):
                                 user_watched[user_name][library_title][
                                     season_dict["Identifiers"]["show_guids"]
-                                ][season_dict["Identifiers"]["season_name"]] = []
+                                ][season_dict["Identifiers"]["season_index"]] = []
 
                             user_watched[user_name][library_title][
                                 season_dict["Identifiers"]["show_guids"]
-                            ][season_dict["Identifiers"]["season_name"]] = season_dict[
+                            ][season_dict["Identifiers"]["season_index"]] = season_dict[
                                 "Episodes"
                             ]
                             logger(

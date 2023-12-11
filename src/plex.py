@@ -105,17 +105,17 @@ def get_user_library_watched_show(show):
 
         for episode in show.episodes():
             if episode in watched:
-                if episode.parentTitle not in episode_guids:
-                    episode_guids[episode.parentTitle] = []
+                if episode.parentIndex not in episode_guids:
+                    episode_guids[episode.parentIndex] = []
 
-                episode_guids[episode.parentTitle].append(
+                episode_guids[episode.parentIndex].append(
                     get_episode_guids(episode, show, completed=True)
                 )
             elif episode.viewOffset > 0:
-                if episode.parentTitle not in episode_guids:
-                    episode_guids[episode.parentTitle] = []
+                if episode.parentIndex not in episode_guids:
+                    episode_guids[episode.parentIndex] = []
 
-                episode_guids[episode.parentTitle].append(
+                episode_guids[episode.parentIndex].append(
                     get_episode_guids(episode, show, completed=False)
                 )
 
