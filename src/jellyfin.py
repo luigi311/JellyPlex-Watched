@@ -283,7 +283,6 @@ class Jellyfin:
         user_id,
     ):
         watched_task = []
-        inprogress_task = []
         # Iterate through the seasons
         for season in seasons["Items"]:
             # Check if the season has been partially or fully watched
@@ -305,7 +304,7 @@ class Jellyfin:
                         frozenset(show_identifiers.items()),
                     )
                 )
-                inprogress_task.append(
+                watched_task.append(
                     self.query(
                         f"/Shows/{show_identifiers['show_id']}/Episodes"
                         + f"?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&Filters=IsResumable&Fields=ProviderIds,MediaSources",
@@ -316,7 +315,6 @@ class Jellyfin:
                 )
 
         watched_episodes = await asyncio.gather(*watched_task)
-        inprogress_episodes = await asyncio.gather(*inprogress_task)
 
         process_task = []
 
@@ -328,19 +326,6 @@ class Jellyfin:
                     library_title,
                     episodes,
                     user_name,
-                    in_progress=False,
-                )
-            )
-
-        # Process the in-progress episodes
-        for episodes in inprogress_episodes:
-            process_task.append(
-                self.process_watched_episodes(
-                    user_watched,
-                    library_title,
-                    episodes,
-                    user_name,
-                    in_progress=True,
                 )
             )
 
@@ -352,7 +337,6 @@ class Jellyfin:
         library_title,
         episodes,
         user_name,
-        in_progress=False,
     ):
         show_identifiers = episodes["Identifiers"]
         # Check if the season has any watched episodes
@@ -365,8 +349,7 @@ class Jellyfin:
                 if "MediaSources" in episode and episode["MediaSources"]:
                     # Check if the episode is in progress or fully watched
                     if (
-                        not in_progress
-                        or episode["UserData"]["Played"]
+                        episode["UserData"]["Played"]
                         or episode["UserData"]["PlaybackPositionTicks"] > 600000000
                     ):
                         # Get the episode's GUIDs
