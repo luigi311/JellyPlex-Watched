@@ -150,40 +150,34 @@ class Jellyfin:
         # Initialize the user's movie library in the user_watched dictionary
         user_watched[user_name][library_title] = []
 
+        movies_task = []
         # Get the list of watched movies
-        watched = await self.query(
-            f"/Users/{user_id}/Items"
-            + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
-            "get",
-            session,
+        movies_task.append(
+            self.query(
+                f"/Users/{user_id}/Items"
+                + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
+                "get",
+                session,
+            )
         )
         # Get the list of in-progress movies
-        in_progress = await self.query(
-            f"/Users/{user_id}/Items"
-            + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
-            "get",
-            session,
+        movies_task.append(
+            self.query(
+                f"/Users/{user_id}/Items"
+                + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
+                "get",
+                session,
+            )
         )
 
-        # Process the watched movies
-        await self.process_movies(
-            user_watched,
-            library_title,
-            watched["Items"],
-            user_name,
-            in_progress=False,
-        )
-        # Process the in-progress movies
-        await self.process_movies(
-            user_watched,
-            library_title,
-            in_progress["Items"],
-            user_name,
-            in_progress=True,
+        movies = await asyncio.gather(*movies_task)
+
+        await self.process_watched_movies(
+            user_watched, library_title, movies, user_name
         )
 
-    async def process_movies(
-        self, user_watched, library_title, movies, user_name, in_progress=False
+    async def process_watched_movies(
+        self, user_watched, library_title, movies, user_name
     ):
         # Iterate through the list of movies
         for movie in movies:
@@ -193,13 +187,14 @@ class Jellyfin:
                     f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
                     3,
                 )
-                # Get the movie's GUIDs
-                movie_guids = get_media_guids(movie)
                 # Check if the movie is in progress or fully watched
                 if (
-                    not in_progress
+                    movie["UserData"]["Played"]
                     or movie["UserData"]["PlaybackPositionTicks"] >= 600000000
                 ):
+                    # Get the movie's GUIDs
+                    movie_guids = get_media_guids(movie)
+
                     # Append the movie dictionary to the user's watched list
                     user_watched[user_name][library_title].append(movie_guids)
                 logger(f"Jellyfin: Added {movie_guids} to {user_name} watched list", 3)
