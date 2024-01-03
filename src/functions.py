@@ -64,8 +64,15 @@ def str_to_bool(value: any) -> bool:
 
 # Search for nested element in list
 def contains_nested(element, lst):
+    if lst is None:
+        return None
+
     for i, item in enumerate(lst):
+        if item is None:
+            continue
         if element in item:
+            return i
+        elif element == item:
             return i
     return None
 

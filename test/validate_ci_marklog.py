@@ -2,11 +2,13 @@
 
 import os
 
+
 def read_marklog():
     marklog = os.path.join(os.getcwd(), "mark.log")
     with open(marklog, "r") as f:
         lines = f.readlines()
     return lines
+
 
 def check_marklog(lines, expected_values):
     for line in lines:
@@ -17,11 +19,18 @@ def check_marklog(lines, expected_values):
             return False
     return True
 
+
 def main():
     expected_values = [
-        "jellyplex_watched/TV Shows/Blender Shorts/Episode 2"
-        , "JellyUser/Movies/Big Buck Bunny"
-        , "JellyUser/Shows/Blender Shorts/S01E01"
+        "jellyplex_watched/Movies/Five Nights at Freddy's",
+        "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
+        "JellyUser/Movies/Big Buck Bunny",
+        "JellyUser/Shows/Doctor Who/The Unquiet Dead",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
     ]
 
     lines = read_marklog()
@@ -30,6 +39,7 @@ def main():
         exit(1)
     else:
         print("Marklog contained the expected values")
+
 
 if __name__ == "__main__":
     main()
