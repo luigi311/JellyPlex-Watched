@@ -172,6 +172,10 @@ class Jellyfin:
 
         movies = await asyncio.gather(*movies_task)
 
+        # Combine the list of watched and in-progress movies
+        movies = movies[0]["Items"] + movies[1]["Items"]
+
+
         await self.process_watched_movies(
             user_watched, library_title, movies, user_name
         )
