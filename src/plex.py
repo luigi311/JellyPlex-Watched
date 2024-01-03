@@ -89,8 +89,8 @@ def get_user_library_watched_show(show):
                     )
                     for episode
                     in show.episodes()
-                    # Only include watched/partially-watched episodes
-                    if episode in watched_episodes or episode.viewOffset > 0
+                    # Only include watched or partially-watched more than a minute episodes
+                    if episode in watched_episodes or episode.viewOffset >= 60000
                 ],
                 operator.itemgetter(0)
             )
@@ -124,8 +124,8 @@ def get_user_library_watched(user, user_plex, library):
                        for video
                        # Get all partially watched movies
                        in library_videos.search(inProgress=True)
-                       # Ignore all partially watched movies watched under 1 minute
-                       if video.viewOffset < 60000
+                       # Only include partially-watched movies more than a minute
+                       if video.viewOffset >= 60000
                    ]
 
             for guid in future_thread_executor(
