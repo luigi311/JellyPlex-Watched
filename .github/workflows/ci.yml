@@ -59,6 +59,7 @@ jobs:
           python main.py
 
           cat mark.log
+          python test/validate_ci_marklog.py
 
   docker:
     runs-on: ubuntu-latest
