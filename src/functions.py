@@ -64,8 +64,15 @@ def str_to_bool(value: any) -> bool:
 
 # Search for nested element in list
 def contains_nested(element, lst):
+    if lst is None:
+        return None
+
     for i, item in enumerate(lst):
+        if item is None:
+            continue
         if element in item:
+            return i
+        elif element == item:
             return i
     return None
 
@@ -91,6 +98,13 @@ def future_thread_executor(args: list, threads: int = 32):
     results = []
 
     workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2, threads)
+
+    # If only one worker, run in main thread to avoid overhead
+    if workers == 1:
+        results = []
+        for arg in args:
+            results.append(arg[0](*arg[1:]))
+        return results
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         for arg in args:

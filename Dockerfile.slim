@@ -33,7 +33,11 @@ ENV BLACKLIST_USERS  ''
 ENV WHITELIST_USERS  ''
 
 
-RUN addgroup --system jellyplex_user && \
+RUN apt-get update && \
+    apt-get install tini --yes --no-install-recommends && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    addgroup --system jellyplex_user && \
     adduser --system --no-create-home jellyplex_user --ingroup jellyplex_user && \
     mkdir -p /app && \
     chown -R jellyplex_user:jellyplex_user /app
@@ -48,4 +52,5 @@ COPY --chown=jellyplex_user:jellyplex_user . .
 
 USER jellyplex_user
 
+ENTRYPOINT ["/bin/tini", "--"]
 CMD ["python", "-u", "main.py"]

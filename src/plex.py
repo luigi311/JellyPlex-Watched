@@ -1,7 +1,14 @@
-import re, requests, traceback
+import re, requests, os, traceback
+from typing import Dict, Union, FrozenSet
+import operator
+from itertools import groupby as itertools_groupby
+
 from urllib3.poolmanager import PoolManager
 from math import floor
 
+from requests.adapters import HTTPAdapter as RequestsHTTPAdapter
+
+from plexapi.video import Episode, Movie
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
@@ -19,7 +26,7 @@ from src.library import (
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
-class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
+class HostNameIgnoringAdapter(RequestsHTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
         self.poolmanager = PoolManager(
             num_pools=connections,
@@ -30,107 +37,77 @@ class HostNameIgnoringAdapter(requests.adapters.HTTPAdapter):
         )
 
 
-def get_movie_guids(video, completed=True):
-    logger(f"Plex: {video.title} {video.guids} {video.locations}", 3)
+def extract_guids_from_item(item: Union[Movie, Episode]) -> Dict[str, str]:
+    guids: Dict[str, str] = dict(
+        guid.id.split("://")
+        for guid in item.guids
+        if guid.id is not None and len(guid.id.strip()) > 0
+    )
 
-    movie_guids = {}
-    try:
-        for guid in video.guids:
-            # Extract source and id from guid.id
-            m = re.match(r"(.*)://(.*)", guid.id)
-            guid_source, guid_id = m.group(1).lower(), m.group(2)
-            movie_guids[guid_source] = guid_id
-    except Exception:
-        logger(f"Plex: Failed to get guids for {video.title}, Using location only", 1)
-
-    movie_guids["title"] = video.title
-    movie_guids["locations"] = tuple([x.split("/")[-1] for x in video.locations])
-
-    movie_guids["status"] = {
-        "completed": completed,
-        "time": video.viewOffset,
-    }
-
-    return movie_guids
-
-
-def get_episode_guids(episode, show, completed=True):
-    episode_guids_temp = {}
-    try:
-        for guid in episode.guids:
-            # Extract after :// from guid.id
-            m = re.match(r"(.*)://(.*)", guid.id)
-            guid_source, guid_id = m.group(1).lower(), m.group(2)
-            episode_guids_temp[guid_source] = guid_id
-    except Exception:
+    if len(guids) == 0:
         logger(
-            f"Plex: Failed to get guids for {episode.title} in {show.title}, Using location only",
+            f"Plex: Failed to get any guids for {item.title}, Using location only",
             1,
         )
 
-    episode_guids_temp["title"] = episode.title
-    episode_guids_temp["locations"] = tuple(
-        [x.split("/")[-1] for x in episode.locations]
-    )
+    return guids
 
-    episode_guids_temp["status"] = {
-        "completed": completed,
-        "time": episode.viewOffset,
-    }
 
-    return episode_guids_temp
+def get_guids(item: Union[Movie, Episode], completed=True):
+    return {
+        "title": item.title,
+        "locations": tuple([location.split("/")[-1] for location in item.locations]),
+        "status": {
+            "completed": completed,
+            "time": item.viewOffset,
+        },
+    } | extract_guids_from_item(
+        item
+    )  # Merge the metadata and guid dictionaries
 
 
 def get_user_library_watched_show(show):
     try:
-        show_guids = {}
-        try:
-            for show_guid in show.guids:
-                # Extract source and id from guid.id
-                m = re.match(r"(.*)://(.*)", show_guid.id)
-                show_guid_source, show_guid_id = m.group(1).lower(), m.group(2)
-                show_guids[show_guid_source] = show_guid_id
-        except Exception:
-            logger(
-                f"Plex: Failed to get guids for {show.title}, Using location only", 1
+        show_guids: FrozenSet = frozenset(
+            (
+                {
+                    "title": show.title,
+                    "locations": tuple(
+                        [location.split("/")[-1] for location in show.locations]
+                    ),
+                }
+                | extract_guids_from_item(show)
+            ).items()  # Merge the metadata and guid dictionaries
+        )
+
+        watched_episodes = show.watched()
+        episode_guids = {
+            # Offset group data because the first value will be the key
+            season: [episode[1] for episode in episodes]
+            for season, episodes
+            # Group episodes by first element of tuple (episode.parentIndex)
+            in itertools_groupby(
+                [
+                    (
+                        episode.parentIndex,
+                        get_guids(episode, completed=episode in watched_episodes),
+                    )
+                    for episode in show.episodes()
+                    # Only include watched or partially-watched more than a minute episodes
+                    if episode in watched_episodes or episode.viewOffset >= 60000
+                ],
+                operator.itemgetter(0),
             )
-
-        show_guids["title"] = show.title
-        show_guids["locations"] = tuple([x.split("/")[-1] for x in show.locations])
-        show_guids = frozenset(show_guids.items())
-
-        # Get all watched episodes for show
-        episode_guids = {}
-        watched = show.watched()
-
-        for episode in show.episodes():
-            if episode in watched:
-                if episode.parentIndex not in episode_guids:
-                    episode_guids[episode.parentIndex] = []
-
-                episode_guids[episode.parentIndex].append(
-                    get_episode_guids(episode, show, completed=True)
-                )
-            elif episode.viewOffset > 0:
-                if episode.parentIndex not in episode_guids:
-                    episode_guids[episode.parentIndex] = []
-
-                episode_guids[episode.parentIndex].append(
-                    get_episode_guids(episode, show, completed=False)
-                )
+        }
 
         return show_guids, episode_guids
-
     except Exception:
         return {}, {}
 
 
 def get_user_library_watched(user, user_plex, library):
+    user_name: str = user.title.lower()
     try:
-        user_name = user.username.lower() if user.username else user.title.lower()
-        user_watched = {}
-        user_watched[user_name] = {}
-
         logger(
             f"Plex: Generating watched for {user_name} in library {library.title}",
             0,
@@ -139,58 +116,49 @@ def get_user_library_watched(user, user_plex, library):
         library_videos = user_plex.library.section(library.title)
 
         if library.type == "movie":
-            user_watched[user_name][library.title] = []
+            watched = []
 
-            # Get all watched movies
-            for video in library_videos.search(unwatched=False):
-                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
+            args = [
+                [get_guids, video, True]
+                for video
+                # Get all watched movies
+                in library_videos.search(unwatched=False)
+            ] + [
+                [get_guids, video, False]
+                for video
+                # Get all partially watched movies
+                in library_videos.search(inProgress=True)
+                # Only include partially-watched movies more than a minute
+                if video.viewOffset >= 60000
+            ]
 
-                movie_guids = get_movie_guids(video, completed=True)
-
-                user_watched[user_name][library.title].append(movie_guids)
-
-            # Get all partially watched movies greater than 1 minute
-            for video in library_videos.search(inProgress=True):
-                if video.viewOffset < 60000:
-                    continue
-
-                logger(f"Plex: Adding {video.title} to {user_name} watched list", 3)
-
-                movie_guids = get_movie_guids(video, completed=False)
-
-                user_watched[user_name][library.title].append(movie_guids)
-
+            for guid in future_thread_executor(args, threads=min(os.cpu_count(), 4)):
+                logger(f"Plex: Adding {guid['title']} to {user_name} watched list", 3)
+                watched.append(guid)
         elif library.type == "show":
-            user_watched[user_name][library.title] = {}
+            watched = {}
 
-            # Parallelize show processing
-            args = []
-
-            # Get all watched shows
-            for show in library_videos.search(unwatched=False):
-                args.append([get_user_library_watched_show, show])
-
-            # Get all partially watched shows
-            for show in library_videos.search(inProgress=True):
-                args.append([get_user_library_watched_show, show])
+            # Get all watched shows and partially watched shows
+            args = [
+                (get_user_library_watched_show, show)
+                for show in library_videos.search(unwatched=False)
+                + library_videos.search(inProgress=True)
+            ]
 
             for show_guids, episode_guids in future_thread_executor(args, threads=4):
                 if show_guids and episode_guids:
-                    # append show, season, episode
-                    if show_guids not in user_watched[user_name][library.title]:
-                        user_watched[user_name][library.title][show_guids] = {}
-
-                    user_watched[user_name][library.title][show_guids] = episode_guids
+                    watched[show_guids] = episode_guids
                     logger(
                         f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
                         3,
                     )
+        else:
+            watched = None
 
         logger(f"Plex: Got watched for {user_name} in library {library.title}", 1)
-        if library.title in user_watched[user_name]:
-            logger(f"Plex: {user_watched[user_name][library.title]}", 3)
+        logger(f"Plex: {watched}", 3)
 
-        return user_watched
+        return {user_name: {library.title: watched} if watched is not None else {}}
     except Exception as e:
         logger(
             f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",

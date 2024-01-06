@@ -11,6 +11,17 @@
       "program": "main.py",
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Pytest",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "-vv"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
     }
   ]
 }

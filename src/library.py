@@ -158,7 +158,7 @@ def show_title_dict(user_list: dict):
 
         return show_output_dict
     except Exception:
-        logger("Generating show_output_dict failed, skipping", 1)
+        logger("Skipping show_output_dict ", 1)
         return {}
 
 
@@ -168,12 +168,28 @@ def episode_title_dict(user_list: dict):
         episode_output_dict["completed"] = []
         episode_output_dict["time"] = []
         episode_output_dict["locations"] = []
+        episode_output_dict["show"] = []
+        episode_output_dict["season"] = []
         episode_counter = 0  # Initialize a counter for the current episode position
 
         # Iterate through the shows, seasons, and episodes in user_list
         for show in user_list:
             for season in user_list[show]:
                 for episode in user_list[show][season]:
+                    # Add the show title to the episode_output_dict if it doesn't exist
+                    if "show" not in episode_output_dict:
+                        episode_output_dict["show"] = [None] * episode_counter
+
+                    # Add the season number to the episode_output_dict if it doesn't exist
+                    if "season" not in episode_output_dict:
+                        episode_output_dict["season"] = [None] * episode_counter
+
+                    # Add the show title to the episode_output_dict
+                    episode_output_dict["show"].append(dict(show))
+
+                    # Add the season number to the episode_output_dict
+                    episode_output_dict["season"].append(season)
+
                     # Iterate through the keys and values in each episode
                     for episode_key, episode_value in episode.items():
                         # If the key is not "status", add the key to episode_output_dict if it doesn't exist
@@ -213,7 +229,7 @@ def episode_title_dict(user_list: dict):
 
         return episode_output_dict
     except Exception:
-        logger("Generating episode_output_dict failed, skipping", 1)
+        logger("Skipping episode_output_dict", 1)
         return {}
 
 
@@ -246,7 +262,7 @@ def movies_title_dict(user_list: dict):
 
         return movies_output_dict
     except Exception:
-        logger("Generating movies_output_dict failed, skipping", 1)
+        logger("Skipping movies_output_dict failed", 1)
         return {}
 
 

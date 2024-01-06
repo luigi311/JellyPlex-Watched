@@ -83,6 +83,16 @@ episode_titles = {
     "tvdb": ["8444132"],
     "completed": [True],
     "time": [0],
+    "season": ["Season 1"],
+    "show": [
+        {
+            "imdb": "tt3581920",
+            "locations": ("The Last of Us",),
+            "title": "The Last of Us",
+            "tmdb": "100088",
+            "tvdb": "392256",
+        }
+    ],
 }
 movie_titles = {
     "imdb": ["tt2380307"],

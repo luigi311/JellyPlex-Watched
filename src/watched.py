@@ -6,11 +6,17 @@ from src.library import generate_library_guids_dict
 
 
 def combine_watched_dicts(dicts: list):
+    # Ensure that the input is a list of dictionaries
+    if not all(isinstance(d, dict) for d in dicts):
+        raise ValueError("Input must be a list of dictionaries")
+
     combined_dict = {}
+
     for single_dict in dicts:
         for key, value in single_dict.items():
             if key not in combined_dict:
                 combined_dict[key] = {}
+
             for subkey, subvalue in value.items():
                 if subkey in combined_dict[key]:
                     # If the subkey already exists in the combined dictionary,
@@ -117,11 +123,18 @@ def cleanup_watched(
                     show_key_dict = dict(show_key_1)
 
                     for season in watched_list_1[user_1][library_1][show_key_1]:
+                        # Filter the episode_watched_list_2_keys_dict dictionary to handle cases
+                        # where episode location names are not unique such as S01E01.mkv
+                        filtered_episode_watched_list_2_keys_dict = (
+                            filter_episode_watched_list_2_keys_dict(
+                                episode_watched_list_2_keys_dict, show_key_dict, season
+                            )
+                        )
                         for episode in watched_list_1[user_1][library_1][show_key_1][
                             season
                         ]:
                             episode_index = get_episode_index_in_dict(
-                                episode, episode_watched_list_2_keys_dict
+                                episode, filtered_episode_watched_list_2_keys_dict
                             )
                             if episode_index is not None:
                                 if check_remove_entry(
@@ -215,6 +228,59 @@ def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
 
     # If the loop completes without finding a match, return False
     return None
+
+
+def filter_episode_watched_list_2_keys_dict(
+    episode_watched_list_2_keys_dict, show_key_dict, season
+):
+    # Filter the episode_watched_list_2_keys_dict dictionary to only include values for the correct show and season
+    filtered_episode_watched_list_2_keys_dict = {}
+    show_indecies = []
+    season_indecies = []
+
+    # Iterate through episode_watched_list_2_keys_dict["season"] and find the indecies that match season
+    for season_index, season_value in enumerate(
+        episode_watched_list_2_keys_dict["season"]
+    ):
+        if season_value == season:
+            season_indecies.append(season_index)
+
+    # Iterate through episode_watched_list_2_keys_dict["show"] and find the indecies that match show_key_dict
+    for show_index, show_value in enumerate(episode_watched_list_2_keys_dict["show"]):
+        # Iterate through the keys and values of the show_value dictionary and check if they match show_key_dict
+        for show_key, show_key_value in show_value.items():
+            if show_key == "locations":
+                # Iterate through the locations in the show_value dictionary
+                for location in show_key_value:
+                    # If the location is in the episode_watched_list_2_keys_dict dictionary, return index of the key
+                    if (
+                        contains_nested(location, show_key_dict["locations"])
+                        is not None
+                    ):
+                        show_indecies.append(show_index)
+                        break
+            else:
+                if show_key in show_key_dict.keys():
+                    if show_key_value == show_key_dict[show_key]:
+                        show_indecies.append(show_index)
+                        break
+
+    # Find the intersection of the show_indecies and season_indecies lists
+    indecies = list(set(show_indecies) & set(season_indecies))
+
+    filtered_episode_watched_list_2_keys_dict = {}
+    # Create a copy of the dictionary with indecies that match the show and season and none that don't
+    for key, value in episode_watched_list_2_keys_dict.items():
+        if key not in filtered_episode_watched_list_2_keys_dict:
+            filtered_episode_watched_list_2_keys_dict[key] = []
+
+        for index, _ in enumerate(value):
+            if index in indecies:
+                filtered_episode_watched_list_2_keys_dict[key].append(value[index])
+            else:
+                filtered_episode_watched_list_2_keys_dict[key].append(None)
+
+    return filtered_episode_watched_list_2_keys_dict
 
 
 def get_episode_index_in_dict(episode, episode_watched_list_2_keys_dict):

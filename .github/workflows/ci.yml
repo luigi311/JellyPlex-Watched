@@ -1,5 +1,6 @@
 name: CI
 on:
+  workflow_dispatch:
   push:
     paths-ignore:
       - .gitignore
@@ -44,10 +45,16 @@ jobs:
 
           sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
 
+          docker pull lscr.io/linuxserver/plex &
+          docker pull lscr.io/linuxserver/jellyfin &
+
+          wait
+
           docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
           docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
           # Wait for containers to start
-          sleep 15
+          sleep 5
+
           docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
           docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
 
@@ -59,6 +66,7 @@ jobs:
           python main.py
 
           cat mark.log
+          python test/validate_ci_marklog.py
 
   docker:
     runs-on: ubuntu-latest
