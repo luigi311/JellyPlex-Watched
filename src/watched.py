@@ -274,7 +274,7 @@ def filter_episode_watched_list_2_keys_dict(
         if key not in filtered_episode_watched_list_2_keys_dict:
             filtered_episode_watched_list_2_keys_dict[key] = []
 
-        for index in range(len(value)):
+        for index, _ in enumerate(value):
             if index in indecies:
                 filtered_episode_watched_list_2_keys_dict[key].append(value[index])
             else:
