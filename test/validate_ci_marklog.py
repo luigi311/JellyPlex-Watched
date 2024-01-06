@@ -20,24 +20,32 @@ def check_marklog(lines, expected_values):
             if line not in expected_values:
                 raise Exception("Line not found in marklog: " + line)
 
-
             found_values.append(line)
 
         # Check to make sure the marklog contains the same number of values as the expected values
         if len(found_values) != len(expected_values):
-            raise Exception("Marklog did not contain the same number of values as the expected values, found " + 
-                str(len(found_values)) + " values, expected " + str(len(expected_values)) + " values")
-        
+            raise Exception(
+                "Marklog did not contain the same number of values as the expected values, found "
+                + str(len(found_values))
+                + " values, expected "
+                + str(len(expected_values))
+                + " values"
+            )
+
         # Check that the two lists contain the same values
         if sorted(found_values) != sorted(expected_values):
-            raise Exception("Marklog did not contain the same values as the expected values, found:\n" +
-                "\n".join(sorted(found_values)) + "\n\nExpected:\n" + "\n".join(sorted(expected_values)))
+            raise Exception(
+                "Marklog did not contain the same values as the expected values, found:\n"
+                + "\n".join(sorted(found_values))
+                + "\n\nExpected:\n"
+                + "\n".join(sorted(expected_values))
+            )
 
         return True
     except Exception as e:
         print(e)
         return False
-        
+
 
 def main():
     expected_values = [
@@ -59,7 +67,6 @@ def main():
 
     print("Successfully validated marklog")
     exit(0)
-
 
 
 if __name__ == "__main__":

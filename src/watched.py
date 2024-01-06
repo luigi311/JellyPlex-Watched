@@ -97,7 +97,7 @@ def cleanup_watched(
                 continue
 
             (
-                show_watched_list_2_keys_dict,
+                _,
                 episode_watched_list_2_keys_dict,
                 movies_watched_list_2_keys_dict,
             ) = generate_library_guids_dict(watched_list_2[user_2][library_2])
@@ -273,7 +273,7 @@ def filter_episode_watched_list_2_keys_dict(
         episode_watched_list_2_keys_dict
     )
     for key, value in filtered_episode_watched_list_2_keys_dict.items():
-        for index, item in enumerate(value):
+        for index in range(len(value)):
             if index not in indecies:
                 filtered_episode_watched_list_2_keys_dict[key][index] = None
 
