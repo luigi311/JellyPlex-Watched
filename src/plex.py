@@ -100,7 +100,6 @@ def get_user_library_watched_show(show):
             )
         }
 
-
         return show_guids, episode_guids
     except Exception:
         return {}, {}

@@ -268,14 +268,17 @@ def filter_episode_watched_list_2_keys_dict(
     # Find the intersection of the show_indecies and season_indecies lists
     indecies = list(set(show_indecies) & set(season_indecies))
 
+    filtered_episode_watched_list_2_keys_dict = {}
     # Create a copy of the dictionary with indecies that match the show and season and none that don't
-    filtered_episode_watched_list_2_keys_dict = copy.deepcopy(
-        episode_watched_list_2_keys_dict
-    )
-    for key, value in filtered_episode_watched_list_2_keys_dict.items():
+    for key, value in episode_watched_list_2_keys_dict.items():
+        if key not in filtered_episode_watched_list_2_keys_dict:
+            filtered_episode_watched_list_2_keys_dict[key] = []
+
         for index in range(len(value)):
-            if index not in indecies:
-                filtered_episode_watched_list_2_keys_dict[key][index] = None
+            if index in indecies:
+                filtered_episode_watched_list_2_keys_dict[key].append(value[index])
+            else:
+                filtered_episode_watched_list_2_keys_dict[key].append(None)
 
     return filtered_episode_watched_list_2_keys_dict
 
