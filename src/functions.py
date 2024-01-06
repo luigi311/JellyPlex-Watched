@@ -99,6 +99,13 @@ def future_thread_executor(args: list, threads: int = 32):
 
     workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2, threads)
 
+    # If only one worker, run in main thread to avoid overhead
+    if workers == 1:
+        results = []
+        for arg in args:
+            results.append(arg[0](*arg[1:]))
+        return results
+
     with ThreadPoolExecutor(max_workers=workers) as executor:
         for arg in args:
             # * arg unpacks the list into actual arguments
