@@ -1,4 +1,5 @@
-import re, requests, traceback
+import os, requests, traceback
+from dotenv import load_dotenv
 from typing import Dict, Union, FrozenSet
 
 from urllib3.poolmanager import PoolManager
@@ -16,11 +17,17 @@ from src.functions import (
     future_thread_executor,
     contains_nested,
     log_marked,
+    str_to_bool,
 )
 from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
 )
+
+
+load_dotenv(override=True)
+
+generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
@@ -36,6 +43,10 @@ class HostNameIgnoringAdapter(RequestsHTTPAdapter):
 
 
 def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]:
+    # If GENERATE_GUIDS is set to False, then return an empty dict
+    if not generate_guids:
+        return {}
+
     guids: Dict[str, str] = dict(
         guid.id.split("://")
         for guid in item.guids
@@ -198,24 +209,26 @@ def find_video(plex_search, video_ids, videos=None):
 
                 return True, episode_videos
 
-        for guid in plex_search.guids:
-            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
-            guid_id = re.search(r"://(.*)", guid.id).group(1)
+        if not generate_guids:
+            return False, []
+        else:
+            for guid in plex_search.guids:
+                guid_source, guid_id = guid.id.split("://")
 
-            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
-            if guid_source in video_ids.keys():
-                if guid_id in video_ids[guid_source]:
-                    episode_videos = []
-                    if videos:
-                        for show, seasons in videos.items():
-                            show = {k: v for k, v in show}
-                            if guid_source in show.keys():
-                                if guid_id == show[guid_source]:
-                                    for season in seasons.values():
-                                        for episode in season:
-                                            episode_videos.append(episode)
+                # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+                if guid_source in video_ids.keys():
+                    if guid_id in video_ids[guid_source]:
+                        episode_videos = []
+                        if videos:
+                            for show, seasons in videos.items():
+                                show = {k: v for k, v in show}
+                                if guid_source in show["ids"].keys():
+                                    if guid_id in show["ids"][guid_source]:
+                                        for season in seasons:
+                                            for episode in season:
+                                                episode_videos.append(episode)
 
-                    return True, episode_videos
+                        return True, episode_videos
 
         return False, []
     except Exception:
@@ -238,17 +251,19 @@ def get_video_status(plex_search, video_ids, videos):
                     ):
                         return video["status"]
 
-        for guid in plex_search.guids:
-            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
-            guid_id = re.search(r"://(.*)", guid.id).group(1)
+        if not generate_guids:
+            return None
+        else:
+            for guid in plex_search.guids:
+                guid_source, guid_id = guid.id.split("://")
 
-            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
-            if guid_source in video_ids.keys():
-                if guid_id in video_ids[guid_source]:
-                    for video in videos:
-                        if guid_source in video.keys():
-                            if guid_id == video[guid_source]:
-                                return video["status"]
+                # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+                if guid_source in video_ids.keys():
+                    if guid_id in video_ids[guid_source]:
+                        for video in videos:
+                            if guid_source in video["ids"].keys():
+                                if guid_id in video["ids"][guid_source]:
+                                    return video["status"]
 
         return None
     except Exception:
