@@ -65,6 +65,9 @@ jobs:
           # Run script
           python main.py
 
+          # Run script twice to test if it can handle existing data
+          python main.py
+
           cat mark.log
           python test/validate_ci_marklog.py
 
