@@ -93,11 +93,18 @@ def search_mapping(dictionary: dict, key_value: str):
         return None
 
 
-def future_thread_executor(args: list, threads: int = 32):
+def future_thread_executor(
+    args: list, threads: int = None, override_threads: bool = False
+):
     futures_list = []
     results = []
 
-    workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2, threads)
+    workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2)
+    if threads:
+        workers = min(threads, workers)
+
+    if override_threads:
+        workers = threads
 
     # If only one worker, run in main thread to avoid overhead
     if workers == 1:
