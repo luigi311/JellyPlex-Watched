@@ -209,6 +209,8 @@ def find_video(plex_search, video_ids, videos=None):
 
         return False, []
     except Exception:
+        logger(f"Plex: failed to find library item for {video_ids['title']}", 2)
+        logger(traceback.format_exc(), 2)
         return False, []
 
 
@@ -240,6 +242,8 @@ def get_video_status(plex_search, video_ids, videos):
 
         return None
     except Exception:
+        logger(f"Plex: failed to find library item for {video_ids['title']}", 2)
+        logger(traceback.format_exc(), 2)
         return None
 
 
