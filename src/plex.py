@@ -199,9 +199,9 @@ def find_video(plex_search, video_ids, videos=None):
                     if videos:
                         for show, seasons in videos.items():
                             show = {k: v for k, v in show}
-                            if guid_source in show["ids"].keys():
-                                if guid_id in show["ids"][guid_source]:
-                                    for season in seasons:
+                            if guid_source in show.keys():
+                                if guid_id == show[guid_source]:
+                                    for season in seasons.values():
                                         for episode in season:
                                             episode_videos.append(episode)
 
@@ -209,6 +209,8 @@ def find_video(plex_search, video_ids, videos=None):
 
         return False, []
     except Exception:
+        logger(f"Plex: failed to find library item for {video_ids['title']}", 2)
+        logger(traceback.format_exc(), 2)
         return False, []
 
 
@@ -234,12 +236,14 @@ def get_video_status(plex_search, video_ids, videos):
             if guid_source in video_ids.keys():
                 if guid_id in video_ids[guid_source]:
                     for video in videos:
-                        if guid_source in video["ids"].keys():
-                            if guid_id in video["ids"][guid_source]:
+                        if guid_source in video.keys():
+                            if guid_id == video[guid_source]:
                                 return video["status"]
 
         return None
     except Exception:
+        logger(f"Plex: failed to find library item for {video_ids['title']}", 2)
+        logger(traceback.format_exc(), 2)
         return None
 
 
