@@ -28,6 +28,7 @@ from src.library import (
 load_dotenv(override=True)
 
 generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
+generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
@@ -55,7 +56,7 @@ def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]
 
     if len(guids) == 0:
         logger(
-            f"Plex: Failed to get any guids for {item.title}, Using location only",
+            f"Plex: Failed to get any guids for {item.title}",
             1,
         )
 
@@ -65,7 +66,9 @@ def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]
 def get_guids(item: Union[Movie, Episode], completed=True):
     return {
         "title": item.title,
-        "locations": tuple([location.split("/")[-1] for location in item.locations]),
+        "locations": tuple([location.split("/")[-1] for location in item.locations])
+        if generate_locations
+        else tuple(),
         "status": {
             "completed": completed,
             "time": item.viewOffset,
@@ -83,7 +86,9 @@ def get_user_library_watched_show(show, process_episodes, threads=None):
                     "title": show.title,
                     "locations": tuple(
                         [location.split("/")[-1] for location in show.locations]
-                    ),
+                    )
+                    if generate_locations
+                    else tuple(),
                 }
                 | extract_guids_from_item(show)
             ).items()  # Merge the metadata and guid dictionaries
@@ -190,28 +195,32 @@ def get_user_library_watched(user, user_plex, library):
 
 def find_video(plex_search, video_ids, videos=None):
     try:
-        for location in plex_search.locations:
-            if (
-                contains_nested(location.split("/")[-1], video_ids["locations"])
-                is not None
-            ):
-                episode_videos = []
-                if videos:
-                    for show, seasons in videos.items():
-                        show = {k: v for k, v in show}
-                        if (
-                            contains_nested(location.split("/")[-1], show["locations"])
-                            is not None
-                        ):
-                            for season in seasons.values():
-                                for episode in season:
-                                    episode_videos.append(episode)
-
-                return True, episode_videos
-
-        if not generate_guids:
+        if not generate_guids and not generate_locations:
             return False, []
-        else:
+
+        if generate_locations:
+            for location in plex_search.locations:
+                if (
+                    contains_nested(location.split("/")[-1], video_ids["locations"])
+                    is not None
+                ):
+                    episode_videos = []
+                    if videos:
+                        for show, seasons in videos.items():
+                            show = {k: v for k, v in show}
+                            if (
+                                contains_nested(
+                                    location.split("/")[-1], show["locations"]
+                                )
+                                is not None
+                            ):
+                                for season in seasons.values():
+                                    for episode in season:
+                                        episode_videos.append(episode)
+
+                    return True, episode_videos
+
+        if generate_guids:
             for guid in plex_search.guids:
                 guid_source, guid_id = guid.id.split("://")
 
@@ -239,21 +248,23 @@ def find_video(plex_search, video_ids, videos=None):
 
 def get_video_status(plex_search, video_ids, videos):
     try:
-        for location in plex_search.locations:
-            if (
-                contains_nested(location.split("/")[-1], video_ids["locations"])
-                is not None
-            ):
-                for video in videos:
-                    if (
-                        contains_nested(location.split("/")[-1], video["locations"])
-                        is not None
-                    ):
-                        return video["status"]
-
-        if not generate_guids:
+        if not generate_guids and not generate_locations:
             return None
-        else:
+
+        if generate_locations:
+            for location in plex_search.locations:
+                if (
+                    contains_nested(location.split("/")[-1], video_ids["locations"])
+                    is not None
+                ):
+                    for video in videos:
+                        if (
+                            contains_nested(location.split("/")[-1], video["locations"])
+                            is not None
+                        ):
+                            return video["status"]
+
+        if generate_guids:
             for guid in plex_search.guids:
                 guid_source, guid_id = guid.id.split("://")
 
