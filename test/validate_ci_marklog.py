@@ -60,6 +60,9 @@ def main():
         "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
     ]
 
+    # Triple the expected values because the CI runs three times
+    expected_values = expected_values * 3
+
     lines = read_marklog()
     if not check_marklog(lines, expected_values):
         print("Failed to validate marklog")

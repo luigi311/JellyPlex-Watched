@@ -60,9 +60,19 @@ jobs:
 
       - name: "Run tests"
         run: |
-          # Move test/.env to root
-          mv test/ci.env .env
-          # Run script
+          # Test ci1
+          mv test/ci1.env .env
+          python main.py
+
+          # Test ci2
+          mv test/ci2.env .env
+          python main.py
+
+          # Test ci3
+          mv test/ci3.env .env
+          python main.py
+
+          # Test again to test if it can handle existing data
           python main.py
 
           cat mark.log

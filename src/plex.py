@@ -1,14 +1,13 @@
-import re, requests, os, traceback
+import os, requests, traceback
+from dotenv import load_dotenv
 from typing import Dict, Union, FrozenSet
-import operator
-from itertools import groupby as itertools_groupby
 
 from urllib3.poolmanager import PoolManager
 from math import floor
 
 from requests.adapters import HTTPAdapter as RequestsHTTPAdapter
 
-from plexapi.video import Episode, Movie
+from plexapi.video import Show, Episode, Movie
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
@@ -18,11 +17,18 @@ from src.functions import (
     future_thread_executor,
     contains_nested,
     log_marked,
+    str_to_bool,
 )
 from src.library import (
     check_skip_logic,
     generate_library_guids_dict,
 )
+
+
+load_dotenv(override=True)
+
+generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
+generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
@@ -37,7 +43,11 @@ class HostNameIgnoringAdapter(RequestsHTTPAdapter):
         )
 
 
-def extract_guids_from_item(item: Union[Movie, Episode]) -> Dict[str, str]:
+def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]:
+    # If GENERATE_GUIDS is set to False, then return an empty dict
+    if not generate_guids:
+        return {}
+
     guids: Dict[str, str] = dict(
         guid.id.split("://")
         for guid in item.guids
@@ -46,7 +56,7 @@ def extract_guids_from_item(item: Union[Movie, Episode]) -> Dict[str, str]:
 
     if len(guids) == 0:
         logger(
-            f"Plex: Failed to get any guids for {item.title}, Using location only",
+            f"Plex: Failed to get any guids for {item.title}",
             1,
         )
 
@@ -56,7 +66,9 @@ def extract_guids_from_item(item: Union[Movie, Episode]) -> Dict[str, str]:
 def get_guids(item: Union[Movie, Episode], completed=True):
     return {
         "title": item.title,
-        "locations": tuple([location.split("/")[-1] for location in item.locations]),
+        "locations": tuple([location.split("/")[-1] for location in item.locations])
+        if generate_locations
+        else tuple(),
         "status": {
             "completed": completed,
             "time": item.viewOffset,
@@ -66,7 +78,7 @@ def get_guids(item: Union[Movie, Episode], completed=True):
     )  # Merge the metadata and guid dictionaries
 
 
-def get_user_library_watched_show(show):
+def get_user_library_watched_show(show, process_episodes, threads=None):
     try:
         show_guids: FrozenSet = frozenset(
             (
@@ -74,31 +86,28 @@ def get_user_library_watched_show(show):
                     "title": show.title,
                     "locations": tuple(
                         [location.split("/")[-1] for location in show.locations]
-                    ),
+                    )
+                    if generate_locations
+                    else tuple(),
                 }
                 | extract_guids_from_item(show)
             ).items()  # Merge the metadata and guid dictionaries
         )
 
-        watched_episodes = show.watched()
-        episode_guids = {
-            # Offset group data because the first value will be the key
-            season: [episode[1] for episode in episodes]
-            for season, episodes
-            # Group episodes by first element of tuple (episode.parentIndex)
-            in itertools_groupby(
-                [
-                    (
-                        episode.parentIndex,
-                        get_guids(episode, completed=episode in watched_episodes),
-                    )
-                    for episode in show.episodes()
-                    # Only include watched or partially-watched more than a minute episodes
-                    if episode in watched_episodes or episode.viewOffset >= 60000
-                ],
-                operator.itemgetter(0),
-            )
-        }
+        episode_guids_args = []
+
+        for episode in process_episodes:
+            episode_guids_args.append([get_guids, episode, episode.isWatched])
+
+        episode_guids_results = future_thread_executor(
+            episode_guids_args, threads=threads
+        )
+
+        episode_guids = {}
+        for index, episode in enumerate(process_episodes):
+            if episode.parentIndex not in episode_guids:
+                episode_guids[episode.parentIndex] = []
+            episode_guids[episode.parentIndex].append(episode_guids_results[index])
 
         return show_guids, episode_guids
     except Exception:
@@ -119,39 +128,56 @@ def get_user_library_watched(user, user_plex, library):
             watched = []
 
             args = [
-                [get_guids, video, True]
-                for video
-                # Get all watched movies
-                in library_videos.search(unwatched=False)
-            ] + [
-                [get_guids, video, False]
-                for video
-                # Get all partially watched movies
-                in library_videos.search(inProgress=True)
-                # Only include partially-watched movies more than a minute
-                if video.viewOffset >= 60000
+                [get_guids, video, video.isWatched]
+                for video in library_videos.search(unwatched=False)
+                + library_videos.search(inProgress=True)
+                if video.isWatched or video.viewOffset >= 60000
             ]
 
-            for guid in future_thread_executor(args, threads=min(os.cpu_count(), 4)):
+            for guid in future_thread_executor(args, threads=len(args)):
                 logger(f"Plex: Adding {guid['title']} to {user_name} watched list", 3)
                 watched.append(guid)
         elif library.type == "show":
             watched = {}
 
             # Get all watched shows and partially watched shows
-            args = [
-                (get_user_library_watched_show, show)
-                for show in library_videos.search(unwatched=False)
-                + library_videos.search(inProgress=True)
-            ]
+            parallel_show_task = []
+            parallel_episodes_task = []
 
-            for show_guids, episode_guids in future_thread_executor(args, threads=4):
+            for show in library_videos.search(unwatched=False) + library_videos.search(
+                inProgress=True
+            ):
+                process_episodes = []
+                for episode in show.episodes():
+                    if episode.isWatched or episode.viewOffset >= 60000:
+                        process_episodes.append(episode)
+
+                # Shows with more than 24 episodes has its episodes processed in parallel
+                # Shows with less than 24 episodes has its episodes processed in serial but the shows are processed in parallel
+                if len(process_episodes) >= 24:
+                    parallel_episodes_task.append(
+                        [
+                            get_user_library_watched_show,
+                            show,
+                            process_episodes,
+                            len(process_episodes),
+                        ]
+                    )
+                else:
+                    parallel_show_task.append(
+                        [get_user_library_watched_show, show, process_episodes, 1]
+                    )
+
+            for show_guids, episode_guids in future_thread_executor(
+                parallel_show_task, threads=len(parallel_show_task)
+            ) + future_thread_executor(parallel_episodes_task, threads=1):
                 if show_guids and episode_guids:
                     watched[show_guids] = episode_guids
                     logger(
                         f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
                         3,
                     )
+
         else:
             watched = None
 
@@ -169,43 +195,49 @@ def get_user_library_watched(user, user_plex, library):
 
 def find_video(plex_search, video_ids, videos=None):
     try:
-        for location in plex_search.locations:
-            if (
-                contains_nested(location.split("/")[-1], video_ids["locations"])
-                is not None
-            ):
-                episode_videos = []
-                if videos:
-                    for show, seasons in videos.items():
-                        show = {k: v for k, v in show}
-                        if (
-                            contains_nested(location.split("/")[-1], show["locations"])
-                            is not None
-                        ):
-                            for season in seasons.values():
-                                for episode in season:
-                                    episode_videos.append(episode)
+        if not generate_guids and not generate_locations:
+            return False, []
 
-                return True, episode_videos
-
-        for guid in plex_search.guids:
-            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
-            guid_id = re.search(r"://(.*)", guid.id).group(1)
-
-            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
-            if guid_source in video_ids.keys():
-                if guid_id in video_ids[guid_source]:
+        if generate_locations:
+            for location in plex_search.locations:
+                if (
+                    contains_nested(location.split("/")[-1], video_ids["locations"])
+                    is not None
+                ):
                     episode_videos = []
                     if videos:
                         for show, seasons in videos.items():
                             show = {k: v for k, v in show}
-                            if guid_source in show["ids"].keys():
-                                if guid_id in show["ids"][guid_source]:
-                                    for season in seasons:
-                                        for episode in season:
-                                            episode_videos.append(episode)
+                            if (
+                                contains_nested(
+                                    location.split("/")[-1], show["locations"]
+                                )
+                                is not None
+                            ):
+                                for season in seasons.values():
+                                    for episode in season:
+                                        episode_videos.append(episode)
 
                     return True, episode_videos
+
+        if generate_guids:
+            for guid in plex_search.guids:
+                guid_source, guid_id = guid.id.split("://")
+
+                # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+                if guid_source in video_ids.keys():
+                    if guid_id in video_ids[guid_source]:
+                        episode_videos = []
+                        if videos:
+                            for show, seasons in videos.items():
+                                show = {k: v for k, v in show}
+                                if guid_source in show.keys():
+                                    if guid_id == show[guid_source]:
+                                        for season in seasons.values():
+                                            for episode in season:
+                                                episode_videos.append(episode)
+
+                        return True, episode_videos
 
         return False, []
     except Exception:
@@ -214,29 +246,33 @@ def find_video(plex_search, video_ids, videos=None):
 
 def get_video_status(plex_search, video_ids, videos):
     try:
-        for location in plex_search.locations:
-            if (
-                contains_nested(location.split("/")[-1], video_ids["locations"])
-                is not None
-            ):
-                for video in videos:
-                    if (
-                        contains_nested(location.split("/")[-1], video["locations"])
-                        is not None
-                    ):
-                        return video["status"]
+        if not generate_guids and not generate_locations:
+            return None
 
-        for guid in plex_search.guids:
-            guid_source = re.search(r"(.*)://", guid.id).group(1).lower()
-            guid_id = re.search(r"://(.*)", guid.id).group(1)
-
-            # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
-            if guid_source in video_ids.keys():
-                if guid_id in video_ids[guid_source]:
+        if generate_locations:
+            for location in plex_search.locations:
+                if (
+                    contains_nested(location.split("/")[-1], video_ids["locations"])
+                    is not None
+                ):
                     for video in videos:
-                        if guid_source in video["ids"].keys():
-                            if guid_id in video["ids"][guid_source]:
-                                return video["status"]
+                        if (
+                            contains_nested(location.split("/")[-1], video["locations"])
+                            is not None
+                        ):
+                            return video["status"]
+
+        if generate_guids:
+            for guid in plex_search.guids:
+                guid_source, guid_id = guid.id.split("://")
+
+                # If show provider source and show provider id are in videos_shows_ids exactly, then the show is in the list
+                if guid_source in video_ids.keys():
+                    if guid_id in video_ids[guid_source]:
+                        for video in videos:
+                            if guid_source in video.keys():
+                                if guid_id == video[guid_source]:
+                                    return video["status"]
 
         return None
     except Exception:
@@ -432,7 +468,6 @@ class Plex:
         try:
             # Get all libraries
             users_watched = {}
-            args = []
 
             for user in users:
                 if self.admin_user == user:
@@ -474,13 +509,12 @@ class Plex:
                         )
                         continue
 
-                    args.append([get_user_library_watched, user, user_plex, library])
+                    user_watched = get_user_library_watched(user, user_plex, library)
 
-            for user_watched in future_thread_executor(args):
-                for user, user_watched_temp in user_watched.items():
-                    if user not in users_watched:
-                        users_watched[user] = {}
-                    users_watched[user].update(user_watched_temp)
+                    for user_watched, user_watched_temp in user_watched.items():
+                        if user_watched not in users_watched:
+                            users_watched[user_watched] = {}
+                        users_watched[user_watched].update(user_watched_temp)
 
             return users_watched
         except Exception as e:
