@@ -14,7 +14,7 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: "Install dependencies"
         run: pip install -r requirements.txt && pip install -r test/requirements.txt
@@ -25,7 +25,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: "Install dependencies"
         run: |
@@ -33,7 +33,7 @@ jobs:
           sudo apt update && sudo apt install -y docker-compose
 
       - name: "Checkout JellyPlex-Watched-CI"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: luigi311/JellyPlex-Watched-CI
           path: JellyPlex-Watched-CI
@@ -95,11 +95,11 @@ jobs:
             variant: slim
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Docker meta
         id: docker_meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
@@ -121,23 +121,23 @@ jobs:
             type=sha,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         if: "${{ env.DOCKER_USERNAME != '' }}"
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Login to GitHub Container Registry
         if: "${{ steps.docker_meta.outcome == 'success' }}"
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -146,7 +146,7 @@ jobs:
       - name: Build
         id: build
         if: "${{ steps.docker_meta.outputs.tags == '' }}"
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -157,7 +157,7 @@ jobs:
       - name: Build Push
         id: build_push
         if: "${{ steps.docker_meta.outputs.tags != '' }}"
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ matrix.dockerfile }}
