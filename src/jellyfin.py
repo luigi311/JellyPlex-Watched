@@ -108,7 +108,9 @@ class Jellyfin:
             }
 
             if query_type == "get":
-                response = self.session.get(self.baseurl + query, headers=headers)
+                response = self.session.get(
+                    self.baseurl + query, headers=headers, timeout=self.timeout
+                )
                 if response.status_code != 200:
                     raise Exception(
                         f"Query failed with status {response.status} {response.reason}"
@@ -116,7 +118,9 @@ class Jellyfin:
                 results = response.json()
 
             elif query_type == "post":
-                response = self.session.post(self.baseurl + query, headers=headers)
+                response = self.session.post(
+                    self.baseurl + query, headers=headers, timeout=self.timeout
+                )
                 if response.status_code != 200:
                     raise Exception(
                         f"Query failed with status {response.status} {response.reason}"
