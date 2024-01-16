@@ -310,6 +310,13 @@ class Jellyfin:
                 for seasons in seasons_watched_filtered:
                     if len(seasons["Items"]) > 0:
                         for season in seasons["Items"]:
+                            if "IndexNumber" not in season:
+                                logger(
+                                    f"Jellyfin: Skipping show {season.get('SeriesName')} season {season.get('Name')} as it has no index number",
+                                    3,
+                                )
+
+                                continue
                             season_identifiers = dict(seasons["Identifiers"])
                             season_identifiers["season_index"] = season["IndexNumber"]
                             watched_task = self.query(
