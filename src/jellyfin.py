@@ -8,6 +8,7 @@ from src.functions import (
     search_mapping,
     contains_nested,
     log_marked,
+    str_to_bool,
 )
 from src.library import (
     check_skip_logic,
@@ -19,60 +20,78 @@ from src.watched import (
 
 load_dotenv(override=True)
 
+generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
+generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
-def get_movie_guids(movie):
-    if "ProviderIds" in movie:
-        logger(
-            f"Jellyfin: {movie.get('Name')} {movie['ProviderIds']} {movie['MediaSources']}",
-            3,
+
+def get_guids(item):
+    guids = {"title": item["Name"]}
+
+    if "ProviderIds" in item:
+        guids.update({k.lower(): v for k, v in item["ProviderIds"].items()})
+
+    if "MediaSources" in item:
+        guids["locations"] = tuple(
+            [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
         )
     else:
-        logger(
-            f"Jellyfin: {movie.get('Name')} {movie['MediaSources']['Path']}",
-            3,
-        )
+        guids["locations"] = tuple()
 
-    # Create a dictionary for the movie with its title
-    movie_guids = {"title": movie["Name"]}
-
-    # If the movie has provider IDs, add them to the dictionary
-    if "ProviderIds" in movie:
-        movie_guids.update({k.lower(): v for k, v in movie["ProviderIds"].items()})
-
-    # If the movie has media sources, add them to the dictionary
-    if "MediaSources" in movie:
-        movie_guids["locations"] = tuple(
-            [x["Path"].split("/")[-1] for x in movie["MediaSources"]]
-        )
-    else:
-        movie_guids["locations"] = tuple()
-
-    movie_guids["status"] = {
-        "completed": movie["UserData"]["Played"],
+    guids["status"] = {
+        "completed": item["UserData"]["Played"],
         # Convert ticks to milliseconds to match Plex
-        "time": floor(movie["UserData"]["PlaybackPositionTicks"] / 10000),
+        "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
     }
 
-    return movie_guids
+    return guids
 
 
-def get_episode_guids(episode):
-    # Create a dictionary for the episode with its provider IDs and media sources
-    episode_dict = {k.lower(): v for k, v in episode["ProviderIds"].items()}
-    episode_dict["title"] = episode["Name"]
+def get_video_status(jellyfin_video, videos_ids, videos):
+    video_status = None
 
-    episode_dict["locations"] = tuple()
-    if "MediaSources" in episode:
-        for x in episode["MediaSources"]:
-            if "Path" in x:
-                episode_dict["locations"] += (x["Path"].split("/")[-1],)
+    if generate_locations:
+        if "MediaSources" in jellyfin_video:
+            for video_location in jellyfin_video["MediaSources"]:
+                if "Path" in video_location:
+                    if (
+                        contains_nested(
+                            video_location["Path"].split("/")[-1],
+                            videos_ids["locations"],
+                        )
+                        is not None
+                    ):
+                        for video in videos:
+                            if (
+                                contains_nested(
+                                    video_location["Path"].split("/")[-1],
+                                    video["locations"],
+                                )
+                                is not None
+                            ):
+                                video_status = video["status"]
+                                break
+                        break
 
-    episode_dict["status"] = {
-        "completed": episode["UserData"]["Played"],
-        "time": floor(episode["UserData"]["PlaybackPositionTicks"] / 10000),
-    }
+    if generate_guids:
+        if not video_status:
+            for (
+                video_provider_source,
+                video_provider_id,
+            ) in jellyfin_video["ProviderIds"].items():
+                if video_provider_source.lower() in videos_ids:
+                    if (
+                        video_provider_id.lower()
+                        in videos_ids[video_provider_source.lower()]
+                    ):
+                        for video in videos:
+                            if video_provider_id.lower() in video.get(
+                                video_provider_source.lower(), []
+                            ):
+                                video_status = video["status"]
+                                break
+                        break
 
-    return episode_dict
+    return video_status
 
 
 class Jellyfin:
@@ -200,43 +219,27 @@ class Jellyfin:
                     "get",
                 )
 
-                for movie in watched["Items"]:
+                for movie in watched["Items"] + in_progress["Items"]:
                     if "MediaSources" in movie and movie["MediaSources"] != {}:
-                        logger(
-                            f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
-                            3,
-                        )
+                        # Skip if not watched or watched less than a minute
+                        if (
+                            movie["UserData"]["Played"] == True
+                            or movie["UserData"]["PlaybackPositionTicks"] > 600000000
+                        ):
+                            logger(
+                                f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
+                                3,
+                            )
 
-                        # Get the movie's GUIDs
-                        movie_guids = get_movie_guids(movie)
+                            # Get the movie's GUIDs
+                            movie_guids = get_guids(movie)
 
-                        # Append the movie dictionary to the list for the given user and library
-                        user_watched[user_name][library_title].append(movie_guids)
-                        logger(
-                            f"Jellyfin: Added {movie_guids} to {user_name} watched list",
-                            3,
-                        )
-
-                # Get all partially watched movies greater than 1 minute
-                for movie in in_progress["Items"]:
-                    if "MediaSources" in movie and movie["MediaSources"] != {}:
-                        if movie["UserData"]["PlaybackPositionTicks"] < 600000000:
-                            continue
-
-                        logger(
-                            f"Jellyfin: Adding {movie.get('Name')} to {user_name} watched list",
-                            3,
-                        )
-
-                        # Get the movie's GUIDs
-                        movie_guids = get_movie_guids(movie)
-
-                        # Append the movie dictionary to the list for the given user and library
-                        user_watched[user_name][library_title].append(movie_guids)
-                        logger(
-                            f"Jellyfin: Added {movie_guids} to {user_name} watched list",
-                            3,
-                        )
+                            # Append the movie dictionary to the list for the given user and library
+                            user_watched[user_name][library_title].append(movie_guids)
+                            logger(
+                                f"Jellyfin: Added {movie_guids} to {user_name} watched list",
+                                3,
+                            )
 
             # TV Shows
             if library_type in ["Series", "Episode"]:
@@ -257,7 +260,7 @@ class Jellyfin:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)
 
-                # Create a list of tasks to retrieve the seasons of each watched show
+                # Retrieve the seasons of each watched show
                 seasons_watched = []
                 for show in watched_shows_filtered:
                     logger(
@@ -277,13 +280,14 @@ class Jellyfin:
                         "show_id": show["Id"],
                     }
 
-                    season_task = self.query(
-                        f"/Shows/{show['Id']}/Seasons"
-                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount",
-                        "get",
-                        identifiers=frozenset(show_identifiers.items()),
+                    seasons_watched.append(
+                        self.query(
+                            f"/Shows/{show['Id']}/Seasons"
+                            + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount",
+                            "get",
+                            identifiers=frozenset(show_identifiers.items()),
+                        )
                     )
-                    seasons_watched.append(season_task)
 
                 # Filter the list of seasons to only include those that have been partially or fully watched
                 seasons_watched_filtered = []
@@ -343,7 +347,7 @@ class Jellyfin:
                                     or episode["UserData"]["PlaybackPositionTicks"]
                                     > 600000000
                                 ):
-                                    episode_dict = get_episode_guids(episode)
+                                    episode_dict = get_guids(episode)
                                     # Add the episode dictionary to the season's list of episodes
                                     season_dict["Episodes"].append(episode_dict)
 
@@ -405,7 +409,7 @@ class Jellyfin:
         try:
             # Get all libraries
             user_name = user_name.lower()
-            tasks_watched = []
+            watched = []
 
             libraries = []
 
@@ -417,25 +421,26 @@ class Jellyfin:
                     "library_id": library_id,
                     "library_title": library_title,
                 }
-                task = self.query(
-                    f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
-                    "get",
-                    identifiers=identifiers,
+                libraries.append(
+                    self.query(
+                        f"/Users/{user_id}/Items"
+                        + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
+                        "get",
+                        identifiers=identifiers,
+                    )
                 )
-                libraries.append(task)
 
-            for watched in libraries:
-                if len(watched["Items"]) == 0:
+            for library in libraries:
+                if len(library["Items"]) == 0:
                     continue
 
-                library_id = watched["Identifiers"]["library_id"]
-                library_title = watched["Identifiers"]["library_title"]
+                library_id = library["Identifiers"]["library_id"]
+                library_title = library["Identifiers"]["library_title"]
                 # Get all library types excluding "Folder"
                 types = set(
                     [
                         x["Type"]
-                        for x in watched["Items"]
+                        for x in library["Items"]
                         if x["Type"] in ["Movie", "Series", "Episode"]
                     ]
                 )
@@ -459,7 +464,7 @@ class Jellyfin:
 
                 # If there are multiple types in library raise error
                 if types is None or len(types) < 1:
-                    all_types = set([x["Type"] for x in watched["Items"]])
+                    all_types = set([x["Type"] for x in library["Items"]])
                     logger(
                         f"Jellyfin: Skipping Library {library_title} found types: {types}, all types: {all_types}",
                         1,
@@ -468,16 +473,15 @@ class Jellyfin:
 
                 for library_type in types:
                     # Get watched for user
-                    task = self.get_user_library_watched(
-                        user_name,
-                        user_id,
-                        library_type,
-                        library_id,
-                        library_title,
+                    watched.append(
+                        self.get_user_library_watched(
+                            user_name,
+                            user_id,
+                            library_type,
+                            library_id,
+                            library_title,
+                        )
                     )
-                    tasks_watched.append(task)
-
-            watched = tasks_watched
 
             return watched
         except Exception as e:
@@ -535,6 +539,18 @@ class Jellyfin:
                 videos_movies_ids,
             ) = generate_library_guids_dict(videos)
 
+            if (
+                not videos_movies_ids
+                and not videos_shows_ids
+                and not videos_episodes_ids
+            ):
+                logger(
+                    f"Jellyfin: No videos to mark as watched for {user_name} in library {library}",
+                    1,
+                )
+
+                return
+
             logger(
                 f"Jellyfin: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
                 1,
@@ -548,47 +564,9 @@ class Jellyfin:
                     "get",
                 )
                 for jellyfin_video in jellyfin_search["Items"]:
-                    movie_status = None
-
-                    if "MediaSources" in jellyfin_video:
-                        for movie_location in jellyfin_video["MediaSources"]:
-                            if "Path" in movie_location:
-                                if (
-                                    contains_nested(
-                                        movie_location["Path"].split("/")[-1],
-                                        videos_movies_ids["locations"],
-                                    )
-                                    is not None
-                                ):
-                                    for video in videos:
-                                        if (
-                                            contains_nested(
-                                                movie_location["Path"].split("/")[-1],
-                                                video["locations"],
-                                            )
-                                            is not None
-                                        ):
-                                            movie_status = video["status"]
-                                            break
-                                    break
-
-                    if not movie_status:
-                        for (
-                            movie_provider_source,
-                            movie_provider_id,
-                        ) in jellyfin_video["ProviderIds"].items():
-                            if movie_provider_source.lower() in videos_movies_ids:
-                                if (
-                                    movie_provider_id.lower()
-                                    in videos_movies_ids[movie_provider_source.lower()]
-                                ):
-                                    for video in videos:
-                                        if movie_provider_id.lower() in video.get(
-                                            movie_provider_source.lower(), []
-                                        ):
-                                            movie_status = video["status"]
-                                            break
-                                    break
+                    movie_status = get_video_status(
+                        jellyfin_video, videos_movies_ids, videos
+                    )
 
                     if movie_status:
                         jellyfin_video_id = jellyfin_video["Id"]
@@ -643,50 +621,56 @@ class Jellyfin:
 
                 for jellyfin_show in jellyfin_shows:
                     show_found = False
+                    episode_videos = []
 
-                    if "Path" in jellyfin_show:
-                        if (
-                            contains_nested(
-                                jellyfin_show["Path"].split("/")[-1],
-                                videos_shows_ids["locations"],
-                            )
-                            is not None
-                        ):
-                            show_found = True
-                            episode_videos = []
+                    if generate_locations:
+                        if "Path" in jellyfin_show:
+                            if (
+                                contains_nested(
+                                    jellyfin_show["Path"].split("/")[-1],
+                                    videos_shows_ids["locations"],
+                                )
+                                is not None
+                            ):
+                                show_found = True
+                                for shows, seasons in videos.items():
+                                    show = {k: v for k, v in shows}
+                                    if (
+                                        contains_nested(
+                                            jellyfin_show["Path"].split("/")[-1],
+                                            show["locations"],
+                                        )
+                                        is not None
+                                    ):
+                                        for season in seasons.values():
+                                            for episode in season:
+                                                episode_videos.append(episode)
 
-                            for show, seasons in videos.items():
-                                show = {k: v for k, v in show}
-                                if (
-                                    contains_nested(
-                                        jellyfin_show["Path"].split("/")[-1],
-                                        show["locations"],
-                                    )
-                                    is not None
-                                ):
-                                    for season in seasons.values():
-                                        for episode in season:
-                                            episode_videos.append(episode)
+                                        break
 
-                    if not show_found:
-                        for show_provider_source, show_provider_id in jellyfin_show[
-                            "ProviderIds"
-                        ].items():
-                            if show_provider_source.lower() in videos_shows_ids:
-                                if (
-                                    show_provider_id.lower()
-                                    in videos_shows_ids[show_provider_source.lower()]
-                                ):
-                                    show_found = True
-                                    episode_videos = []
-                                    for show, seasons in videos.items():
-                                        show = {k: v for k, v in show}
-                                        if show_provider_id.lower() in show.get(
-                                            show_provider_source.lower(), []
-                                        ):
-                                            for season in seasons.values():
-                                                for episode in season:
-                                                    episode_videos.append(episode)
+                    if generate_guids:
+                        if not show_found:
+                            for show_provider_source, show_provider_id in jellyfin_show[
+                                "ProviderIds"
+                            ].items():
+                                if show_provider_source.lower() in videos_shows_ids:
+                                    if (
+                                        show_provider_id.lower()
+                                        in videos_shows_ids[
+                                            show_provider_source.lower()
+                                        ]
+                                    ):
+                                        show_found = True
+                                        for show, seasons in videos.items():
+                                            show = {k: v for k, v in show}
+                                            if show_provider_id.lower() in show.get(
+                                                show_provider_source.lower(), []
+                                            ):
+                                                for season in seasons.values():
+                                                    for episode in season:
+                                                        episode_videos.append(episode)
+
+                                                break
 
                     if show_found:
                         logger(
@@ -701,65 +685,9 @@ class Jellyfin:
                         )
 
                         for jellyfin_episode in jellyfin_episodes["Items"]:
-                            episode_status = None
-
-                            if "MediaSources" in jellyfin_episode:
-                                for episode_location in jellyfin_episode[
-                                    "MediaSources"
-                                ]:
-                                    if "Path" in episode_location:
-                                        if (
-                                            contains_nested(
-                                                episode_location["Path"].split("/")[-1],
-                                                videos_episodes_ids["locations"],
-                                            )
-                                            is not None
-                                        ):
-                                            for episode in episode_videos:
-                                                if (
-                                                    contains_nested(
-                                                        episode_location["Path"].split(
-                                                            "/"
-                                                        )[-1],
-                                                        episode["locations"],
-                                                    )
-                                                    is not None
-                                                ):
-                                                    episode_status = episode["status"]
-                                                    break
-                                            break
-
-                            if not episode_status:
-                                for (
-                                    episode_provider_source,
-                                    episode_provider_id,
-                                ) in jellyfin_episode["ProviderIds"].items():
-                                    if (
-                                        episode_provider_source.lower()
-                                        in videos_episodes_ids
-                                    ):
-                                        if (
-                                            episode_provider_id.lower()
-                                            in videos_episodes_ids[
-                                                episode_provider_source.lower()
-                                            ]
-                                        ):
-                                            for episode in episode_videos:
-                                                if (
-                                                    episode_provider_source.lower()
-                                                    in episode
-                                                ):
-                                                    if (
-                                                        episode_provider_id.lower()
-                                                        in episode[
-                                                            episode_provider_source.lower()
-                                                        ]
-                                                    ):
-                                                        episode_status = episode[
-                                                            "status"
-                                                        ]
-                                                        break
-                                            break
+                            episode_status = get_video_status(
+                                jellyfin_episode, videos_episodes_ids, episode_videos
+                            )
 
                             if episode_status:
                                 jellyfin_episode_id = jellyfin_episode["Id"]
@@ -815,16 +743,6 @@ class Jellyfin:
                             3,
                         )
 
-            if (
-                not videos_movies_ids
-                and not videos_shows_ids
-                and not videos_episodes_ids
-            ):
-                logger(
-                    f"Jellyfin: No videos to mark as watched for {user_name} in library {library}",
-                    1,
-                )
-
         except Exception as e:
             logger(
                 f"Jellyfin: Error updating watched for {user_name} in library {library}, {e}",
@@ -837,8 +755,6 @@ class Jellyfin:
         self, watched_list, user_mapping=None, library_mapping=None, dryrun=False
     ):
         try:
-            tasks = []
-
             for user, libraries in watched_list.items():
                 logger(f"Jellyfin: Updating for entry {user}, {libraries}", 1)
                 user_other = None
