@@ -766,7 +766,7 @@ class Jellyfin:
                         user_other = search_mapping(user_mapping, user)
 
                 user_id = None
-                for key in self.users.keys():
+                for key in self.users:
                     if user.lower() == key.lower():
                         user_id = self.users[key]
                         user_name = key
