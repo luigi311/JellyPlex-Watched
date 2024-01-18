@@ -346,7 +346,7 @@ class Jellyfin:
                         for episode in episodes["Items"]:
                             if (
                                 "MediaSources" in episode
-                                and episode["MediaSources"] is not {}
+                                and episode["MediaSources"] != {}
                             ):
                                 # If watched or watched more than a minute
                                 if (
