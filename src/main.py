@@ -1,4 +1,4 @@
-import os, traceback, json, asyncio
+import os, traceback, json
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
@@ -28,6 +28,8 @@ def setup_users(
 ):
     server_1_users = generate_user_list(server_1)
     server_2_users = generate_user_list(server_2)
+    logger(f"Server 1 users: {server_1_users}", 1)
+    logger(f"Server 2 users: {server_2_users}", 1)
 
     users = combine_user_lists(server_1_users, server_2_users, user_mapping)
     logger(f"User list that exist on both servers {users}", 1)
@@ -180,15 +182,13 @@ def get_server_watched(
             library_mapping,
         )
     elif server_connection[0] == "jellyfin":
-        return asyncio.run(
-            server_connection[1].get_watched(
-                users,
-                blacklist_library,
-                whitelist_library,
-                blacklist_library_type,
-                whitelist_library_type,
-                library_mapping,
-            )
+        return server_connection[1].get_watched(
+            users,
+            blacklist_library,
+            whitelist_library,
+            blacklist_library_type,
+            whitelist_library_type,
+            library_mapping,
         )
 
 
@@ -204,10 +204,8 @@ def update_server_watched(
             server_watched_filtered, user_mapping, library_mapping, dryrun
         )
     elif server_connection[0] == "jellyfin":
-        asyncio.run(
-            server_connection[1].update_watched(
-                server_watched_filtered, user_mapping, library_mapping, dryrun
-            )
+        server_connection[1].update_watched(
+            server_watched_filtered, user_mapping, library_mapping, dryrun
         )
 
 

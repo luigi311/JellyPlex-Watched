@@ -1,4 +1,4 @@
-.env
+**.env
 *.prof
 
 # Byte-compiled / optimized / DLL files
