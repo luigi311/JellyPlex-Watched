@@ -115,7 +115,7 @@ def get_user_library_watched_show(show, process_episodes, threads=None):
 
 
 def get_user_library_watched(user, user_plex, library):
-    user_name: str = user.title.lower()
+    user_name: str = user.username.lower() if user.username else user.title.lower()
     try:
         logger(
             f"Plex: Generating watched for {user_name} in library {library.title}",
