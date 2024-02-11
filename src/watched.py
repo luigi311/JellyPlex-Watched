@@ -233,6 +233,14 @@ def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
 def filter_episode_watched_list_2_keys_dict(
     episode_watched_list_2_keys_dict, show_key_dict, season
 ):
+    # If the episode_watched_list_2_keys_dict dictionary is empty, missing season or show then return an empty dictionary
+    if (
+        len(episode_watched_list_2_keys_dict) == 0
+        or "season" not in episode_watched_list_2_keys_dict.keys()
+        or "show" not in episode_watched_list_2_keys_dict.keys()
+    ):
+        return {}
+
     # Filter the episode_watched_list_2_keys_dict dictionary to only include values for the correct show and season
     filtered_episode_watched_list_2_keys_dict = {}
     show_indecies = []
@@ -268,7 +276,10 @@ def filter_episode_watched_list_2_keys_dict(
     # Find the intersection of the show_indecies and season_indecies lists
     indecies = list(set(show_indecies) & set(season_indecies))
 
-    filtered_episode_watched_list_2_keys_dict = {}
+    # If there are no indecies that match the show and season, return an empty dictionary
+    if len(indecies) == 0:
+        return {}
+
     # Create a copy of the dictionary with indecies that match the show and season and none that don't
     for key, value in episode_watched_list_2_keys_dict.items():
         if key not in filtered_episode_watched_list_2_keys_dict:
