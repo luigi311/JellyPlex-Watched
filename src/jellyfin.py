@@ -221,6 +221,9 @@ class Jellyfin:
 
                 for movie in watched["Items"] + in_progress["Items"]:
                     if "MediaSources" in movie and movie["MediaSources"] != {}:
+                        if "UserData" not in movie:
+                            continue
+                        
                         # Skip if not watched or watched less than a minute
                         if (
                             movie["UserData"]["Played"] == True
@@ -256,6 +259,9 @@ class Jellyfin:
                 # Filter the list of shows to only include those that have been partially or fully watched
                 watched_shows_filtered = []
                 for show in watched_shows["Items"]:
+                    if not "UserData" in show:
+                        continue
+                    
                     if "PlayedPercentage" in show["UserData"]:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)
@@ -613,7 +619,7 @@ class Jellyfin:
                     else:
                         logger(
                             f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
-                            1,
+                            3,
                         )
 
             # TV Shows
