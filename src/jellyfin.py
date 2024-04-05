@@ -132,7 +132,7 @@ class Jellyfin:
                 )
                 if response.status_code != 200:
                     raise Exception(
-                        f"Query failed with status {response.status} {response.reason}"
+                        f"Query failed with status {response.status_code} {response.reason}"
                     )
                 results = response.json()
 
@@ -142,7 +142,7 @@ class Jellyfin:
                 )
                 if response.status_code != 200:
                     raise Exception(
-                        f"Query failed with status {response.status} {response.reason}"
+                        f"Query failed with status {response.status_code} {response.reason}"
                     )
                 results = response.json()
 
