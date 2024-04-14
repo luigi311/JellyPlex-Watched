@@ -248,7 +248,7 @@ def filter_episode_watched_list_2_keys_dict(
 
     # Iterate through episode_watched_list_2_keys_dict["season"] and find the indecies that match season
     for season_index, season_value in enumerate(
-        episode_watched_list_2_keys_dict["season"]
+        episode_watched_list_2_keys_dict.get("season")
     ):
         if season_value == season:
             season_indecies.append(season_index)
