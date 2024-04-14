@@ -25,23 +25,34 @@ generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 
 def get_guids(item):
-    guids = {"title": item["Name"]}
+    if item.get("Name"):
+        guids = {"title": item.get("Name")}
+    else:
+        logger(f"Jellyfin: Name not found in {item.get('Id')}", 1)
+        guids = {"title": None}
 
     if "ProviderIds" in item:
         guids.update({k.lower(): v for k, v in item["ProviderIds"].items()})
+    else:
+        logger(f"Jellyfin: ProviderIds not found in {item.get('Name')}", 1)
 
     if "MediaSources" in item:
         guids["locations"] = tuple(
             [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
         )
     else:
+        logger(f"Jellyfin: MediaSources not found in {item.get('Name')}", 1)
         guids["locations"] = tuple()
 
-    guids["status"] = {
-        "completed": item["UserData"]["Played"],
-        # Convert ticks to milliseconds to match Plex
-        "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
-    }
+    if "UserData" in item:
+        guids["status"] = {
+            "completed": item["UserData"]["Played"],
+            # Convert ticks to milliseconds to match Plex
+            "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
+        }
+    else:
+        logger(f"Jellyfin: UserData not found in {item.get('Name')}", 1)
+        guids["status"] = {}
 
     return guids
 

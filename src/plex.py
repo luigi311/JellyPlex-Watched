@@ -64,6 +64,19 @@ def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]
 
 
 def get_guids(item: Union[Movie, Episode], completed=True):
+    if not item.locations:
+        logger(
+            f"Plex: {item.title} has no locations",
+            1,
+        )
+    
+    if not item.guids:
+        logger(
+            f"Plex: {item.title} has no guids",
+            1,
+        )        
+
+
     return {
         "title": item.title,
         "locations": (
