@@ -53,7 +53,7 @@ jobs:
           docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
           docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
           # Wait for containers to start
-          sleep 5
+          sleep 10
 
           docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
           docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
