@@ -234,7 +234,7 @@ class Jellyfin:
                     if "MediaSources" in movie and movie["MediaSources"] != {}:
                         if "UserData" not in movie:
                             continue
-                        
+
                         # Skip if not watched or watched less than a minute
                         if (
                             movie["UserData"]["Played"] == True
@@ -272,7 +272,7 @@ class Jellyfin:
                 for show in watched_shows["Items"]:
                     if not "UserData" in show:
                         continue
-                    
+
                     if "PlayedPercentage" in show["UserData"]:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)

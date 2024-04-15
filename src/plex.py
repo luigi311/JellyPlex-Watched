@@ -69,13 +69,12 @@ def get_guids(item: Union[Movie, Episode], completed=True):
             f"Plex: {item.title} has no locations",
             1,
         )
-    
+
     if not item.guids:
         logger(
             f"Plex: {item.title} has no guids",
             1,
-        )        
-
+        )
 
     return {
         "title": item.title,
