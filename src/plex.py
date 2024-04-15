@@ -64,11 +64,25 @@ def extract_guids_from_item(item: Union[Movie, Show, Episode]) -> Dict[str, str]
 
 
 def get_guids(item: Union[Movie, Episode], completed=True):
+    if not item.locations:
+        logger(
+            f"Plex: {item.title} has no locations",
+            1,
+        )
+
+    if not item.guids:
+        logger(
+            f"Plex: {item.title} has no guids",
+            1,
+        )
+
     return {
         "title": item.title,
-        "locations": tuple([location.split("/")[-1] for location in item.locations])
-        if generate_locations
-        else tuple(),
+        "locations": (
+            tuple([location.split("/")[-1] for location in item.locations])
+            if generate_locations
+            else tuple()
+        ),
         "status": {
             "completed": completed,
             "time": item.viewOffset,
@@ -84,11 +98,11 @@ def get_user_library_watched_show(show, process_episodes, threads=None):
             (
                 {
                     "title": show.title,
-                    "locations": tuple(
-                        [location.split("/")[-1] for location in show.locations]
-                    )
-                    if generate_locations
-                    else tuple(),
+                    "locations": (
+                        tuple([location.split("/")[-1] for location in show.locations])
+                        if generate_locations
+                        else tuple()
+                    ),
                 }
                 | extract_guids_from_item(show)
             ).items()  # Merge the metadata and guid dictionaries

@@ -25,23 +25,34 @@ generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 
 def get_guids(item):
-    guids = {"title": item["Name"]}
+    if item.get("Name"):
+        guids = {"title": item.get("Name")}
+    else:
+        logger(f"Jellyfin: Name not found in {item.get('Id')}", 1)
+        guids = {"title": None}
 
     if "ProviderIds" in item:
         guids.update({k.lower(): v for k, v in item["ProviderIds"].items()})
+    else:
+        logger(f"Jellyfin: ProviderIds not found in {item.get('Name')}", 1)
 
     if "MediaSources" in item:
         guids["locations"] = tuple(
             [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
         )
     else:
+        logger(f"Jellyfin: MediaSources not found in {item.get('Name')}", 1)
         guids["locations"] = tuple()
 
-    guids["status"] = {
-        "completed": item["UserData"]["Played"],
-        # Convert ticks to milliseconds to match Plex
-        "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
-    }
+    if "UserData" in item:
+        guids["status"] = {
+            "completed": item["UserData"]["Played"],
+            # Convert ticks to milliseconds to match Plex
+            "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
+        }
+    else:
+        logger(f"Jellyfin: UserData not found in {item.get('Name')}", 1)
+        guids["status"] = {}
 
     return guids
 
@@ -132,7 +143,7 @@ class Jellyfin:
                 )
                 if response.status_code != 200:
                     raise Exception(
-                        f"Query failed with status {response.status} {response.reason}"
+                        f"Query failed with status {response.status_code} {response.reason}"
                     )
                 results = response.json()
 
@@ -142,7 +153,7 @@ class Jellyfin:
                 )
                 if response.status_code != 200:
                     raise Exception(
-                        f"Query failed with status {response.status} {response.reason}"
+                        f"Query failed with status {response.status_code} {response.reason}"
                     )
                 results = response.json()
 
@@ -221,6 +232,9 @@ class Jellyfin:
 
                 for movie in watched["Items"] + in_progress["Items"]:
                     if "MediaSources" in movie and movie["MediaSources"] != {}:
+                        if "UserData" not in movie:
+                            continue
+
                         # Skip if not watched or watched less than a minute
                         if (
                             movie["UserData"]["Played"] == True
@@ -256,6 +270,9 @@ class Jellyfin:
                 # Filter the list of shows to only include those that have been partially or fully watched
                 watched_shows_filtered = []
                 for show in watched_shows["Items"]:
+                    if not "UserData" in show:
+                        continue
+
                     if "PlayedPercentage" in show["UserData"]:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)
@@ -613,7 +630,7 @@ class Jellyfin:
                     else:
                         logger(
                             f"Jellyfin: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
-                            1,
+                            3,
                         )
 
             # TV Shows
