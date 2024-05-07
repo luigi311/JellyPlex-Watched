@@ -221,41 +221,41 @@ def should_sync_server(server_1_type, server_2_type):
 
     if server_1_type == "plex":
         if server_2_type == "jellyfin" and not sync_from_plex_to_jellyfin:
-            logger("Sync from plex to jellyfin is disabled", 1)
+            logger("Sync from plex -> jellyfin is disabled", 1)
             return False
 
         if server_2_type == "emby" and not sync_from_plex_to_emby:
-            logger("Sync from plex to emby is disabled", 1)
+            logger("Sync from plex -> emby is disabled", 1)
             return False
 
         if server_2_type == "plex" and not sync_from_plex_to_plex:
-            logger("Sync from plex to plex is disabled", 1)
+            logger("Sync from plex -> plex is disabled", 1)
             return False
 
     if server_1_type == "jellyfin":
         if server_2_type == "plex" and not sync_from_jelly_to_plex:
-            logger("Sync from jellyfin to plex is disabled", 1)
+            logger("Sync from jellyfin -> plex is disabled", 1)
             return False
 
         if server_2_type == "jellyfin" and not sync_from_jelly_to_jellyfin:
-            logger("Sync from jellyfin to jellyfin is disabled", 1)
+            logger("Sync from jellyfin -> jellyfin is disabled", 1)
             return False
 
         if server_2_type == "emby" and not sync_from_jelly_to_emby:
-            logger("Sync from jellyfin to emby is disabled", 1)
+            logger("Sync from jellyfin -> emby is disabled", 1)
             return False
 
     if server_1_type == "emby":
         if server_2_type == "plex" and not sync_from_emby_to_plex:
-            logger("Sync from emby to plex is disabled", 1)
+            logger("Sync from emby -> plex is disabled", 1)
             return False
 
         if server_2_type == "jellyfin" and not sync_from_emby_to_jellyfin:
-            logger("Sync from emby to jellyfin is disabled", 1)
+            logger("Sync from emby -> jellyfin is disabled", 1)
             return False
 
         if server_2_type == "emby" and not sync_from_emby_to_emby:
-            logger("Sync from emby to emby is disabled", 1)
+            logger("Sync from emby -> emby is disabled", 1)
             return False
 
     return True
@@ -318,6 +318,10 @@ def main_loop():
 
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
+            # Check if server 1 and server 2 are going to be synced in either direction, skip if not
+            if not should_sync_server(server_1[0], server_2[0]) and not should_sync_server(server_2[0], server_1[0]):
+                continue
+
             logger(f"Server 1: {server_1[0].capitalize()}: {server_1[1].info()}", 0)
             logger(f"Server 2: {server_2[0].capitalize()}: {server_2[1].info()}", 0)
 
