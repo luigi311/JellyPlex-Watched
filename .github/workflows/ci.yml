@@ -49,24 +49,48 @@ jobs:
             docker-compose -f "${FOLDER}/docker-compose.yml" logs
           done
 
-      - name: "Run tests"
+      - name: "Test Plex"
         run: |
-          # Test guids
+          mv test/ci_plex.env .env
+          python main.py
+          python test/validate_ci_marklog.py --plex
+          
+          rm mark.log
+          
+      - name: "Test Jellyfin"
+        run: |
+          mv test/ci_jellyfin.env .env
+          python main.py
+          python test/validate_ci_marklog.py --jellyfin
+          
+          rm mark.log
+
+      - name: "Test Emby"
+        run: |
+          mv test/ci_emby.env .env
+          python main.py
+          python test/validate_ci_marklog.py --emby
+          
+          rm mark.log
+
+      - name: "Test Guids"
+        run: |
           mv test/ci_guids.env .env
           python main.py
-
-          cat mark.log
           python test/validate_ci_marklog.py --dry
+          
           rm mark.log
 
-          # Test locations
+      - name: "Test Locations"
+        run: |
           mv test/ci_locations.env .env
           python main.py
-
-          cat mark.log
           python test/validate_ci_marklog.py --dry
+          
           rm mark.log
 
+      - name: "Test writing to the servers"
+        run: |
           # Test writing to the servers
           mv test/ci_write.env .env
           python main.py
@@ -74,8 +98,9 @@ jobs:
           # Test again to test if it can handle existing data
           python main.py
 
-          cat mark.log
           python test/validate_ci_marklog.py --write
+          
+          rm mark.log
 
   docker:
     runs-on: ubuntu-latest
