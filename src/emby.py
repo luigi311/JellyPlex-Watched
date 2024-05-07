@@ -1,21 +1,21 @@
 from src.jellyfin_emby import JellyfinEmby
 
 
-class Jellyfin(JellyfinEmby):
+class Emby(JellyfinEmby):
     def __init__(self, baseurl, token):
         authorization = (
-            "MediaBrowser , "
+            "Emby , "
             'Client="JellyPlex-Watched", '
             'Device="script", '
             'DeviceId="script", '
-            'Version="5.2.0", '
-            f'Token="{token}"'
+            'Version="0.0.0"'
         )
         headers = {
             "Accept": "application/json",
-            "Authorization": authorization,
+            "X-Emby-Token": token,
+            "X-Emby-Authorization": authorization,
         }
 
         super().__init__(
-            server_type="Jellyfin", baseurl=baseurl, token=token, headers=headers
+            server_type="Emby", baseurl=baseurl, token=token, headers=headers
         )

@@ -40,43 +40,42 @@ jobs:
 
       - name: "Start containers"
         run: |
-          export PGID=$(id -g)
-          export PUID=$(id -u)
+          JellyPlex-Watched-CI/start_containers.sh
 
-          sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
-
-          docker pull lscr.io/linuxserver/plex &
-          docker pull lscr.io/linuxserver/jellyfin &
-
-          wait
-
-          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
-          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
           # Wait for containers to start
           sleep 10
 
-          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
-          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
+          for FOLDER in $(find "JellyPlex-Watched-CI" -type f -name "docker-compose.yml" -exec dirname {} \;); do
+            docker-compose -f "${FOLDER}/docker-compose.yml" logs
+          done
 
       - name: "Run tests"
         run: |
-          # Test ci1
-          mv test/ci1.env .env
+          # Test guids
+          mv test/ci_guids.env .env
           python main.py
 
-          # Test ci2
-          mv test/ci2.env .env
+          cat mark.log
+          python test/validate_ci_marklog.py --dry
+          rm mark.log
+
+          # Test locations
+          mv test/ci_locations.env .env
           python main.py
 
-          # Test ci3
-          mv test/ci3.env .env
+          cat mark.log
+          python test/validate_ci_marklog.py --dry
+          rm mark.log
+
+          # Test writing to the servers
+          mv test/ci_write.env .env
           python main.py
 
           # Test again to test if it can handle existing data
           python main.py
 
           cat mark.log
-          python test/validate_ci_marklog.py
+          python test/validate_ci_marklog.py --write
 
   docker:
     runs-on: ubuntu-latest

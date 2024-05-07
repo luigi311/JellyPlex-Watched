@@ -19,6 +19,7 @@ from src.black_white import setup_black_white_lists
 
 from src.plex import Plex
 from src.jellyfin import Jellyfin
+from src.emby import Emby
 
 load_dotenv(override=True)
 
@@ -63,6 +64,47 @@ def setup_users(
     logger(f"Server 2 users: {output_server_2_users}", 1)
 
     return output_server_1_users, output_server_2_users
+
+
+def jellyfin_emby_server_connection(server_baseurl, server_token, server_type):
+    servers = []
+
+    server_baseurl = server_baseurl.split(",")
+    server_token = server_token.split(",")
+
+    if len(server_baseurl) != len(server_token):
+        raise Exception(
+            f"{server_type.upper()}_BASEURL and {server_type.upper()}_TOKEN must have the same number of entries"
+        )
+
+    for i, baseurl in enumerate(server_baseurl):
+        baseurl = baseurl.strip()
+        if baseurl[-1] == "/":
+            baseurl = baseurl[:-1]
+
+        if server_type == "jellyfin":
+            server = Jellyfin(baseurl=baseurl, token=server_token[i].strip())
+            servers.append(
+                (
+                    "jellyfin",
+                    server,
+                )
+            )
+
+        elif server_type == "emby":
+            server = Emby(baseurl=baseurl, token=server_token[i].strip())
+            servers.append(
+                (
+                    "emby",
+                    server,
+                )
+            )
+        else:
+            raise Exception("Unknown server type")
+
+        logger(f"{server_type} Server {i} info: {server.info()}", 3)
+
+    return servers
 
 
 def generate_server_connections():
@@ -137,121 +179,84 @@ def generate_server_connections():
     jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
 
     if jellyfin_baseurl and jellyfin_token:
-        jellyfin_baseurl = jellyfin_baseurl.split(",")
-        jellyfin_token = jellyfin_token.split(",")
-
-        if len(jellyfin_baseurl) != len(jellyfin_token):
-            raise Exception(
-                "JELLYFIN_BASEURL and JELLYFIN_TOKEN must have the same number of entries"
+        servers.extend(
+            jellyfin_emby_server_connection(
+                jellyfin_baseurl, jellyfin_token, "jellyfin"
             )
+        )
 
-        for i, baseurl in enumerate(jellyfin_baseurl):
-            baseurl = baseurl.strip()
-            if baseurl[-1] == "/":
-                baseurl = baseurl[:-1]
+    emby_baseurl = os.getenv("EMBY_BASEURL", None)
+    emby_token = os.getenv("EMBY_TOKEN", None)
 
-            server = Jellyfin(baseurl=baseurl, token=jellyfin_token[i].strip())
-
-            logger(f"Jellyfin Server {i} info: {server.info()}", 3)
-            servers.append(
-                (
-                    "jellyfin",
-                    server,
-                )
-            )
+    if emby_baseurl and emby_token:
+        servers.extend(
+            jellyfin_emby_server_connection(emby_baseurl, emby_token, "emby")
+        )
 
     return servers
-
-
-def get_server_watched(
-    server_connection: list,
-    users: dict,
-    blacklist_library: list,
-    whitelist_library: list,
-    blacklist_library_type: list,
-    whitelist_library_type: list,
-    library_mapping: dict,
-):
-    if server_connection[0] == "plex":
-        return server_connection[1].get_watched(
-            users,
-            blacklist_library,
-            whitelist_library,
-            blacklist_library_type,
-            whitelist_library_type,
-            library_mapping,
-        )
-    elif server_connection[0] == "jellyfin":
-        return server_connection[1].get_watched(
-            users,
-            blacklist_library,
-            whitelist_library,
-            blacklist_library_type,
-            whitelist_library_type,
-            library_mapping,
-        )
-
-
-def update_server_watched(
-    server_connection: list,
-    server_watched_filtered: dict,
-    user_mapping: dict,
-    library_mapping: dict,
-    dryrun: bool,
-):
-    if server_connection[0] == "plex":
-        server_connection[1].update_watched(
-            server_watched_filtered, user_mapping, library_mapping, dryrun
-        )
-    elif server_connection[0] == "jellyfin":
-        server_connection[1].update_watched(
-            server_watched_filtered, user_mapping, library_mapping, dryrun
-        )
 
 
 def should_sync_server(server_1_type, server_2_type):
     sync_from_plex_to_jellyfin = str_to_bool(
         os.getenv("SYNC_FROM_PLEX_TO_JELLYFIN", "True")
     )
+    sync_from_plex_to_plex = str_to_bool(os.getenv("SYNC_FROM_PLEX_TO_PLEX", "True"))
+    sync_from_plex_to_emby = str_to_bool(os.getenv("SYNC_FROM_PLEX_TO_EMBY", "True"))
+
     sync_from_jelly_to_plex = str_to_bool(
         os.getenv("SYNC_FROM_JELLYFIN_TO_PLEX", "True")
     )
-    sync_from_plex_to_plex = str_to_bool(os.getenv("SYNC_FROM_PLEX_TO_PLEX", "True"))
     sync_from_jelly_to_jellyfin = str_to_bool(
         os.getenv("SYNC_FROM_JELLYFIN_TO_JELLYFIN", "True")
     )
+    sync_from_jelly_to_emby = str_to_bool(
+        os.getenv("SYNC_FROM_JELLYFIN_TO_EMBY", "True")
+    )
 
-    if (
-        server_1_type == "plex"
-        and server_2_type == "plex"
-        and not sync_from_plex_to_plex
-    ):
-        logger("Sync between plex and plex is disabled", 1)
-        return False
+    sync_from_emby_to_plex = str_to_bool(os.getenv("SYNC_FROM_EMBY_TO_PLEX", "True"))
+    sync_from_emby_to_jellyfin = str_to_bool(
+        os.getenv("SYNC_FROM_EMBY_TO_JELLYFIN", "True")
+    )
+    sync_from_emby_to_emby = str_to_bool(os.getenv("SYNC_FROM_EMBY_TO_EMBY", "True"))
 
-    if (
-        server_1_type == "plex"
-        and server_2_type == "jellyfin"
-        and not sync_from_jelly_to_plex
-    ):
-        logger("Sync from jellyfin to plex disabled", 1)
-        return False
+    if server_1_type == "plex":
+        if server_2_type == "jellyfin" and not sync_from_plex_to_jellyfin:
+            logger("Sync from plex to jellyfin is disabled", 1)
+            return False
 
-    if (
-        server_1_type == "jellyfin"
-        and server_2_type == "jellyfin"
-        and not sync_from_jelly_to_jellyfin
-    ):
-        logger("Sync between jellyfin and jellyfin is disabled", 1)
-        return False
+        if server_2_type == "emby" and not sync_from_plex_to_emby:
+            logger("Sync from plex to emby is disabled", 1)
+            return False
 
-    if (
-        server_1_type == "jellyfin"
-        and server_2_type == "plex"
-        and not sync_from_plex_to_jellyfin
-    ):
-        logger("Sync from plex to jellyfin is disabled", 1)
-        return False
+        if server_2_type == "plex" and not sync_from_plex_to_plex:
+            logger("Sync from plex to plex is disabled", 1)
+            return False
+
+    if server_1_type == "jellyfin":
+        if server_2_type == "plex" and not sync_from_jelly_to_plex:
+            logger("Sync from jellyfin to plex is disabled", 1)
+            return False
+
+        if server_2_type == "jellyfin" and not sync_from_jelly_to_jellyfin:
+            logger("Sync from jellyfin to jellyfin is disabled", 1)
+            return False
+
+        if server_2_type == "emby" and not sync_from_jelly_to_emby:
+            logger("Sync from jellyfin to emby is disabled", 1)
+            return False
+
+    if server_1_type == "emby":
+        if server_2_type == "plex" and not sync_from_emby_to_plex:
+            logger("Sync from emby to plex is disabled", 1)
+            return False
+
+        if server_2_type == "jellyfin" and not sync_from_emby_to_jellyfin:
+            logger("Sync from emby to jellyfin is disabled", 1)
+            return False
+
+        if server_2_type == "emby" and not sync_from_emby_to_emby:
+            logger("Sync from emby to emby is disabled", 1)
+            return False
 
     return True
 
@@ -323,8 +328,7 @@ def main_loop():
             )
 
             logger("Creating watched lists", 1)
-            server_1_watched = get_server_watched(
-                server_1,
+            server_1_watched = server_1[1].get_watched(
                 server_1_users,
                 blacklist_library,
                 whitelist_library,
@@ -333,8 +337,8 @@ def main_loop():
                 library_mapping,
             )
             logger("Finished creating watched list server 1", 1)
-            server_2_watched = get_server_watched(
-                server_2,
+
+            server_2_watched = server_2[1].get_watched(
                 server_2_users,
                 blacklist_library,
                 whitelist_library,
@@ -343,6 +347,7 @@ def main_loop():
                 library_mapping,
             )
             logger("Finished creating watched list server 2", 1)
+
             logger(f"Server 1 watched: {server_1_watched}", 3)
             logger(f"Server 2 watched: {server_2_watched}", 3)
 
@@ -365,18 +370,18 @@ def main_loop():
                 1,
             )
 
-            if should_sync_server(server_1[0], server_2[0]):
-                update_server_watched(
-                    server_1,
+            if should_sync_server(server_2[0], server_1[0]):
+                logger(f"Syncing {server_2[1].info()} -> {server_1[1].info()}", 0)
+                server_1[1].update_watched(
                     server_2_watched_filtered,
                     user_mapping,
                     library_mapping,
                     dryrun,
                 )
 
-            if should_sync_server(server_2[0], server_1[0]):
-                update_server_watched(
-                    server_2,
+            if should_sync_server(server_1[0], server_2[0]):
+                logger(f"Syncing {server_1[1].info()} -> {server_2[1].info()}", 0)
+                server_2[1].update_watched(
                     server_1_watched_filtered,
                     user_mapping,
                     library_mapping,
