@@ -1,0 +1,172 @@
+name: CI
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - .gitignore
+      - "*.md"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install dependencies"
+        run: pip install -r requirements.txt && pip install -r test/requirements.txt
+
+      - name: "Run tests"
+        run: pytest -vvv
+  
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install dependencies"
+        run: |
+          pip install -r requirements.txt
+          sudo apt update && sudo apt install -y docker-compose
+
+      - name: "Checkout JellyPlex-Watched-CI"
+        uses: actions/checkout@v4
+        with:
+          repository: luigi311/JellyPlex-Watched-CI
+          path: JellyPlex-Watched-CI
+
+      - name: "Start containers"
+        run: |
+          export PGID=$(id -g)
+          export PUID=$(id -u)
+
+          sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
+
+          docker pull lscr.io/linuxserver/plex &
+          docker pull lscr.io/linuxserver/jellyfin &
+
+          wait
+
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
+          # Wait for containers to start
+          sleep 10
+
+          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
+          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
+
+      - name: "Run tests"
+        run: |
+          # Test ci1
+          mv test/ci1.env .env
+          python main.py
+
+          # Test ci2
+          mv test/ci2.env .env
+          python main.py
+
+          # Test ci3
+          mv test/ci3.env .env
+          python main.py
+
+          # Test again to test if it can handle existing data
+          python main.py
+
+          cat mark.log
+          python test/validate_ci_marklog.py
+
+  docker:
+    runs-on: ubuntu-latest
+    needs:
+      - pytest
+      - test
+    env:
+      DEFAULT_VARIANT: alpine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile.alpine
+            variant: alpine
+          - dockerfile: Dockerfile.slim
+            variant: slim
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
+            # Do not push to ghcr.io on PRs due to permission issues, only push if the owner is luigi311 so it doesnt fail on forks
+            ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311'}}
+          tags: |
+            type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == github.event.repository.default_branch }}
+            type=raw,value=dev,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == 'dev' }}
+            type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
+            type=ref,event=branch,suffix=-${{ matrix.variant }}
+            type=ref,event=branch,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            type=ref,event=pr,suffix=-${{ matrix.variant }}
+            type=ref,event=pr,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ version }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{ major }}.{{ minor }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            type=sha,suffix=-${{ matrix.variant }}
+            type=sha,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        if: "${{ env.DOCKER_USERNAME != '' }}"
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        id: build
+        if: "${{ steps.docker_meta.outputs.tags == '' }}"
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: jellyplex-watched:action
+
+      - name: Build Push
+        id: build_push
+        if: "${{ steps.docker_meta.outputs.tags != '' }}"
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+
+      # Echo digest so users can validate their image
+      - name: Image digest
+        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        run: echo "${{ steps.build_push.outputs.digest }}"
