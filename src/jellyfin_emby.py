@@ -127,7 +127,9 @@ class JellyfinEmby:
         self.session = requests.Session()
         self.users = self.get_users()
 
-    def query(self, query, query_type, identifiers=None):
+    def query(
+        self, query, query_type, identifiers=None, json=None
+    ):
         try:
             results = None
 
@@ -135,24 +137,31 @@ class JellyfinEmby:
                 response = self.session.get(
                     self.baseurl + query, headers=self.headers, timeout=self.timeout
                 )
-                if response.status_code != 200:
+                if response.status_code not in [200, 204]:
                     raise Exception(
                         f"Query failed with status {response.status_code} {response.reason}"
                     )
-                results = response.json()
+                if response.status_code == 204:
+                    results = None
+                else:
+                    results = response.json()
 
             elif query_type == "post":
                 response = self.session.post(
-                    self.baseurl + query, headers=self.headers, timeout=self.timeout
+                    self.baseurl + query, headers=self.headers, json=json, timeout=self.timeout
                 )
-                if response.status_code != 200:
+                if response.status_code not in [200, 204]:
                     raise Exception(
                         f"Query failed with status {response.status_code} {response.reason}"
                     )
-                results = response.json()
+                if response.status_code == 204:
+                    results = None
+                else:
+                    results = response.json()
 
-            if not isinstance(results, list) and not isinstance(results, dict):
-                raise Exception("Query result is not of type list or dict")
+            if results is not None:
+                if not isinstance(results, list) and not isinstance(results, dict):
+                    raise Exception("Query result is not of type list or dict")
 
             # append identifiers to results
             if identifiers:
@@ -612,22 +621,27 @@ class JellyfinEmby:
                                 jellyfin_video.get("Name"),
                             )
                         else:
-                            # TODO add support for partially watched movies
                             msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
-                            """
+
                             if not dryrun:
-                                pass
-                                # logger(msg, 5)
+                                logger(msg, 5)
+                                playback_position_payload = {
+                                    "PlaybackPositionTicks": movie_status['time'] * 10_000,
+                                }
+                                self.query(
+                                    f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
+                                    "post",
+                                    json=playback_position_payload
+                                )
                             else:
-                                pass
-                                # logger(msg, 6)
+                                logger(msg, 6)
 
                             log_marked(
                                 user_name,
                                 library,
                                 jellyfin_video.get("Name"),
                                 duration=floor(movie_status["time"] / 60_000),
-                            )"""
+                            )
                     else:
                         logger(
                             f"{self.server_type}: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
@@ -737,18 +751,23 @@ class JellyfinEmby:
                                         jellyfin_episode.get("Name"),
                                     )
                                 else:
-                                    # TODO add support for partially watched episodes
                                     msg = (
                                         f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                         + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
                                     )
-                                    """
+                                    
                                     if not dryrun:
-                                        pass
-                                        # logger(f"Marked {msg}", 0)
+                                        logger(msg, 5)
+                                        playback_position_payload = {
+                                            "PlaybackPositionTicks": episode_status['time'] * 10_000,
+                                        }
+                                        self.query(
+                                            f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
+                                            "post",
+                                            json=playback_position_payload
+                                        )
                                     else:
-                                        pass
-                                        # logger(f"Dryrun {msg}", 0)
+                                        logger(msg, 6)
 
                                     log_marked(
                                         user_name,
@@ -756,7 +775,7 @@ class JellyfinEmby:
                                         jellyfin_episode.get("SeriesName"),
                                         jellyfin_episode.get('Name'),
                                         duration=floor(episode_status["time"] / 60_000),
-                                    )"""
+                                    )
                             else:
                                 logger(
                                     f"{self.server_type}: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
