@@ -2,11 +2,11 @@
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com\&utm_medium=referral\&utm_content=luigi311/JellyPlex-Watched\&utm_campaign=Badge_Grade)
 
-Sync watched between jellyfin and plex locally
+Sync watched between jellyfin, plex and emby locally
 
 ## Description
 
-Keep in sync all your users watched history between jellyfin and plex servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by entering multiple options in the .env plex/jellyfin section separated by commas.
+Keep in sync all your users watched history between jellyfin, plex and emby servers locally. This uses file names and provider ids to find the correct episode/movie between the two. This is not perfect but it works for most cases. You can use this for as many servers as you want by entering multiple options in the .env plex/jellyfin section separated by commas.
 
 ## Features
 
@@ -32,12 +32,12 @@ Keep in sync all your users watched history between jellyfin and plex servers lo
 
 ### Emby
 
-*   \[ ] Match via filenames
-*   \[ ] Match via provider ids
-*   \[ ] Map usernames
-*   \[ ] Use single login
-*   \[ ] One way/multi way sync
-*   \[ ] Sync watched
+*   \[x] Match via filenames
+*   \[x] Match via provider ids
+*   \[x] Map usernames
+*   \[x] Use single login
+*   \[x] One way/multi way sync
+*   \[x] Sync watched
 *   \[ ] Sync in progress
 
 ## Configuration

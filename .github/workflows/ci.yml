@@ -40,43 +40,67 @@ jobs:
 
       - name: "Start containers"
         run: |
-          export PGID=$(id -g)
-          export PUID=$(id -u)
+          JellyPlex-Watched-CI/start_containers.sh
 
-          sudo chown -R $PUID:$PGID JellyPlex-Watched-CI
-
-          docker pull lscr.io/linuxserver/plex &
-          docker pull lscr.io/linuxserver/jellyfin &
-
-          wait
-
-          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml up -d 
-          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml up -d
           # Wait for containers to start
           sleep 10
 
-          docker-compose -f JellyPlex-Watched-CI/plex/docker-compose.yml logs
-          docker-compose -f JellyPlex-Watched-CI/jellyfin/docker-compose.yml logs
+          for FOLDER in $(find "JellyPlex-Watched-CI" -type f -name "docker-compose.yml" -exec dirname {} \;); do
+            docker-compose -f "${FOLDER}/docker-compose.yml" logs
+          done
 
-      - name: "Run tests"
+      - name: "Test Plex"
         run: |
-          # Test ci1
-          mv test/ci1.env .env
+          mv test/ci_plex.env .env
           python main.py
-
-          # Test ci2
-          mv test/ci2.env .env
+          python test/validate_ci_marklog.py --plex
+          
+          rm mark.log
+          
+      - name: "Test Jellyfin"
+        run: |
+          mv test/ci_jellyfin.env .env
           python main.py
+          python test/validate_ci_marklog.py --jellyfin
+          
+          rm mark.log
 
-          # Test ci3
-          mv test/ci3.env .env
+      - name: "Test Emby"
+        run: |
+          mv test/ci_emby.env .env
+          python main.py
+          python test/validate_ci_marklog.py --emby
+          
+          rm mark.log
+
+      - name: "Test Guids"
+        run: |
+          mv test/ci_guids.env .env
+          python main.py
+          python test/validate_ci_marklog.py --dry
+          
+          rm mark.log
+
+      - name: "Test Locations"
+        run: |
+          mv test/ci_locations.env .env
+          python main.py
+          python test/validate_ci_marklog.py --dry
+          
+          rm mark.log
+
+      - name: "Test writing to the servers"
+        run: |
+          # Test writing to the servers
+          mv test/ci_write.env .env
           python main.py
 
           # Test again to test if it can handle existing data
           python main.py
 
-          cat mark.log
-          python test/validate_ci_marklog.py
+          python test/validate_ci_marklog.py --write
+          
+          rm mark.log
 
   docker:
     runs-on: ubuntu-latest
