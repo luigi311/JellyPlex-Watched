@@ -28,7 +28,7 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 *   \[x] Use single login
 *   \[x] One way/multi way sync
 *   \[x] Sync watched
-*   \[ ] Sync in progress
+*   \[x] Sync in progress
 
 ### Emby
 
@@ -38,7 +38,7 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 *   \[x] Use single login
 *   \[x] One way/multi way sync
 *   \[x] Sync watched
-*   \[ ] Sync in progress
+*   \[x] Sync in progress
 
 ## Configuration
 
