@@ -117,11 +117,9 @@ def get_user_library_watched_show(show, process_episodes, threads=None):
             episode_guids_args, threads=threads
         )
 
-        episode_guids = {}
+        episode_guids = []
         for index, episode in enumerate(process_episodes):
-            if episode.parentIndex not in episode_guids:
-                episode_guids[episode.parentIndex] = []
-            episode_guids[episode.parentIndex].append(episode_guids_results[index])
+            episode_guids.append(episode_guids_results[index])
 
         return show_guids, episode_guids
     except Exception:
@@ -220,7 +218,7 @@ def find_video(plex_search, video_ids, videos=None):
                 ):
                     episode_videos = []
                     if videos:
-                        for show, seasons in videos.items():
+                        for show, episodes in videos.items():
                             show = {k: v for k, v in show}
                             if (
                                 contains_nested(
@@ -228,9 +226,8 @@ def find_video(plex_search, video_ids, videos=None):
                                 )
                                 is not None
                             ):
-                                for season in seasons.values():
-                                    for episode in season:
-                                        episode_videos.append(episode)
+                                for episode in episodes:
+                                    episode_videos.append(episode)
 
                     return True, episode_videos
 
@@ -243,13 +240,12 @@ def find_video(plex_search, video_ids, videos=None):
                     if guid_id in video_ids[guid_source]:
                         episode_videos = []
                         if videos:
-                            for show, seasons in videos.items():
+                            for show, episodes in videos.items():
                                 show = {k: v for k, v in show}
                                 if guid_source in show.keys():
                                     if guid_id == show[guid_source]:
-                                        for season in seasons.values():
-                                            for episode in season:
-                                                episode_videos.append(episode)
+                                        for episode in episodes:
+                                            episode_videos.append(episode)
 
                         return True, episode_videos
 

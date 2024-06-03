@@ -42,21 +42,19 @@ show_list = {
             ("tvdb", "392256"),
             ("title", "The Last of Us"),
         }
-    ): {
-        "Season 1": [
-            {
-                "imdb": "tt11957006",
-                "tmdb": "2181581",
-                "tvdb": "8444132",
-                "locations": (
-                    (
-                        "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",
-                    )
-                ),
-                "status": {"completed": True, "time": 0},
-            }
-        ]
-    }
+    ): [
+        {
+            "imdb": "tt11957006",
+            "tmdb": "2181581",
+            "tvdb": "8444132",
+            "locations": (
+                (
+                    "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",
+                )
+            ),
+            "status": {"completed": True, "time": 0},
+        }
+    ]
 }
 movie_list = [
     {
@@ -83,7 +81,6 @@ episode_titles = {
     "tvdb": ["8444132"],
     "completed": [True],
     "time": [0],
-    "season": ["Season 1"],
     "show": [
         {
             "imdb": "tt3581920",

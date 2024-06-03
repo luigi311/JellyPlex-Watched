@@ -284,8 +284,10 @@ class JellyfinEmby:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)
 
-                # Retrieve the seasons of each watched show
-                seasons_watched = []
+                # Create a list of tasks to retrieve the episodes
+                watched_episodes = []
+
+                # Retrieve the watched/partially watched list of episodes of each watched show
                 for show in watched_shows_filtered:
                     logger(
                         f"{self.server_type}: Adding {show.get('Name')} to {user_name} watched list",
@@ -298,118 +300,62 @@ class JellyfinEmby:
                         if "Path" in show
                         else tuple()
                     )
-                    show_guids = frozenset(show_guids.items())
-                    show_identifiers = {
-                        "show_guids": show_guids,
-                        "show_id": show["Id"],
-                    }
-
-                    seasons_watched.append(
-                        self.query(
-                            f"/Shows/{show['Id']}/Seasons"
-                            + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,RecursiveItemCount",
-                            "get",
-                            identifiers=frozenset(show_identifiers.items()),
-                        )
+                    show_display_name = (
+                        show_guids["title"]
+                        if show_guids["title"]
+                        else show_guids["locations"]
                     )
 
-                # Filter the list of seasons to only include those that have been partially or fully watched
-                seasons_watched_filtered = []
-                for seasons in seasons_watched:
-                    seasons_watched_filtered_dict = {}
-                    seasons_watched_filtered_dict["Identifiers"] = seasons[
-                        "Identifiers"
-                    ]
-                    seasons_watched_filtered_dict["Items"] = []
-                    for season in seasons["Items"]:
-                        if "PlayedPercentage" in season["UserData"]:
-                            if season["UserData"]["PlayedPercentage"] > 0:
-                                seasons_watched_filtered_dict["Items"].append(season)
+                    show_guids = frozenset(show_guids.items())
 
-                    if seasons_watched_filtered_dict["Items"]:
-                        seasons_watched_filtered.append(seasons_watched_filtered_dict)
+                    watched_task = self.query(
+                        f"/Shows/{show['Id']}/Episodes"
+                        + f"?userId={user_id}&isPlaceHolder=false&Filters=IsPlayed&Fields=ProviderIds,MediaSources",
+                        "get",
+                    )
 
-                # Create a list of tasks to retrieve the episodes of each watched season
-                watched_episodes = []
-                for seasons in seasons_watched_filtered:
-                    if len(seasons["Items"]) > 0:
-                        for season in seasons["Items"]:
-                            if "IndexNumber" not in season:
-                                logger(
-                                    f"Jellyfin: Skipping show {season.get('SeriesName')} season {season.get('Name')} as it has no index number",
-                                    3,
-                                )
+                    in_progress_task = self.query(
+                        f"/Shows/{show['Id']}/Episodes"
+                        + f"?userId={user_id}&isPlaceHolder=false&Filters=IsResumable&Fields=ProviderIds,MediaSources",
+                        "get",
+                    )
+                    watched_episodes.append(watched_task)
+                    watched_episodes.append(in_progress_task)
 
-                                continue
-                            season_identifiers = dict(seasons["Identifiers"])
-                            season_identifiers["season_index"] = season["IndexNumber"]
-                            watched_task = self.query(
-                                f"/Shows/{season_identifiers['show_id']}/Episodes"
-                                + f"?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&Filters=IsPlayed&Fields=ProviderIds,MediaSources",
-                                "get",
-                                identifiers=frozenset(season_identifiers.items()),
-                            )
-
-                            in_progress_task = self.query(
-                                f"/Shows/{season_identifiers['show_id']}/Episodes"
-                                + f"?seasonId={season['Id']}&userId={user_id}&isPlaceHolder=false&Filters=IsResumable&Fields=ProviderIds,MediaSources",
-                                "get",
-                                identifiers=frozenset(season_identifiers.items()),
-                            )
-                            watched_episodes.append(watched_task)
-                            watched_episodes.append(in_progress_task)
-
-                # Iterate through the watched episodes
-                for episodes in watched_episodes:
-                    # If the season has any watched episodes
-                    if len(episodes["Items"]) > 0:
-                        # Create a dictionary for the season with its identifier and episodes
-                        season_dict = {}
-                        season_dict["Identifiers"] = dict(episodes["Identifiers"])
-                        season_dict["Episodes"] = []
-                        for episode in episodes["Items"]:
-                            if (
-                                "MediaSources" in episode
-                                and episode["MediaSources"] != {}
-                            ):
-                                # If watched or watched more than a minute
+                    # Iterate through the watched episodes
+                    for episodes in watched_episodes:
+                        # If has any watched episodes
+                        if len(episodes["Items"]) > 0:
+                            # Create a list to store the episodes
+                            episodes_list = []
+                            for episode in episodes["Items"]:
                                 if (
-                                    episode["UserData"]["Played"] == True
-                                    or episode["UserData"]["PlaybackPositionTicks"]
-                                    > 600000000
+                                    "MediaSources" in episode
+                                    and episode["MediaSources"] != {}
                                 ):
-                                    episode_dict = get_guids(self.server_type, episode)
-                                    # Add the episode dictionary to the season's list of episodes
-                                    season_dict["Episodes"].append(episode_dict)
+                                    # If watched or watched more than a minute
+                                    if (
+                                        episode["UserData"]["Played"] == True
+                                        or episode["UserData"]["PlaybackPositionTicks"]
+                                        > 600000000
+                                    ):
+                                        episode_guids = get_guids(
+                                            self.server_type, episode
+                                        )
+                                        episodes_list.append(episode_guids)
 
-                        # Add the season dictionary to the show's list of seasons
-                        if (
-                            season_dict["Identifiers"]["show_guids"]
-                            not in user_watched[user_name][library_title]
-                        ):
+                            # Add the show dictionary to the user's watched list
+                            if show_guids not in user_watched[user_name][library_title]:
+                                user_watched[user_name][library_title][show_guids] = []
+
                             user_watched[user_name][library_title][
-                                season_dict["Identifiers"]["show_guids"]
-                            ] = {}
-
-                        if (
-                            season_dict["Identifiers"]["season_index"]
-                            not in user_watched[user_name][library_title][
-                                season_dict["Identifiers"]["show_guids"]
-                            ]
-                        ):
-                            user_watched[user_name][library_title][
-                                season_dict["Identifiers"]["show_guids"]
-                            ][season_dict["Identifiers"]["season_index"]] = []
-
-                        user_watched[user_name][library_title][
-                            season_dict["Identifiers"]["show_guids"]
-                        ][season_dict["Identifiers"]["season_index"]] = season_dict[
-                            "Episodes"
-                        ]
-                        logger(
-                            f"{self.server_type}: Added {season_dict['Episodes']} to {user_name} {season_dict['Identifiers']['show_guids']} watched list",
-                            1,
-                        )
+                                show_guids
+                            ] = episodes_list
+                            for episode in episodes_list:
+                                logger(
+                                    f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
+                                    1,
+                                )
 
             logger(
                 f"{self.server_type}: Got watched for {user_name} in library {library_title}",
@@ -674,7 +620,7 @@ class JellyfinEmby:
                                 is not None
                             ):
                                 show_found = True
-                                for shows, seasons in videos.items():
+                                for shows, episodes in videos.items():
                                     show = {k: v for k, v in shows}
                                     if (
                                         contains_nested(
@@ -683,9 +629,8 @@ class JellyfinEmby:
                                         )
                                         is not None
                                     ):
-                                        for season in seasons.values():
-                                            for episode in season:
-                                                episode_videos.append(episode)
+                                        for episode in episodes:
+                                            episode_videos.append(episode)
 
                                         break
 
@@ -702,14 +647,13 @@ class JellyfinEmby:
                                         ]
                                     ):
                                         show_found = True
-                                        for show, seasons in videos.items():
+                                        for show, episodes in videos.items():
                                             show = {k: v for k, v in show}
                                             if show_provider_id.lower() in show.get(
                                                 show_provider_source.lower(), []
                                             ):
-                                                for season in seasons.values():
-                                                    for episode in season:
-                                                        episode_videos.append(episode)
+                                                for episode in episodes:
+                                                    episode_videos.append(episode)
 
                                                 break
 
