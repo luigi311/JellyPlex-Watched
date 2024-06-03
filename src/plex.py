@@ -452,7 +452,7 @@ class Plex:
             raise Exception(e)
 
     def info(self) -> str:
-        return f"{self.plex.friendlyName}: {self.plex.version}"
+        return f"Plex {self.plex.friendlyName}: {self.plex.version}"
 
     def get_users(self):
         try:

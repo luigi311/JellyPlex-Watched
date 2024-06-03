@@ -184,7 +184,7 @@ class JellyfinEmby:
             response = self.query(query_string, "get")
 
             if response:
-                return f"{response['ServerName']}: {response['Version']}"
+                return f"{self.server_type} {response['ServerName']}: {response['Version']}"
             else:
                 return None
 
@@ -229,38 +229,42 @@ class JellyfinEmby:
                     f"/Users/{user_id}/Items"
                     + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
                     "get",
-                )
+                ).get("Items", [])
 
                 in_progress = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
                     "get",
-                )
+                ).get("Items", [])
 
-                for movie in watched["Items"] + in_progress["Items"]:
-                    if "MediaSources" in movie and movie["MediaSources"] != {}:
-                        if "UserData" not in movie:
-                            continue
+                for movie in watched + in_progress:
+                    # Skip if theres no user data which means the movie has not been watched
+                    if "UserData" not in movie:
+                        continue
 
-                        # Skip if not watched or watched less than a minute
-                        if (
-                            movie["UserData"]["Played"] == True
-                            or movie["UserData"]["PlaybackPositionTicks"] > 600000000
-                        ):
-                            logger(
-                                f"{self.server_type}: Adding {movie.get('Name')} to {user_name} watched list",
-                                3,
-                            )
+                    # Skip if theres no media tied to the movie
+                    if "MediaSources" not in movie or movie["MediaSources"] == {}:
+                        continue
 
-                            # Get the movie's GUIDs
-                            movie_guids = get_guids(self.server_type, movie)
+                    # Skip if not watched or watched less than a minute
+                    if (
+                        movie["UserData"]["Played"] == True
+                        or movie["UserData"]["PlaybackPositionTicks"] > 600000000
+                    ):
+                        logger(
+                            f"{self.server_type}: Adding {movie.get('Name')} to {user_name} watched list",
+                            3,
+                        )
 
-                            # Append the movie dictionary to the list for the given user and library
-                            user_watched[user_name][library_title].append(movie_guids)
-                            logger(
-                                f"{self.server_type}: Added {movie_guids} to {user_name} watched list",
-                                3,
-                            )
+                        # Get the movie's GUIDs
+                        movie_guids = get_guids(self.server_type, movie)
+
+                        # Append the movie dictionary to the list for the given user and library
+                        user_watched[user_name][library_title].append(movie_guids)
+                        logger(
+                            f"{self.server_type}: Added {movie_guids} to {user_name} watched list",
+                            3,
+                        )
 
             # TV Shows
             if library_type in ["Series", "Episode"]:
@@ -272,20 +276,17 @@ class JellyfinEmby:
                     f"/Users/{user_id}/Items"
                     + f"?ParentId={library_id}&isPlaceHolder=false&IncludeItemTypes=Series&Recursive=True&Fields=ProviderIds,Path,RecursiveItemCount",
                     "get",
-                )
+                ).get("Items", [])
 
                 # Filter the list of shows to only include those that have been partially or fully watched
                 watched_shows_filtered = []
-                for show in watched_shows["Items"]:
-                    if not "UserData" in show:
+                for show in watched_shows:
+                    if "UserData" not in show:
                         continue
 
                     if "PlayedPercentage" in show["UserData"]:
                         if show["UserData"]["PlayedPercentage"] > 0:
                             watched_shows_filtered.append(show)
-
-                # Create a list of tasks to retrieve the episodes
-                watched_episodes = []
 
                 # Retrieve the watched/partially watched list of episodes of each watched show
                 for show in watched_shows_filtered:
@@ -308,54 +309,46 @@ class JellyfinEmby:
 
                     show_guids = frozenset(show_guids.items())
 
-                    watched_task = self.query(
+                    show_episodes = self.query(
                         f"/Shows/{show['Id']}/Episodes"
-                        + f"?userId={user_id}&isPlaceHolder=false&Filters=IsPlayed&Fields=ProviderIds,MediaSources",
+                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,MediaSources",
                         "get",
-                    )
+                    ).get("Items", [])
 
-                    in_progress_task = self.query(
-                        f"/Shows/{show['Id']}/Episodes"
-                        + f"?userId={user_id}&isPlaceHolder=false&Filters=IsResumable&Fields=ProviderIds,MediaSources",
-                        "get",
-                    )
-                    watched_episodes.append(watched_task)
-                    watched_episodes.append(in_progress_task)
+                    # Iterate through the episodes
+                    # Create a list to store the episodes
+                    mark_episodes_list = []
+                    for episode in show_episodes:
+                        if "UserData" not in episode:
+                            continue
 
-                    # Iterate through the watched episodes
-                    for episodes in watched_episodes:
-                        # If has any watched episodes
-                        if len(episodes["Items"]) > 0:
-                            # Create a list to store the episodes
-                            episodes_list = []
-                            for episode in episodes["Items"]:
-                                if (
-                                    "MediaSources" in episode
-                                    and episode["MediaSources"] != {}
-                                ):
-                                    # If watched or watched more than a minute
-                                    if (
-                                        episode["UserData"]["Played"] == True
-                                        or episode["UserData"]["PlaybackPositionTicks"]
-                                        > 600000000
-                                    ):
-                                        episode_guids = get_guids(
-                                            self.server_type, episode
-                                        )
-                                        episodes_list.append(episode_guids)
+                        if (
+                            "MediaSources" not in episode
+                            or episode["MediaSources"] == {}
+                        ):
+                            continue
 
-                            # Add the show dictionary to the user's watched list
-                            if show_guids not in user_watched[user_name][library_title]:
-                                user_watched[user_name][library_title][show_guids] = []
+                        # If watched or watched more than a minute
+                        if (
+                            episode["UserData"]["Played"] == True
+                            or episode["UserData"]["PlaybackPositionTicks"] > 600000000
+                        ):
+                            episode_guids = get_guids(self.server_type, episode)
+                            mark_episodes_list.append(episode_guids)
 
-                            user_watched[user_name][library_title][
-                                show_guids
-                            ] = episodes_list
-                            for episode in episodes_list:
-                                logger(
-                                    f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
-                                    1,
-                                )
+                    if mark_episodes_list:
+                        # Add the show dictionary to the user's watched list
+                        if show_guids not in user_watched[user_name][library_title]:
+                            user_watched[user_name][library_title][show_guids] = []
+
+                        user_watched[user_name][library_title][
+                            show_guids
+                        ] = mark_episodes_list
+                        for episode in mark_episodes_list:
+                            logger(
+                                f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
+                                1,
+                            )
 
             logger(
                 f"{self.server_type}: Got watched for {user_name} in library {library_title}",
