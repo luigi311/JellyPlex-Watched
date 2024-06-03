@@ -1,6 +1,6 @@
 # JellyPlex-Watched
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com\&utm_medium=referral\&utm_content=luigi311/JellyPlex-Watched\&utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/26b47c5db63942f28f02f207f692dc85)](https://www.codacy.com/gh/luigi311/JellyPlex-Watched/dashboard?utm_source=github.com&utm_medium=referral&utm_content=luigi311/JellyPlex-Watched&utm_campaign=Badge_Grade)
 
 Sync watched between jellyfin, plex and emby locally
 
@@ -12,33 +12,33 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 
 ### Plex
 
-*   \[x] Match via filenames
-*   \[x] Match via provider ids
-*   \[x] Map usernames
-*   \[x] Use single login
-*   \[x] One way/multi way sync
-*   \[x] Sync watched
-*   \[x] Sync in progress
+- \[x] Match via filenames
+- \[x] Match via provider ids
+- \[x] Map usernames
+- \[x] Use single login
+- \[x] One way/multi way sync
+- \[x] Sync watched
+- \[x] Sync in progress
 
 ### Jellyfin
 
-*   \[x] Match via filenames
-*   \[x] Match via provider ids
-*   \[x] Map usernames
-*   \[x] Use single login
-*   \[x] One way/multi way sync
-*   \[x] Sync watched
-*   \[x] Sync in progress
+- \[x] Match via filenames
+- \[x] Match via provider ids
+- \[x] Map usernames
+- \[x] Use single login
+- \[x] One way/multi way sync
+- \[x] Sync watched
+- \[x] Sync in progress
 
 ### Emby
 
-*   \[x] Match via filenames
-*   \[x] Match via provider ids
-*   \[x] Map usernames
-*   \[x] Use single login
-*   \[x] One way/multi way sync
-*   \[x] Sync watched
-*   \[x] Sync in progress
+- \[x] Match via filenames
+- \[x] Match via provider ids
+- \[x] Map usernames
+- \[x] Use single login
+- \[x] One way/multi way sync
+- \[x] Sync watched
+- \[x] Sync in progress
 
 ## Configuration
 
@@ -48,62 +48,62 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
 
 ### Baremetal
 
-*   Setup virtualenv of your choice
+- Setup virtualenv of your choice
 
-*   Install dependencies
+- Install dependencies
 
-    ```bash
-      pip install -r requirements.txt
-    ```
+  ```bash
+    pip install -r requirements.txt
+  ```
 
-*   Create a .env file similar to .env.sample, uncomment whitelist and blacklist if needed, fill in baseurls and tokens
+- Create a .env file similar to .env.sample, uncomment whitelist and blacklist if needed, fill in baseurls and tokens
 
-*   Run
+- Run
 
-    ```bash
-    python main.py
-    ```
+  ```bash
+  python main.py
+  ```
 
 ### Docker
 
-*   Build docker image
+- Build docker image
 
-    ```bash
-    docker build -t jellyplex-watched .
-    ```
+  ```bash
+  docker build -t jellyplex-watched .
+  ```
 
-*   or use pre-built image
+- or use pre-built image
 
-    ```bash
-    docker pull luigi311/jellyplex-watched:latest
-    ```
+  ```bash
+  docker pull luigi311/jellyplex-watched:latest
+  ```
 
 #### With variables
 
-*   Run
+- Run
 
-    ```bash
-    docker run --rm -it -e PLEX_TOKEN='SuperSecretToken' luigi311/jellyplex-watched:latest
-    ```
+  ```bash
+  docker run --rm -it -e PLEX_TOKEN='SuperSecretToken' luigi311/jellyplex-watched:latest
+  ```
 
 #### With .env
 
-*   Create a .env file similar to .env.sample and set the variables to match your setup
+- Create a .env file similar to .env.sample and set the variables to match your setup
 
-*   Run
+- Run
 
-    ```bash
-     docker run --rm -it -v "$(pwd)/.env:/app/.env" luigi311/jellyplex-watched:latest
-    ```
+  ```bash
+   docker run --rm -it -v "$(pwd)/.env:/app/.env" luigi311/jellyplex-watched:latest
+  ```
 
 ## Troubleshooting/Issues
 
-*   Jellyfin
-    *   Attempt to decode JSON with unexpected mimetype, make sure you enable remote access or add your docker subnet to lan networks in jellyfin settings
+- Jellyfin
 
-*   Configuration
-    *   Do not use quotes around variables in docker compose
+  - Attempt to decode JSON with unexpected mimetype, make sure you enable remote access or add your docker subnet to lan networks in jellyfin settings
 
+- Configuration
+  - Do not use quotes around variables in docker compose
 
 ## Contributing
 
