@@ -127,9 +127,7 @@ class JellyfinEmby:
         self.session = requests.Session()
         self.users = self.get_users()
 
-    def query(
-        self, query, query_type, identifiers=None, json=None
-    ):
+    def query(self, query, query_type, identifiers=None, json=None):
         try:
             results = None
 
@@ -148,7 +146,10 @@ class JellyfinEmby:
 
             elif query_type == "post":
                 response = self.session.post(
-                    self.baseurl + query, headers=self.headers, json=json, timeout=self.timeout
+                    self.baseurl + query,
+                    headers=self.headers,
+                    json=json,
+                    timeout=self.timeout,
                 )
                 if response.status_code not in [200, 204]:
                     raise Exception(
@@ -626,12 +627,13 @@ class JellyfinEmby:
                             if not dryrun:
                                 logger(msg, 5)
                                 playback_position_payload = {
-                                    "PlaybackPositionTicks": movie_status['time'] * 10_000,
+                                    "PlaybackPositionTicks": movie_status["time"]
+                                    * 10_000,
                                 }
                                 self.query(
                                     f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
                                     "post",
-                                    json=playback_position_payload
+                                    json=playback_position_payload,
                                 )
                             else:
                                 logger(msg, 6)
@@ -755,16 +757,19 @@ class JellyfinEmby:
                                         f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                         + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
                                     )
-                                    
+
                                     if not dryrun:
                                         logger(msg, 5)
                                         playback_position_payload = {
-                                            "PlaybackPositionTicks": episode_status['time'] * 10_000,
+                                            "PlaybackPositionTicks": episode_status[
+                                                "time"
+                                            ]
+                                            * 10_000,
                                         }
                                         self.query(
                                             f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
                                             "post",
-                                            json=playback_position_payload
+                                            json=playback_position_payload,
                                         )
                                     else:
                                         logger(msg, 6)
@@ -773,7 +778,7 @@ class JellyfinEmby:
                                         user_name,
                                         library,
                                         jellyfin_episode.get("SeriesName"),
-                                        jellyfin_episode.get('Name'),
+                                        jellyfin_episode.get("Name"),
                                         duration=floor(episode_status["time"] / 60_000),
                                     )
                             else:

@@ -319,7 +319,9 @@ def main_loop():
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
             # Check if server 1 and server 2 are going to be synced in either direction, skip if not
-            if not should_sync_server(server_1[0], server_2[0]) and not should_sync_server(server_2[0], server_1[0]):
+            if not should_sync_server(
+                server_1[0], server_2[0]
+            ) and not should_sync_server(server_2[0], server_1[0]):
                 continue
 
             logger(f"Server 1: {server_1[0].capitalize()}: {server_1[1].info()}", 0)
