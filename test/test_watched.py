@@ -24,34 +24,32 @@ tv_shows_watched_list_1 = {
             ("tvdb", "78804"),
             ("title", "Doctor Who (2005)"),
         }
-    ): {
-        1: [
-            {
-                "imdb": "tt0563001",
-                "tmdb": "968589",
-                "tvdb": "295296",
-                "title": "The Unquiet Dead",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt0562985",
-                "tmdb": "968590",
-                "tvdb": "295297",
-                "title": "Aliens of London (1)",
-                "locations": ("S01E04.mkv",),
-                "status": {"completed": False, "time": 240000},
-            },
-            {
-                "imdb": "tt0563003",
-                "tmdb": "968592",
-                "tvdb": "295298",
-                "title": "World War Three (2)",
-                "locations": ("S01E05.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "imdb": "tt0563001",
+            "tmdb": "968589",
+            "tvdb": "295296",
+            "title": "The Unquiet Dead",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt0562985",
+            "tmdb": "968590",
+            "tvdb": "295297",
+            "title": "Aliens of London (1)",
+            "locations": ("S01E04.mkv",),
+            "status": {"completed": False, "time": 240000},
+        },
+        {
+            "imdb": "tt0563003",
+            "tmdb": "968592",
+            "tvdb": "295298",
+            "title": "World War Three (2)",
+            "locations": ("S01E05.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
     frozenset(
         {
             ("title", "Monarch: Legacy of Monsters"),
@@ -63,34 +61,32 @@ tv_shows_watched_list_1 = {
                 ("Monarch - Legacy of Monsters {tvdb-422598} {imdb-tt17220216}",),
             ),
         }
-    ): {
-        1: [
-            {
-                "imdb": "tt21255044",
-                "tmdb": "4661246",
-                "tvdb": "10009418",
-                "title": "Secrets and Lies",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt21255050",
-                "tmdb": "4712059",
-                "tvdb": "10009419",
-                "title": "Parallels and Interiors",
-                "locations": ("S01E04.mkv",),
-                "status": {"completed": False, "time": 240000},
-            },
-            {
-                "imdb": "tt23787572",
-                "tmdb": "4712061",
-                "tvdb": "10009420",
-                "title": "The Way Out",
-                "locations": ("S01E05.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "imdb": "tt21255044",
+            "tmdb": "4661246",
+            "tvdb": "10009418",
+            "title": "Secrets and Lies",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt21255050",
+            "tmdb": "4712059",
+            "tvdb": "10009419",
+            "title": "Parallels and Interiors",
+            "locations": ("S01E04.mkv",),
+            "status": {"completed": False, "time": 240000},
+        },
+        {
+            "imdb": "tt23787572",
+            "tmdb": "4712061",
+            "tvdb": "10009420",
+            "title": "The Way Out",
+            "locations": ("S01E05.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
     frozenset(
         {
             ("tmdb", "125928"),
@@ -102,34 +98,32 @@ tv_shows_watched_list_1 = {
             ),
             ("title", "My Adventures with Superman"),
         }
-    ): {
-        1: [
-            {
-                "imdb": "tt15699926",
-                "tmdb": "3070048",
-                "tvdb": "8438181",
-                "title": "Adventures of a Normal Man (1)",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt20413322",
-                "tmdb": "4568681",
-                "tvdb": "9829910",
-                "title": "Adventures of a Normal Man (2)",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt20413328",
-                "tmdb": "4497012",
-                "tvdb": "9870382",
-                "title": "My Interview with Superman",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "imdb": "tt15699926",
+            "tmdb": "3070048",
+            "tvdb": "8438181",
+            "title": "Adventures of a Normal Man (1)",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt20413322",
+            "tmdb": "4568681",
+            "tvdb": "9829910",
+            "title": "Adventures of a Normal Man (2)",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt20413328",
+            "tmdb": "4497012",
+            "tvdb": "9870382",
+            "title": "My Interview with Superman",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
 }
 
 
@@ -143,31 +137,29 @@ tv_shows_watched_list_2 = {
             ("tvdb", "78804"),
             ("tvrage", "3332"),
         }
-    ): {
-        1: [
-            {
-                "tvdb": "295294",
-                "imdb": "tt0562992",
-                "title": "Rose",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "295295",
-                "imdb": "tt0562997",
-                "title": "The End of the World",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": False, "time": 300670},
-            },
-            {
-                "tvdb": "295298",
-                "imdb": "tt0563003",
-                "title": "World War Three (2)",
-                "locations": ("S01E05.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "tvdb": "295294",
+            "imdb": "tt0562992",
+            "title": "Rose",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "295295",
+            "imdb": "tt0562997",
+            "title": "The End of the World",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": False, "time": 300670},
+        },
+        {
+            "tvdb": "295298",
+            "imdb": "tt0563003",
+            "title": "World War Three (2)",
+            "locations": ("S01E05.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
     frozenset(
         {
             ("title", "Monarch: Legacy of Monsters"),
@@ -179,31 +171,29 @@ tv_shows_watched_list_2 = {
                 ("Monarch - Legacy of Monsters {tvdb-422598} {imdb-tt17220216}",),
             ),
         }
-    ): {
-        1: [
-            {
-                "tvdb": "9959300",
-                "imdb": "tt20412166",
-                "title": "Aftermath",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "10009417",
-                "imdb": "tt22866594",
-                "title": "Departure",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": False, "time": 300741},
-            },
-            {
-                "tvdb": "10009420",
-                "imdb": "tt23787572",
-                "title": "The Way Out",
-                "locations": ("S01E05.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "tvdb": "9959300",
+            "imdb": "tt20412166",
+            "title": "Aftermath",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "10009417",
+            "imdb": "tt22866594",
+            "title": "Departure",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": False, "time": 300741},
+        },
+        {
+            "tvdb": "10009420",
+            "imdb": "tt23787572",
+            "title": "The Way Out",
+            "locations": ("S01E05.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
     frozenset(
         {
             ("tmdb", "125928"),
@@ -215,31 +205,29 @@ tv_shows_watched_list_2 = {
             ),
             ("title", "My Adventures with Superman"),
         }
-    ): {
-        1: [
-            {
-                "tvdb": "8438181",
-                "imdb": "tt15699926",
-                "title": "Adventures of a Normal Man (1)",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "9829910",
-                "imdb": "tt20413322",
-                "title": "Adventures of a Normal Man (2)",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "9870382",
-                "imdb": "tt20413328",
-                "title": "My Interview with Superman",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    },
+    ): [
+        {
+            "tvdb": "8438181",
+            "imdb": "tt15699926",
+            "title": "Adventures of a Normal Man (1)",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "9829910",
+            "imdb": "tt20413322",
+            "title": "Adventures of a Normal Man (2)",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "9870382",
+            "imdb": "tt20413328",
+            "title": "My Interview with Superman",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ],
 }
 
 expected_tv_show_watched_list_1 = {
@@ -251,26 +239,24 @@ expected_tv_show_watched_list_1 = {
             ("tvdb", "78804"),
             ("title", "Doctor Who (2005)"),
         }
-    ): {
-        1: [
-            {
-                "imdb": "tt0563001",
-                "tmdb": "968589",
-                "tvdb": "295296",
-                "title": "The Unquiet Dead",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt0562985",
-                "tmdb": "968590",
-                "tvdb": "295297",
-                "title": "Aliens of London (1)",
-                "locations": ("S01E04.mkv",),
-                "status": {"completed": False, "time": 240000},
-            },
-        ]
-    },
+    ): [
+        {
+            "imdb": "tt0563001",
+            "tmdb": "968589",
+            "tvdb": "295296",
+            "title": "The Unquiet Dead",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt0562985",
+            "tmdb": "968590",
+            "tvdb": "295297",
+            "title": "Aliens of London (1)",
+            "locations": ("S01E04.mkv",),
+            "status": {"completed": False, "time": 240000},
+        },
+    ],
     frozenset(
         {
             ("title", "Monarch: Legacy of Monsters"),
@@ -282,26 +268,24 @@ expected_tv_show_watched_list_1 = {
                 ("Monarch - Legacy of Monsters {tvdb-422598} {imdb-tt17220216}",),
             ),
         }
-    ): {
-        1: [
-            {
-                "imdb": "tt21255044",
-                "tmdb": "4661246",
-                "tvdb": "10009418",
-                "title": "Secrets and Lies",
-                "locations": ("S01E03.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "imdb": "tt21255050",
-                "tmdb": "4712059",
-                "tvdb": "10009419",
-                "title": "Parallels and Interiors",
-                "locations": ("S01E04.mkv",),
-                "status": {"completed": False, "time": 240000},
-            },
-        ]
-    },
+    ): [
+        {
+            "imdb": "tt21255044",
+            "tmdb": "4661246",
+            "tvdb": "10009418",
+            "title": "Secrets and Lies",
+            "locations": ("S01E03.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "imdb": "tt21255050",
+            "tmdb": "4712059",
+            "tvdb": "10009419",
+            "title": "Parallels and Interiors",
+            "locations": ("S01E04.mkv",),
+            "status": {"completed": False, "time": 240000},
+        },
+    ],
 }
 
 expected_tv_show_watched_list_2 = {
@@ -314,24 +298,22 @@ expected_tv_show_watched_list_2 = {
             ("tvdb", "78804"),
             ("tvrage", "3332"),
         }
-    ): {
-        1: [
-            {
-                "tvdb": "295294",
-                "imdb": "tt0562992",
-                "title": "Rose",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "295295",
-                "imdb": "tt0562997",
-                "title": "The End of the World",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": False, "time": 300670},
-            },
-        ]
-    },
+    ): [
+        {
+            "tvdb": "295294",
+            "imdb": "tt0562992",
+            "title": "Rose",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "295295",
+            "imdb": "tt0562997",
+            "title": "The End of the World",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": False, "time": 300670},
+        },
+    ],
     frozenset(
         {
             ("title", "Monarch: Legacy of Monsters"),
@@ -343,24 +325,22 @@ expected_tv_show_watched_list_2 = {
                 ("Monarch - Legacy of Monsters {tvdb-422598} {imdb-tt17220216}",),
             ),
         }
-    ): {
-        1: [
-            {
-                "tvdb": "9959300",
-                "imdb": "tt20412166",
-                "title": "Aftermath",
-                "locations": ("S01E01.mkv",),
-                "status": {"completed": True, "time": 0},
-            },
-            {
-                "tvdb": "10009417",
-                "imdb": "tt22866594",
-                "title": "Departure",
-                "locations": ("S01E02.mkv",),
-                "status": {"completed": False, "time": 300741},
-            },
-        ]
-    },
+    ): [
+        {
+            "tvdb": "9959300",
+            "imdb": "tt20412166",
+            "title": "Aftermath",
+            "locations": ("S01E01.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+        {
+            "tvdb": "10009417",
+            "imdb": "tt22866594",
+            "title": "Departure",
+            "locations": ("S01E02.mkv",),
+            "status": {"completed": False, "time": 300741},
+        },
+    ],
 }
 
 movies_watched_list_1 = [
@@ -463,20 +443,16 @@ tv_shows_2_watched_list_1 = {
             ("locations", ("Criminal Minds",)),
             ("tmdb", "4057"),
         }
-    ): {
-        "Season 1": [
-            {
-                "imdb": "tt0550489",
-                "tmdb": "282843",
-                "tvdb": "176357",
-                "title": "Extreme Aggressor",
-                "locations": (
-                    "Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",
-                ),
-                "status": {"completed": True, "time": 0},
-            },
-        ]
-    }
+    ): [
+        {
+            "imdb": "tt0550489",
+            "tmdb": "282843",
+            "tvdb": "176357",
+            "title": "Extreme Aggressor",
+            "locations": ("Criminal Minds S01E01 Extreme Aggressor WEBDL-720p.mkv",),
+            "status": {"completed": True, "time": 0},
+        },
+    ]
 }
 
 
@@ -610,18 +586,16 @@ def test_combine_watched_dicts():
                             ("locations", ("11.22.63",)),
                             ("imdb", "tt2879552"),
                         }
-                    ): {
-                        "Season 1": [
-                            {
-                                "imdb": "tt4460418",
-                                "title": "The Rabbit Hole",
-                                "locations": (
-                                    "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
-                                ),
-                                "status": {"completed": True, "time": 0},
-                            }
-                        ]
-                    }
+                    ): [
+                        {
+                            "imdb": "tt4460418",
+                            "title": "The Rabbit Hole",
+                            "locations": (
+                                "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
+                            ),
+                            "status": {"completed": True, "time": 0},
+                        }
+                    ]
                 }
             }
         },
@@ -664,18 +638,16 @@ def test_combine_watched_dicts():
                         ("locations", ("11.22.63",)),
                         ("imdb", "tt2879552"),
                     }
-                ): {
-                    "Season 1": [
-                        {
-                            "imdb": "tt4460418",
-                            "title": "The Rabbit Hole",
-                            "locations": (
-                                "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
-                            ),
-                            "status": {"completed": True, "time": 0},
-                        }
-                    ]
-                }
+                ): [
+                    {
+                        "imdb": "tt4460418",
+                        "title": "The Rabbit Hole",
+                        "locations": (
+                            "11.22.63 S01E01 The Rabbit Hole Bluray-1080p.mkv",
+                        ),
+                        "status": {"completed": True, "time": 0},
+                    }
+                ]
             },
             "Subbed Anime": {},
         }

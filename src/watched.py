@@ -122,53 +122,27 @@ def cleanup_watched(
                 for show_key_1 in watched_list_1[user_1][library_1].keys():
                     show_key_dict = dict(show_key_1)
 
-                    for season in watched_list_1[user_1][library_1][show_key_1]:
-                        # Filter the episode_watched_list_2_keys_dict dictionary to handle cases
-                        # where episode location names are not unique such as S01E01.mkv
-                        filtered_episode_watched_list_2_keys_dict = (
-                            filter_episode_watched_list_2_keys_dict(
-                                episode_watched_list_2_keys_dict, show_key_dict, season
-                            )
+                    # Filter the episode_watched_list_2_keys_dict dictionary to handle cases
+                    # where episode location names are not unique such as S01E01.mkv
+                    filtered_episode_watched_list_2_keys_dict = (
+                        filter_episode_watched_list_2_keys_dict(
+                            episode_watched_list_2_keys_dict, show_key_dict
                         )
-                        for episode in watched_list_1[user_1][library_1][show_key_1][
-                            season
-                        ]:
-                            episode_index = get_episode_index_in_dict(
-                                episode, filtered_episode_watched_list_2_keys_dict
-                            )
-                            if episode_index is not None:
-                                if check_remove_entry(
-                                    episode,
-                                    library_1,
-                                    episode_index,
-                                    episode_watched_list_2_keys_dict,
-                                ):
-                                    modified_watched_list_1[user_1][library_1][
-                                        show_key_1
-                                    ][season].remove(episode)
-
-                        # Remove empty seasons
-                        if (
-                            len(
-                                modified_watched_list_1[user_1][library_1][show_key_1][
-                                    season
-                                ]
-                            )
-                            == 0
-                        ):
-                            if (
-                                season
-                                in modified_watched_list_1[user_1][library_1][
-                                    show_key_1
-                                ]
+                    )
+                    for episode in watched_list_1[user_1][library_1][show_key_1]:
+                        episode_index = get_episode_index_in_dict(
+                            episode, filtered_episode_watched_list_2_keys_dict
+                        )
+                        if episode_index is not None:
+                            if check_remove_entry(
+                                episode,
+                                library_1,
+                                episode_index,
+                                episode_watched_list_2_keys_dict,
                             ):
-                                logger(
-                                    f"Removing {season} from {show_key_dict['title']} because it is empty",
-                                    3,
-                                )
-                                del modified_watched_list_1[user_1][library_1][
+                                modified_watched_list_1[user_1][library_1][
                                     show_key_1
-                                ][season]
+                                ].remove(episode)
 
                     # Remove empty shows
                     if len(modified_watched_list_1[user_1][library_1][show_key_1]) == 0:
@@ -231,27 +205,18 @@ def get_movie_index_in_dict(movie, movies_watched_list_2_keys_dict):
 
 
 def filter_episode_watched_list_2_keys_dict(
-    episode_watched_list_2_keys_dict, show_key_dict, season
+    episode_watched_list_2_keys_dict, show_key_dict
 ):
-    # If the episode_watched_list_2_keys_dict dictionary is empty, missing season or show then return an empty dictionary
+    # If the episode_watched_list_2_keys_dict dictionary is empty, missing show then return an empty dictionary
     if (
         len(episode_watched_list_2_keys_dict) == 0
-        or "season" not in episode_watched_list_2_keys_dict.keys()
         or "show" not in episode_watched_list_2_keys_dict.keys()
     ):
         return {}
 
-    # Filter the episode_watched_list_2_keys_dict dictionary to only include values for the correct show and season
+    # Filter the episode_watched_list_2_keys_dict dictionary to only include values for the correct show
     filtered_episode_watched_list_2_keys_dict = {}
     show_indecies = []
-    season_indecies = []
-
-    # Iterate through episode_watched_list_2_keys_dict["season"] and find the indecies that match season
-    for season_index, season_value in enumerate(
-        episode_watched_list_2_keys_dict.get("season")
-    ):
-        if season_value == season:
-            season_indecies.append(season_index)
 
     # Iterate through episode_watched_list_2_keys_dict["show"] and find the indecies that match show_key_dict
     for show_index, show_value in enumerate(episode_watched_list_2_keys_dict["show"]):
@@ -273,14 +238,14 @@ def filter_episode_watched_list_2_keys_dict(
                         show_indecies.append(show_index)
                         break
 
-    # Find the intersection of the show_indecies and season_indecies lists
-    indecies = list(set(show_indecies) & set(season_indecies))
+    # lists
+    indecies = list(set(show_indecies))
 
-    # If there are no indecies that match the show and season, return an empty dictionary
+    # If there are no indecies that match the show, return an empty dictionary
     if len(indecies) == 0:
         return {}
 
-    # Create a copy of the dictionary with indecies that match the show and season and none that don't
+    # Create a copy of the dictionary with indecies that match the show and none that don't
     for key, value in episode_watched_list_2_keys_dict.items():
         if key not in filtered_episode_watched_list_2_keys_dict:
             filtered_episode_watched_list_2_keys_dict[key] = []
