@@ -169,63 +169,53 @@ def episode_title_dict(user_list: dict):
         episode_output_dict["time"] = []
         episode_output_dict["locations"] = []
         episode_output_dict["show"] = []
-        episode_output_dict["season"] = []
         episode_counter = 0  # Initialize a counter for the current episode position
 
-        # Iterate through the shows, seasons, and episodes in user_list
+        # Iterate through the shows and episodes in user_list
         for show in user_list:
-            for season in user_list[show]:
-                for episode in user_list[show][season]:
-                    # Add the show title to the episode_output_dict if it doesn't exist
-                    if "show" not in episode_output_dict:
-                        episode_output_dict["show"] = [None] * episode_counter
 
-                    # Add the season number to the episode_output_dict if it doesn't exist
-                    if "season" not in episode_output_dict:
-                        episode_output_dict["season"] = [None] * episode_counter
+            for episode in user_list[show]:
+                # Add the show title to the episode_output_dict if it doesn't exist
+                if "show" not in episode_output_dict:
+                    episode_output_dict["show"] = [None] * episode_counter
 
-                    # Add the show title to the episode_output_dict
-                    episode_output_dict["show"].append(dict(show))
+                # Add the show title to the episode_output_dict
+                episode_output_dict["show"].append(dict(show))
 
-                    # Add the season number to the episode_output_dict
-                    episode_output_dict["season"].append(season)
+                # Iterate through the keys and values in each episode
+                for episode_key, episode_value in episode.items():
+                    # If the key is not "status", add the key to episode_output_dict if it doesn't exist
+                    if episode_key != "status":
+                        if episode_key.lower() not in episode_output_dict:
+                            # Initialize the list with None values up to the current episode position
+                            episode_output_dict[episode_key.lower()] = [
+                                None
+                            ] * episode_counter
 
-                    # Iterate through the keys and values in each episode
-                    for episode_key, episode_value in episode.items():
-                        # If the key is not "status", add the key to episode_output_dict if it doesn't exist
-                        if episode_key != "status":
-                            if episode_key.lower() not in episode_output_dict:
-                                # Initialize the list with None values up to the current episode position
-                                episode_output_dict[episode_key.lower()] = [
-                                    None
-                                ] * episode_counter
+                    # If the key is "locations", append each location to the list
+                    if episode_key == "locations":
+                        episode_output_dict[episode_key.lower()].append(episode_value)
 
-                        # If the key is "locations", append each location to the list
-                        if episode_key == "locations":
-                            episode_output_dict[episode_key.lower()].append(
-                                episode_value
-                            )
+                    # If the key is "status", append the "completed" and "time" values
+                    elif episode_key == "status":
+                        episode_output_dict["completed"].append(
+                            episode_value["completed"]
+                        )
+                        episode_output_dict["time"].append(episode_value["time"])
 
-                        # If the key is "status", append the "completed" and "time" values
-                        elif episode_key == "status":
-                            episode_output_dict["completed"].append(
-                                episode_value["completed"]
-                            )
-                            episode_output_dict["time"].append(episode_value["time"])
+                    # For other keys, append the value to the list
+                    else:
+                        episode_output_dict[episode_key.lower()].append(
+                            episode_value.lower()
+                        )
 
-                        # For other keys, append the value to the list
-                        else:
-                            episode_output_dict[episode_key.lower()].append(
-                                episode_value.lower()
-                            )
+                # Increment the episode_counter
+                episode_counter += 1
 
-                    # Increment the episode_counter
-                    episode_counter += 1
-
-                    # Extend the lists in episode_output_dict with None values to match the current episode_counter
-                    for key in episode_output_dict:
-                        if len(episode_output_dict[key]) < episode_counter:
-                            episode_output_dict[key].append(None)
+                # Extend the lists in episode_output_dict with None values to match the current episode_counter
+                for key in episode_output_dict:
+                    if len(episode_output_dict[key]) < episode_counter:
+                        episode_output_dict[key].append(None)
 
         return episode_output_dict
     except Exception:

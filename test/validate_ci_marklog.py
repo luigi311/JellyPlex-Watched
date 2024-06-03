@@ -73,65 +73,30 @@ def check_marklog(lines, expected_values):
 
 def main():
     args = parse_args()
-    expected = {
-        "dry": [
-            # Jellyfin -> Plex
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
+    expected_jellyfin = [
+        "jellyplex_watched/Movies/Five Nights at Freddy's",
+        "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
+        "jellyplex_watched/Movies/The Family Plan",
+        "jellyplex_watched/Movies/Five Nights at Freddy's",
+        "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/5",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/5",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/5",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/The Way Out",
+    ]
+    expected_emby = [
+        "jellyplex_watched/Movies/Tears of Steel",
             "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
-            # Plex -> Jellyfin
-            "JellyUser/Movies/Big Buck Bunny",
-            "JellyUser/Movies/Killers of the Flower Moon/4",
-            "JellyUser/Shows/Doctor Who/The Unquiet Dead",
-            "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
-            # Emby -> Plex
-            "jellyplex_watched/Movies/Tears of Steel",
-            "jellyplex_watched/TV shows/Doctor Who (2005)/World War Three (2)",
-            "jellyplex_watched/TV shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
-            # Plex -> Emby
-            "jellyplex_watched/Movies/Big Buck Bunny",
-            "jellyplex_watched/Movies/The Family Plan",
-            "jellyplex_watched/Movies/Killers of the Flower Moon/4",
-            # Emby -> Jellyfin
-            "JellyUser/Movies/Tears of Steel",
-            # Jellyfin -> Emby
-            "jellyplex_watched/Movies/The Family Plan",
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/5",
-        ],
-        "write": [
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
-            "JellyUser/Movies/Big Buck Bunny",
-            "JellyUser/Movies/Killers of the Flower Moon/4",
-            "JellyUser/Shows/Doctor Who/The Unquiet Dead",
-            "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
-            "jellyplex_watched/Movies/Tears of Steel",
-            "jellyplex_watched/TV shows/Doctor Who (2005)/World War Three (2)",
-            "jellyplex_watched/TV shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
-            "jellyplex_watched/Movies/Big Buck Bunny",
-            "jellyplex_watched/Movies/The Family Plan",
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/5",
-            "jellyplex_watched/Movies/Killers of the Flower Moon/4",
+            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
             "JellyUser/Movies/Tears of Steel",
             "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
-            "jellyplex_watched/TV shows/Doctor Who (2005)/World War Three (2)",
-            "jellyplex_watched/TV shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
-        ],
-        "plex": [
-            "JellyUser/Movies/Big Buck Bunny",
+    ]
+    expected_plex = [
+        "JellyUser/Movies/Big Buck Bunny",
             "JellyUser/Movies/Killers of the Flower Moon/4",
             "JellyUser/Shows/Doctor Who/The Unquiet Dead",
             "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
@@ -140,39 +105,58 @@ def main():
             "jellyplex_watched/Movies/Big Buck Bunny",
             "jellyplex_watched/Movies/The Family Plan",
             "jellyplex_watched/Movies/Killers of the Flower Moon/4",
-        ],
-        "jellyfin": [
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
-            "jellyplex_watched/Movies/The Family Plan",
-            "jellyplex_watched/Movies/Five Nights at Freddy's",
-            "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/5",
-        ],
-        "emby": [
-            "jellyplex_watched/Movies/Tears of Steel",
-            "jellyplex_watched/TV shows/Doctor Who (2005)/World War Three (2)",
-            "jellyplex_watched/TV shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
-            "JellyUser/Movies/Tears of Steel",
-        ],
-    }
+            "jellyplex_watched/TV Shows/Doctor Who (2005)/The Unquiet Dead",
+            "jellyplex_watched/TV Shows/Doctor Who (2005)/Aliens of London (1)/4",
+            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Secrets and Lies",
+            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/The Way Out",
+    ]
+
+    expected_dry = expected_emby + expected_plex + expected_jellyfin
+
+    expected_write = [
+        "jellyplex_watched/Movies/Five Nights at Freddy's",
+        "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/301215",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/300670",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/300741",
+        "JellyUser/Movies/Big Buck Bunny",
+        "JellyUser/Movies/Killers of the Flower Moon/4",
+        "JellyUser/Shows/Doctor Who/The Unquiet Dead",
+        "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
+        "jellyplex_watched/Movies/Tears of Steel",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
+        "jellyplex_watched/Movies/Big Buck Bunny",
+        "jellyplex_watched/Movies/The Family Plan",
+        "jellyplex_watched/Movies/Five Nights at Freddy's",
+        "jellyplex_watched/Movies/The Hunger Games: The Ballad of Songbirds & Snakes/5",
+        "jellyplex_watched/Movies/Killers of the Flower Moon/4",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Rose",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The End of the World/5",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The Unquiet Dead",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Aliens of London (1)/4",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Departure/5",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Secrets and Lies",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/The Way Out",
+        "JellyUser/Movies/Tears of Steel",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
+    ]
 
     # Expected values for the mark.log file, dry-run is slightly different than write-run
     # due to some of the items being copied over from one server to another and now being there
     # for the next server run.
     if args.dry:
-        expected_values = expected["dry"]
+        expected_values = expected_dry
     elif args.write:
-        expected_values = expected["write"]
+        expected_values = expected_write
     elif args.plex:
-        expected_values = expected["plex"]
+        expected_values = expected_plex
     elif args.jellyfin:
-        expected_values = expected["jellyfin"]
+        expected_values = expected_jellyfin
     elif args.emby:
-        expected_values = expected["emby"]
+        expected_values = expected_emby
     else:
         print("No server specified")
         exit(1)
