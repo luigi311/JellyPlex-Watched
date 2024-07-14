@@ -19,3 +19,8 @@ class Emby(JellyfinEmby):
         super().__init__(
             server_type="Emby", baseurl=baseurl, token=token, headers=headers
         )
+    
+    def is_partial_update_supported(self, version):
+        version_parts = version.split('.')
+        major, minor, patch = map(int, version_parts[:3])
+        return major > 4 or (major >= 4 and minor >= 4)

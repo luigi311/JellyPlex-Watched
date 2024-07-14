@@ -192,6 +192,19 @@ class JellyfinEmby:
             logger(f"{self.server_type}: Get server name failed {e}", 2)
             raise Exception(e)
 
+    def get_server_version(self):
+        try:
+            response = self.query('/System/Info/Public', 'get')
+
+            if response:
+                return response['Version']
+            else:
+                return None
+
+        except Exception as e:
+            logger(f"{self.server_type}: Get server version failed: {e}", 2)
+            raise Exception(e)
+
     def get_users(self):
         try:
             users = {}
@@ -500,7 +513,7 @@ class JellyfinEmby:
             raise Exception(e)
 
     def update_user_watched(
-        self, user_name, user_id, library, library_id, videos, dryrun
+        self, user_name, user_id, library, library_id, videos, update_partial, dryrun
     ):
         try:
             logger(
@@ -561,6 +574,9 @@ class JellyfinEmby:
                                 jellyfin_video.get("Name"),
                             )
                         else:
+                            if not update_partial:
+                                return
+                            
                             msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
 
                             if not dryrun:
@@ -690,6 +706,9 @@ class JellyfinEmby:
                                         jellyfin_episode.get("Name"),
                                     )
                                 else:
+                                    if not update_partial:
+                                        return
+
                                     msg = (
                                         f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                         + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
@@ -741,6 +760,15 @@ class JellyfinEmby:
         self, watched_list, user_mapping=None, library_mapping=None, dryrun=False
     ):
         try:
+            server_version = self.get_server_version()
+            update_partial = self.is_partial_update_supported(server_version)
+            
+            if not update_partial:
+                logger(
+                    f"{self.server_type}: Server version {server_version} does not support updating playback position.", 
+                    2,
+                )
+
             for user, libraries in watched_list.items():
                 logger(f"{self.server_type}: Updating for entry {user}, {libraries}", 1)
                 user_other = None
@@ -813,7 +841,13 @@ class JellyfinEmby:
 
                     if library_id:
                         self.update_user_watched(
-                            user_name, user_id, library, library_id, videos, dryrun
+                            user_name, 
+                            user_id, 
+                            library, 
+                            library_id, 
+                            videos, 
+                            update_partial,
+                            dryrun
                         )
 
         except Exception as e:
