@@ -136,8 +136,8 @@ jobs:
             type=ref,event=pr,suffix=-${{ matrix.variant }}
             type=ref,event=pr,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
-            type=ref,event=tag,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
-            type=ref,event=tag,value=latest,suffix=-${{ matrix.variant }}
+            type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.event_name == 'release' }}
+            type=raw,value=latest,suffix=-${{ matrix.variant }},enable=${{ github.event_name == 'release' }}
             
             type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{ version }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
