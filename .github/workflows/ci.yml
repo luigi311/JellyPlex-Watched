@@ -129,22 +129,23 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/jellyplex-watched,enable=${{ secrets.DOCKER_USERNAME != '' }}
             # Do not push to ghcr.io on PRs due to permission issues, only push if the owner is luigi311 so it doesnt fail on forks
             ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311'}}
+          flavor: latest=false
           tags: |
+            type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,suffix=-${{ matrix.variant }},enable=${{ startsWith(github.ref, 'refs/tags/')  }}
+
             type=ref,event=branch,suffix=-${{ matrix.variant }}
             type=ref,event=branch,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
-            
+
             type=ref,event=pr,suffix=-${{ matrix.variant }}
             type=ref,event=pr,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
-            type=ref,event=tag,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
-            type=ref,event=tag,value=latest,suffix=-${{ matrix.variant }}
-            
             type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{ version }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
-            
+
             type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{ major }}.{{ minor }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
-            
+
             type=sha,suffix=-${{ matrix.variant }}
             type=sha,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
