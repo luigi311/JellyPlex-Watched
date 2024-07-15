@@ -130,17 +130,21 @@ jobs:
             # Do not push to ghcr.io on PRs due to permission issues, only push if the owner is luigi311 so it doesnt fail on forks
             ghcr.io/${{ github.repository }},enable=${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311'}}
           tags: |
-            type=raw,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == github.event.repository.default_branch }}
-            type=raw,value=dev,enable=${{ matrix.variant == env.DEFAULT_VARIANT && github.ref_name == 'dev' }}
-            type=raw,value=latest,suffix=-${{ matrix.variant }},enable={{ is_default_branch }}
             type=ref,event=branch,suffix=-${{ matrix.variant }}
             type=ref,event=branch,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            
             type=ref,event=pr,suffix=-${{ matrix.variant }}
             type=ref,event=pr,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+
+            type=ref,event=tag,value=latest,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            type=ref,event=tag,value=latest,suffix=-${{ matrix.variant }}
+            
             type=semver,pattern={{ version }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{ version }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            
             type=semver,pattern={{ major }}.{{ minor }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{ major }}.{{ minor }},enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
+            
             type=sha,suffix=-${{ matrix.variant }}
             type=sha,enable=${{ matrix.variant == env.DEFAULT_VARIANT }}
 
