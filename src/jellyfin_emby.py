@@ -4,6 +4,7 @@ import traceback, os
 from math import floor
 from dotenv import load_dotenv
 import requests
+from packaging import version
 
 from src.functions import (
     logger,
@@ -24,7 +25,6 @@ load_dotenv(override=True)
 
 generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
 generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
-
 
 def get_guids(server_type, item):
     if item.get("Name"):
@@ -125,6 +125,7 @@ class JellyfinEmby:
             raise Exception(f"{self.server_type} token not set")
 
         self.session = requests.Session()
+        self.version = version.parse(self.info(version=True))
         self.users = self.get_users()
 
     def query(self, query, query_type, identifiers=None, json=None):
@@ -177,13 +178,17 @@ class JellyfinEmby:
             )
             raise Exception(e)
 
-    def info(self) -> str:
+    def info(self, version=False) -> str:
         try:
             query_string = "/System/Info/Public"
 
             response = self.query(query_string, "get")
 
             if response:
+                # Return version only if requested
+                if version:
+                    return response['Version']
+
                 return f"{self.server_type} {response['ServerName']}: {response['Version']}"
             else:
                 return None
@@ -561,28 +566,32 @@ class JellyfinEmby:
                                 jellyfin_video.get("Name"),
                             )
                         else:
-                            msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
-
-                            if not dryrun:
-                                logger(msg, 5)
-                                playback_position_payload = {
-                                    "PlaybackPositionTicks": movie_status["time"]
-                                    * 10_000,
-                                }
-                                self.query(
-                                    f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
-                                    "post",
-                                    json=playback_position_payload,
-                                )
+                            # Handle partially watched movies not supported in jellyfin < 10.9.0
+                            if self.server_type == "Jellyfin" and self.version < version.parse("10.9.0"):
+                                logger(f"{self.server_type}: Skipping movie {jellyfin_video.get('Name')} as partially watched not supported in Jellyfin < 10.9.0", 4)
                             else:
-                                logger(msg, 6)
+                                msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(movie_status['time'] / 60_000)} minutes for {user_name} in {library}"
 
-                            log_marked(
-                                user_name,
-                                library,
-                                jellyfin_video.get("Name"),
-                                duration=floor(movie_status["time"] / 60_000),
-                            )
+                                if not dryrun:
+                                    logger(msg, 5)
+                                    playback_position_payload = {
+                                        "PlaybackPositionTicks": movie_status["time"]
+                                        * 10_000,
+                                    }
+                                    self.query(
+                                        f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
+                                        "post",
+                                        json=playback_position_payload,
+                                    )
+                                else:
+                                    logger(msg, 6)
+
+                                log_marked(
+                                    user_name,
+                                    library,
+                                    jellyfin_video.get("Name"),
+                                    duration=floor(movie_status["time"] / 60_000),
+                                )
                     else:
                         logger(
                             f"{self.server_type}: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
@@ -690,34 +699,38 @@ class JellyfinEmby:
                                         jellyfin_episode.get("Name"),
                                     )
                                 else:
-                                    msg = (
-                                        f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                        + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
-                                    )
-
-                                    if not dryrun:
-                                        logger(msg, 5)
-                                        playback_position_payload = {
-                                            "PlaybackPositionTicks": episode_status[
-                                                "time"
-                                            ]
-                                            * 10_000,
-                                        }
-                                        self.query(
-                                            f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
-                                            "post",
-                                            json=playback_position_payload,
-                                        )
+                                    # Handle partially watched episodes not supported in jellyfin < 10.9.0
+                                    if self.server_type == "Jellyfin" and self.version < version.parse("10.9.0"):
+                                        logger(f"{self.server_type}: Skipping episode {jellyfin_episode.get('Name')} as partially watched not supported in Jellyfin < 10.9.0", 4)
                                     else:
-                                        logger(msg, 6)
+                                        msg = (
+                                            f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                            + f" as partially watched for {floor(episode_status['time'] / 60_000)} minutes for {user_name} in {library}"
+                                        )
 
-                                    log_marked(
-                                        user_name,
-                                        library,
-                                        jellyfin_episode.get("SeriesName"),
-                                        jellyfin_episode.get("Name"),
-                                        duration=floor(episode_status["time"] / 60_000),
-                                    )
+                                        if not dryrun:
+                                            logger(msg, 5)
+                                            playback_position_payload = {
+                                                "PlaybackPositionTicks": episode_status[
+                                                    "time"
+                                                ]
+                                                * 10_000,
+                                            }
+                                            self.query(
+                                                f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
+                                                "post",
+                                                json=playback_position_payload,
+                                            )
+                                        else:
+                                            logger(msg, 6)
+
+                                        log_marked(
+                                            user_name,
+                                            library,
+                                            jellyfin_episode.get("SeriesName"),
+                                            jellyfin_episode.get("Name"),
+                                            duration=floor(episode_status["time"] / 60_000),
+                                        )
                             else:
                                 logger(
                                     f"{self.server_type}: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
