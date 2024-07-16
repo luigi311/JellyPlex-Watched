@@ -1,5 +1,5 @@
 from src.jellyfin_emby import JellyfinEmby
-
+from packaging import version
 
 class Jellyfin(JellyfinEmby):
     def __init__(self, baseurl, token):
@@ -8,7 +8,7 @@ class Jellyfin(JellyfinEmby):
             'Client="JellyPlex-Watched", '
             'Device="script", '
             'DeviceId="script", '
-            'Version="5.2.0", '
+            'Version="6.0.2", '
             f'Token="{token}"'
         )
         headers = {
@@ -19,3 +19,6 @@ class Jellyfin(JellyfinEmby):
         super().__init__(
             server_type="Jellyfin", baseurl=baseurl, token=token, headers=headers
         )
+        
+    def is_partial_update_supported(self, server_version):
+        return server_version >= version.parse("10.9.0")
