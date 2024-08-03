@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+ENV PUID=1000
+ENV PGID=1000
+
 ENV DRYRUN 'True'
 ENV DEBUG 'True'
 ENV DEBUG_LEVEL 'INFO'
@@ -34,23 +37,19 @@ ENV WHITELIST_USERS  ''
 
 
 RUN apt-get update && \
-    apt-get install tini --yes --no-install-recommends && \
+    apt-get install tini gosu --yes --no-install-recommends && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    addgroup --system jellyplex_user && \
-    adduser --system --no-create-home jellyplex_user --ingroup jellyplex_user && \
-    mkdir -p /app && \
-    chown -R jellyplex_user:jellyplex_user /app
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --chown=jellyplex_user:jellyplex_user ./requirements.txt ./
+COPY ./requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=jellyplex_user:jellyplex_user . .
+COPY . .
 
-USER jellyplex_user
+RUN chmod +x *.sh
 
-ENTRYPOINT ["/bin/tini", "--"]
+ENTRYPOINT ["/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["python", "-u", "main.py"]
