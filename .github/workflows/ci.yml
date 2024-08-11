@@ -46,7 +46,7 @@ jobs:
           sleep 10
 
           for FOLDER in $(find "JellyPlex-Watched-CI" -type f -name "docker-compose.yml" -exec dirname {} \;); do
-            docker-compose -f "${FOLDER}/docker-compose.yml" logs
+            docker compose -f "${FOLDER}/docker-compose.yml" logs
           done
 
       - name: "Test Plex"
