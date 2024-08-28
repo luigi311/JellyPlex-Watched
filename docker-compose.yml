@@ -1,32 +1,11 @@
-version: '3'
+# Sync watched status between media servers locally
 
 services:
   jellyplex-watched:
     image: luigi311/jellyplex-watched:latest
     container_name: jellyplex-watched
-    restart: always
+    restart: unless-stopped
     environment:
-      - DRYRUN=True
-      - DEBUG=True
-      - DEBUG_LEVEL=info
-      - RUN_ONLY_ONCE=False
-      - SLEEP_DURATION=3600
-      - LOGFILE=/tmp/log.log
-      - MARKFILE=/tmp/mark.log
-      - USER_MAPPING={"user1":"user2"}
-      - LIBRARY_MAPPING={"TV Shows":"Shows"}
-      - BLACKLIST_LIBRARY=
-      - WHITELIST_LIBRARY=
-      - BLACKLIST_LIBRARY_TYPE=
-      - WHITELIST_LIBRARY_TYPE=
-      - BLACKLIST_USERS=
-      - WHITELIST_USERS=
-      - PLEX_BASEURL=https://localhost:32400
-      - PLEX_TOKEN=plex_token
-      - JELLYFIN_BASEURL=http://localhost:8096
-      - JELLYFIN_TOKEN=jelly_token
-      - SSL_BYPASS=True
-      - SYNC_FROM_PLEX_TO_JELLYFIN=True
-      - SYNC_FROM_JELLYFIN_TO_PLEX=True
-      - SYNC_FROM_PLEX_TO_PLEX=True
-      - SYNC_FROM_JELLYFIN_TO_JELLYFIN=True
+      - PUID=1000
+      - PGID=1000
+    env_file: "./.env"
