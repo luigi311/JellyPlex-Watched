@@ -262,10 +262,10 @@ def should_sync_server(server_1_type, server_2_type):
 
 
 def main_loop():
-    logfile = os.getenv("LOGFILE", "log.log")
-    # Delete logfile if it exists
-    if os.path.exists(logfile):
-        os.remove(logfile)
+    log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
+    # Delete log_file if it exists
+    if os.path.exists(log_file):
+        os.remove(log_file)
 
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger(f"Dryrun: {dryrun}", 1)
