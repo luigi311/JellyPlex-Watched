@@ -25,18 +25,19 @@ fi
 chown -R "$PUID:$PGID" /app
 
 # Get directory of log and mark file to create base folder if it doesnt exist and change permissions
-LOG_DIR=$(dirname "$LOGFILE")
+LOG_DIR=$(dirname "$LOG_FILE")
 # If LOG_DIR is set, create the directory
 if [ -n "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
-    chown -R "$PUID:$PGID" "$LOG_DIR"
 fi
 
-MARK_DIR=$(dirname "$MARKFILE")
+MARK_DIR=$(dirname "$MARK_FILE")
 if [ -n "$MARK_DIR" ]; then
-    mkdir -p "$MARK_DIR"
-    chown -R "$PUID:$PGID" "$MARK_DIR"
+    mkdir -p "$MARK_DIR"  
 fi
+
+chown -R "$PUID:$PGID" "$LOG_DIR"
+chown -R "$PUID:$PGID" "$MARK_DIR"
 
 # Run the application as the created user
 exec gosu "$PUID:$PGID" "$@"
