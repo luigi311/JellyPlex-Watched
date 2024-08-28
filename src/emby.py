@@ -20,6 +20,6 @@ class Emby(JellyfinEmby):
         super().__init__(
             server_type="Emby", baseurl=baseurl, token=token, headers=headers
         )
-    
+
     def is_partial_update_supported(self, server_version):
         return server_version > version.parse("4.4")

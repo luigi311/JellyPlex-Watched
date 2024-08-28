@@ -26,6 +26,7 @@ load_dotenv(override=True)
 generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
 generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
+
 def get_guids(server_type, item):
     if item.get("Name"):
         guids = {"title": item.get("Name")}
@@ -194,10 +195,10 @@ class JellyfinEmby:
 
     def get_server_version(self):
         try:
-            response = self.query('/System/Info/Public', 'get')
+            response = self.query("/System/Info/Public", "get")
 
             if response:
-                return version.parse(response['Version'])
+                return version.parse(response["Version"])
             else:
                 return None
 
@@ -756,10 +757,10 @@ class JellyfinEmby:
         try:
             server_version = self.get_server_version()
             update_partial = self.is_partial_update_supported(server_version)
-            
+
             if not update_partial:
                 logger(
-                    f"{self.server_type}: Server version {server_version} does not support updating playback position.", 
+                    f"{self.server_type}: Server version {server_version} does not support updating playback position.",
                     2,
                 )
 
@@ -835,13 +836,13 @@ class JellyfinEmby:
 
                     if library_id:
                         self.update_user_watched(
-                            user_name, 
-                            user_id, 
-                            library, 
-                            library_id, 
-                            videos, 
+                            user_name,
+                            user_id,
+                            library,
+                            library_id,
+                            videos,
                             update_partial,
-                            dryrun
+                            dryrun,
                         )
 
         except Exception as e:

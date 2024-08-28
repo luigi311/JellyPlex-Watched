@@ -90,25 +90,25 @@ def main():
     ]
     expected_emby = [
         "jellyplex_watched/Movies/Tears of Steel",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
-            "JellyUser/Movies/Tears of Steel",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
+        "JellyUser/Movies/Tears of Steel",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
     ]
     expected_plex = [
         "JellyUser/Movies/Big Buck Bunny",
-            "JellyUser/Movies/Killers of the Flower Moon/4",
-            "JellyUser/Shows/Doctor Who/The Unquiet Dead",
-            "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
-            "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
-            "jellyplex_watched/Movies/Big Buck Bunny",
-            "jellyplex_watched/Movies/The Family Plan",
-            "jellyplex_watched/Movies/Killers of the Flower Moon/4",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/The Unquiet Dead",
-            "jellyplex_watched/TV Shows/Doctor Who (2005)/Aliens of London (1)/4",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Secrets and Lies",
-            "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/The Way Out",
+        "JellyUser/Movies/Killers of the Flower Moon/4",
+        "JellyUser/Shows/Doctor Who/The Unquiet Dead",
+        "JellyUser/Shows/Doctor Who/Aliens of London (1)/4",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Secrets and Lies",
+        "JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
+        "jellyplex_watched/Movies/Big Buck Bunny",
+        "jellyplex_watched/Movies/The Family Plan",
+        "jellyplex_watched/Movies/Killers of the Flower Moon/4",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/The Unquiet Dead",
+        "jellyplex_watched/TV Shows/Doctor Who (2005)/Aliens of London (1)/4",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Secrets and Lies",
+        "jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/The Way Out",
     ]
 
     expected_dry = expected_emby + expected_plex + expected_jellyfin

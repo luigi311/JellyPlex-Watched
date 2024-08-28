@@ -1,6 +1,7 @@
 from src.jellyfin_emby import JellyfinEmby
 from packaging import version
 
+
 class Jellyfin(JellyfinEmby):
     def __init__(self, baseurl, token):
         authorization = (
@@ -19,6 +20,6 @@ class Jellyfin(JellyfinEmby):
         super().__init__(
             server_type="Jellyfin", baseurl=baseurl, token=token, headers=headers
         )
-        
+
     def is_partial_update_supported(self, server_version):
         return server_version >= version.parse("10.9.0")
