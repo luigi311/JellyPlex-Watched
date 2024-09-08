@@ -4,7 +4,7 @@ ENV PUID=1000
 ENV PGID=1000
 ENV GOSU_VERSION 1.17
 
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini dos2unix
 
 # Install gosu
 RUN set -eux; \
@@ -42,7 +42,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN chmod +x *.sh
+RUN chmod +x *.sh && \
+	dos2unix *.sh
 
 ENTRYPOINT ["tini", "--", "/app/entrypoint.sh"]
 CMD ["python", "-u", "main.py"]

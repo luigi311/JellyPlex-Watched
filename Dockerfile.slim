@@ -4,7 +4,7 @@ ENV PUID=1000
 ENV PGID=1000
 
 RUN apt-get update && \
-    apt-get install tini gosu --yes --no-install-recommends && \
+    apt-get install tini gosu dos2unix --yes --no-install-recommends && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN chmod +x *.sh
+RUN chmod +x *.sh && \
+    dos2unix *.sh
 
 ENTRYPOINT ["/bin/tini", "--", "/app/entrypoint.sh"]
 CMD ["python", "-u", "main.py"]
