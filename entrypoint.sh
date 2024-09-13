@@ -4,22 +4,24 @@ set -e
 
 # Check if user is root
 if [ "$(id -u)" = '0' ]; then
+    echo "User is root, checking if we need to create a user and group based on environment variables"
     # Create group and user based on environment variables
     if [ ! "$(getent group "$PGID")" ]; then
         # If groupadd exists, use it
         if command -v groupadd > /dev/null; then
-            groupadd -g "$PGID" jellyplex_group
+            groupadd -g "$PGID" jellyplex_watched
         elif command -v addgroup > /dev/null; then
-            addgroup -g "$PGID" jellyplex_group
+            addgroup -g "$PGID" jellyplex_watched
         fi
     fi
 
+    # If user id does not exist, create the user
     if [ ! "$(getent passwd "$PUID")" ]; then
-        # If useradd exists, use it
         if command -v useradd > /dev/null; then
-            useradd --no-create-home -u "$PUID" -g "$PGID" jellyplex_user
+            useradd --no-create-home -u "$PUID" -g "$PGID" jellyplex_watched
         elif command -v adduser > /dev/null; then
-            adduser -D -H -u "$PUID" -G jellyplex_group jellyplex_user
+            # Use alpine busybox adduser syntax
+            adduser -D -H -u "$PUID" -G jellyplex_watched jellyplex_watched
         fi
     fi
 else 
@@ -39,6 +41,8 @@ MARK_DIR=$(dirname "$MARK_FILE")
 if [ -n "$MARK_DIR" ]; then
     mkdir -p "$MARK_DIR"  
 fi
+
+echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
 
 # If root run as the created user
 if [ "$(id -u)" = '0' ]; then

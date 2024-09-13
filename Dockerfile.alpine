@@ -2,7 +2,7 @@ FROM python:3.11-alpine
 
 ENV PUID=1000
 ENV PGID=1000
-ENV GOSU_VERSION 1.17
+ENV GOSU_VERSION=1.17
 
 RUN apk add --no-cache tini dos2unix
 
