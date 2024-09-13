@@ -20,8 +20,12 @@ if [ "$(id -u)" = '0' ]; then
         if command -v useradd > /dev/null; then
             useradd --no-create-home -u "$PUID" -g "$PGID" jellyplex_watched
         elif command -v adduser > /dev/null; then
+            # Get the group name based on the PGID since adduser does not have a flag to specify the group id
+            # and if the group id already exists the group name will be sommething unexpected
+            GROUPNAME=$(getent group "$PGID" | cut -d: -f1)
+            
             # Use alpine busybox adduser syntax
-            adduser -D -H -u "$PUID" -G jellyplex_watched jellyplex_watched
+            adduser -D -H -u "$PUID" -G "$GROUPNAME" jellyplex_watched
         fi
     fi
 else 
