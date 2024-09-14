@@ -3,6 +3,8 @@ from src.functions import (
     search_mapping,
 )
 
+from copy import copy
+
 
 def generate_user_list(server):
     # generate list of users from server 1 and server 2
@@ -131,3 +133,18 @@ def setup_users(
     logger(f"Server 2 users: {output_server_2_users}", 1)
 
     return output_server_1_users, output_server_2_users
+
+
+def sync_users(original_user_mapping, user_server_mapping, server_type):
+    # if no overrides are defined then return original mapping.
+    if user_server_mapping is None:
+        return original_user_mapping
+    
+    user_mapping = copy(original_user_mapping)
+    for user in original_user_mapping.keys():
+        # if the user override exists in server mapping and server type is not one of the servers
+        # we want to sync then we will remove it from the users we want to map.
+        if user in user_server_mapping and server_type not in user_server_mapping.get(user):
+            del user_mapping[user]
+
+    return user_mapping

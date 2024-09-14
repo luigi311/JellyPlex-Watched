@@ -6,7 +6,10 @@ from src.functions import (
     logger,
     str_to_bool,
 )
-from src.users import setup_users
+from src.users import (
+    setup_users,
+    sync_users
+)
 from src.watched import (
     cleanup_watched,
 )
@@ -94,6 +97,11 @@ def main_loop():
     if user_mapping:
         user_mapping = json.loads(user_mapping.lower())
         logger(f"User Mapping: {user_mapping}", 1)
+    
+    user_server_mapping = os.getenv("USER_SERVER_MAPPING")
+    if user_server_mapping:
+        user_server_mapping = json.loads(user_server_mapping.lower())
+        logger(f"User Server Mapping: {user_server_mapping}", 1)
 
     library_mapping = os.getenv("LIBRARY_MAPPING")
     if library_mapping:
@@ -197,19 +205,21 @@ def main_loop():
             )
 
             if should_sync_server(server_2[0], server_1[0]):
+                sync_to_server1_users = sync_users(user_mapping, user_server_mapping, server_1[0])
                 logger(f"Syncing {server_2[1].info()} -> {server_1[1].info()}", 0)
                 server_1[1].update_watched(
                     server_2_watched_filtered,
-                    user_mapping,
+                    sync_to_server1_users,
                     library_mapping,
                     dryrun,
                 )
 
             if should_sync_server(server_1[0], server_2[0]):
+                sync_to_server2_users = sync_users(user_mapping, user_server_mapping, server_2[0])
                 logger(f"Syncing {server_1[1].info()} -> {server_2[1].info()}", 0)
                 server_2[1].update_watched(
                     server_1_watched_filtered,
-                    user_mapping,
+                    sync_to_server2_users,
                     library_mapping,
                     dryrun,
                 )
