@@ -101,7 +101,7 @@ def main_loop():
     user_server_sync_mapping = os.getenv("USER_SERVER_SYNC_MAPPING")
     if user_server_sync_mapping:
         user_server_sync_mapping = json.loads(user_server_sync_mapping.lower())
-        logger(f"User Server Mapping: {user_server_sync_mapping}", 1)
+        logger(f"User Server Sync Mapping: {user_server_sync_mapping}", 1)
 
     library_mapping = os.getenv("LIBRARY_MAPPING")
     if library_mapping:
