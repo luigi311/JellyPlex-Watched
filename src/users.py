@@ -139,7 +139,7 @@ def sync_users(original_user_mapping, user_server_sync_mapping, server_type):
     # if no overrides are defined then return original mapping.
     if user_server_sync_mapping is None:
         return original_user_mapping
-    
+
     user_mapping = copy(original_user_mapping)
     for user in original_user_mapping.keys():
         # if the user override exists in server mapping and server type is not one of the servers

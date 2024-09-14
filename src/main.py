@@ -97,7 +97,7 @@ def main_loop():
     if user_mapping:
         user_mapping = json.loads(user_mapping.lower())
         logger(f"User Mapping: {user_mapping}", 1)
-    
+
     user_server_sync_mapping = os.getenv("USER_SERVER_SYNC_MAPPING")
     if user_server_sync_mapping:
         user_server_sync_mapping = json.loads(user_server_sync_mapping.lower())
