@@ -16,6 +16,7 @@ sys.path.append(parent)
 from src.users import (
     combine_user_lists,
     filter_user_lists,
+    sync_users
 )
 
 
@@ -37,3 +38,26 @@ def test_filter_user_lists():
     filtered = filter_user_lists(users, blacklist_users, whitelist_users)
 
     assert filtered == {"test": "test2", "luigi311": "luigi311"}
+
+def test_sync_users():
+    users = { "user1": "user1", "user2": "user2", "user3": "user3" }
+
+    # empty sync users returns original list
+    users_to_sync = sync_users(users, {}, 'jellyfin')
+    assert users_to_sync == users
+
+    # None sync users returns original list
+    users_to_sync = sync_users(users, None, 'jellyfin')
+    assert users_to_sync == users
+
+    # sync user not in orignal list returns original list
+    users_to_sync = sync_users(users, { "user4": ['plex'] }, 'jellyfin')
+    assert users_to_sync == users
+
+    # sync user syncing expected server returns original list
+    users_to_sync = sync_users(users, { "user3": ['jellyfin'] }, 'jellyfin')
+    assert users_to_sync == users
+
+    # sync user removed as it is not syncing the server expected.
+    users_to_sync = sync_users(users, { "user2": ['plex'] }, 'jellyfin')
+    assert users_to_sync == { "user1": "user1", "user3": "user3" }
