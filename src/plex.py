@@ -186,7 +186,7 @@ def get_user_library_watched(user, user_plex, library):
                 if show_guids and episode_guids:
                     watched[show_guids] = episode_guids
                     logger(
-                        f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
+                        f"Plex: Added {episode_guids} to {user_name} watched list",
                         3,
                     )
 

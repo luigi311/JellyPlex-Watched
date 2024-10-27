@@ -398,8 +398,8 @@ class JellyfinEmby:
                         user_watched[library_title][show_guids] = mark_episodes_list
                         for episode in mark_episodes_list:
                             logger(
-                                f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
-                                1,
+                                f"{self.server_type}: Added {episode} to {user_name} watched list",
+                                3,
                             )
 
             logger(
@@ -431,6 +431,10 @@ class JellyfinEmby:
                 for library in all_libraries["Items"]:
                     library_id = library["Id"]
                     library_title = library["Name"]
+
+                    if library_title not in sync_libraries:
+                        continue
+
                     identifiers = {
                         "library_id": library_id,
                         "library_title": library_title,
@@ -450,9 +454,6 @@ class JellyfinEmby:
 
                     library_id = library["Identifiers"]["library_id"]
                     library_title = library["Identifiers"]["library_title"]
-
-                    if library_title not in sync_libraries:
-                        continue
 
                     # Get all library types excluding "Folder"
                     types = set(
