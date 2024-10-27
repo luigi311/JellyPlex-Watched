@@ -13,10 +13,7 @@ from src.functions import (
     log_marked,
     str_to_bool,
 )
-from src.library import (
-    check_skip_logic,
-    generate_library_guids_dict,
-)
+from src.library import generate_library_guids_dict
 
 load_dotenv(override=True)
 
@@ -354,11 +351,6 @@ class JellyfinEmby:
                         tuple([show["Path"].split("/")[-1]])
                         if "Path" in show
                         else tuple()
-                    )
-                    show_display_name = (
-                        show_guids["title"]
-                        if show_guids["title"]
-                        else show_guids["locations"]
                     )
 
                     show_guids = frozenset(show_guids.items())
