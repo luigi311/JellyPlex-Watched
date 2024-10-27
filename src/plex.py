@@ -317,7 +317,15 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                         else:
                             logger(msg, 6)
 
-                        log_marked(user.title, library, movies_search.title, None, None)
+                        log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
+                            user.title,
+                            library,
+                            movies_search.title,
+                            None,
+                            None,
+                        )
                     elif video_status["time"] > 60_000:
                         msg = f"Plex: {movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
                         if not dryrun:
@@ -327,6 +335,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                             logger(msg, 6)
 
                         log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
                             user.title,
                             library,
                             movies_search.title,
@@ -358,6 +368,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     logger(msg, 6)
 
                                 log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
                                     user.title,
                                     library,
                                     show_search.title,
@@ -372,6 +384,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     logger(msg, 6)
 
                                 log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
                                     user.title,
                                     library,
                                     show_search.title,
@@ -477,18 +491,13 @@ class Plex:
                 library_type = library.type
 
                 output[library_title] = library_type
-            
+
             return output
         except Exception as e:
             logger(f"Plex: Failed to get libraries, Error: {e}", 2)
             raise Exception(e)
-            
 
-    def get_watched(
-        self,
-        users,
-        sync_libraries
-    ):
+    def get_watched(self, users, sync_libraries):
         try:
             # Get all libraries
             users_watched = {}

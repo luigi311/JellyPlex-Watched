@@ -129,8 +129,14 @@ def check_whitelist_logic(
 
     return skip_reason
 
+
 def filter_libaries(
-    server_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping=None
+    server_libraries,
+    blacklist_library,
+    blacklist_library_type,
+    whitelist_library,
+    whitelist_library_type,
+    library_mapping=None,
 ):
     filtered_libaries = []
     for library in server_libraries:
@@ -145,9 +151,7 @@ def filter_libaries(
         )
 
         if skip_reason:
-            logger(
-                f"Skipping library {library}: {skip_reason}", 1
-            )
+            logger(f"Skipping library {library}: {skip_reason}", 1)
             continue
 
         filtered_libaries.append(library)
@@ -156,7 +160,13 @@ def filter_libaries(
 
 
 def setup_libraries(
-    server_1, server_2, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping=None
+    server_1,
+    server_2,
+    blacklist_library,
+    blacklist_library_type,
+    whitelist_library,
+    whitelist_library_type,
+    library_mapping=None,
 ):
     server_1_libraries = server_1.get_libraries()
     server_2_libraries = server_2.get_libraries()
@@ -164,11 +174,29 @@ def setup_libraries(
     logger(f"Server 2 libraries: {server_2_libraries}", 1)
 
     # Filter out all blacklist, whitelist libaries
-    filtered_server_1_libraries = filter_libaries(server_1_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping)
-    filtered_server_2_libraries = filter_libaries(server_2_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping)
+    filtered_server_1_libraries = filter_libaries(
+        server_1_libraries,
+        blacklist_library,
+        blacklist_library_type,
+        whitelist_library,
+        whitelist_library_type,
+        library_mapping,
+    )
+    filtered_server_2_libraries = filter_libaries(
+        server_2_libraries,
+        blacklist_library,
+        blacklist_library_type,
+        whitelist_library,
+        whitelist_library_type,
+        library_mapping,
+    )
 
-    output_server_1_libaries = match_list(filtered_server_1_libraries, filtered_server_2_libraries, library_mapping)
-    output_server_2_libaries = match_list(filtered_server_2_libraries, filtered_server_1_libraries, library_mapping)
+    output_server_1_libaries = match_list(
+        filtered_server_1_libraries, filtered_server_2_libraries, library_mapping
+    )
+    output_server_2_libaries = match_list(
+        filtered_server_2_libraries, filtered_server_1_libraries, library_mapping
+    )
 
     return output_server_1_libaries, output_server_2_libaries
 

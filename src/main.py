@@ -155,19 +155,23 @@ def main_loop():
             )
 
             server_1_libraries, server_2_libraries = setup_libraries(
-                server_1[1], server_2[1], blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping
+                server_1[1],
+                server_2[1],
+                blacklist_library,
+                blacklist_library_type,
+                whitelist_library,
+                whitelist_library_type,
+                library_mapping,
             )
 
             logger("Creating watched lists", 1)
             server_1_watched = server_1[1].get_watched(
-                server_1_users,
-                server_1_libraries
+                server_1_users, server_1_libraries
             )
             logger("Finished creating watched list server 1", 1)
 
             server_2_watched = server_2[1].get_watched(
-                server_2_users,
-                server_2_libraries
+                server_2_users, server_2_libraries
             )
             logger("Finished creating watched list server 2", 1)
 

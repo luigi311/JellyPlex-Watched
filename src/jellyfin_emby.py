@@ -109,7 +109,6 @@ class JellyfinEmby:
     def __init__(self, server_type, baseurl, token, headers):
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
-
         self.server_type = server_type
         self.baseurl = baseurl
         self.token = token
@@ -124,6 +123,7 @@ class JellyfinEmby:
 
         self.session = requests.Session()
         self.users = self.get_users()
+        self.server_name = self.info(name_only=True)
 
     def query(self, query, query_type, identifiers=None, json=None):
         try:
@@ -175,13 +175,15 @@ class JellyfinEmby:
             )
             raise Exception(e)
 
-    def info(self) -> str:
+    def info(self, name_only: bool = False) -> str:
         try:
             query_string = "/System/Info/Public"
 
             response = self.query(query_string, "get")
 
             if response:
+                if name_only:
+                    return f"{response['ServerName']}"
                 return f"{self.server_type} {response['ServerName']}: {response['Version']}"
             else:
                 return None
@@ -223,7 +225,7 @@ class JellyfinEmby:
     def get_libraries(self):
         try:
             libraries = {}
-            
+
             # Theres no way to get all libraries so individually get list of libraries from all users
             users = self.get_users()
 
@@ -256,12 +258,12 @@ class JellyfinEmby:
                         )
                     else:
                         libraries[library_title] = str(types)
-                        
+
             return libraries
         except Exception as e:
             logger(f"{self.server_type}: Get libraries failed {e}", 2)
             raise Exception(e)
-        
+
     def get_user_library_watched(
         self, user_name, user_id, library_type, library_id, library_title
     ):
@@ -393,9 +395,7 @@ class JellyfinEmby:
                         if show_guids not in user_watched[library_title]:
                             user_watched[library_title][show_guids] = []
 
-                        user_watched[library_title][
-                            show_guids
-                        ] = mark_episodes_list
+                        user_watched[library_title][show_guids] = mark_episodes_list
                         for episode in mark_episodes_list:
                             logger(
                                 f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
@@ -407,9 +407,7 @@ class JellyfinEmby:
                 1,
             )
             if library_title in user_watched:
-                logger(
-                    f"{self.server_type}: {user_watched[library_title]}", 3
-                )
+                logger(f"{self.server_type}: {user_watched[library_title]}", 3)
 
             return user_watched
         except Exception as e:
@@ -421,11 +419,7 @@ class JellyfinEmby:
             logger(traceback.format_exc(), 2)
             return {}
 
-    def get_watched(
-        self,
-        users,
-        sync_libraries
-    ):
+    def get_watched(self, users, sync_libraries):
         try:
             users_watched = {}
             watched = []
@@ -479,7 +473,6 @@ class JellyfinEmby:
                             library_title,
                         )
 
-                
                         if user_name.lower() not in users_watched:
                             users_watched[user_name.lower()] = {}
                         users_watched[user_name.lower()].update(watched)
@@ -546,6 +539,8 @@ class JellyfinEmby:
                                 logger(msg, 6)
 
                             log_marked(
+                                self.server_type,
+                                self.server_name,
                                 user_name,
                                 library,
                                 jellyfin_video.get("Name"),
@@ -568,6 +563,8 @@ class JellyfinEmby:
                                 logger(msg, 6)
 
                             log_marked(
+                                self.server_type,
+                                self.server_name,
                                 user_name,
                                 library,
                                 jellyfin_video.get("Name"),
@@ -674,6 +671,8 @@ class JellyfinEmby:
                                         logger(msg, 6)
 
                                     log_marked(
+                                        self.server_type,
+                                        self.server_name,
                                         user_name,
                                         library,
                                         jellyfin_episode.get("SeriesName"),
@@ -702,6 +701,8 @@ class JellyfinEmby:
                                         logger(msg, 6)
 
                                     log_marked(
+                                        self.server_type,
+                                        self.server_name,
                                         user_name,
                                         library,
                                         jellyfin_episode.get("SeriesName"),

@@ -37,12 +37,18 @@ def logger(message: str, log_type=0):
 
 
 def log_marked(
-    username: str, library: str, movie_show: str, episode: str = None, duration=None
+    server_type: str,
+    server_name: str,
+    username: str,
+    library: str,
+    movie_show: str,
+    episode: str = None,
+    duration=None,
 ):
     if mark_file is None:
         return
 
-    output = f"{username}/{library}/{movie_show}"
+    output = f"{server_type}/{server_name}/{username}/{library}/{movie_show}"
 
     if episode:
         output += f"/{episode}"
@@ -92,6 +98,7 @@ def search_mapping(dictionary: dict, key_value: str):
     else:
         return None
 
+
 # Return list of objects that exist in both lists including mappings
 def match_list(list1, list2, list_mapping=None):
     output = []
@@ -104,6 +111,7 @@ def match_list(list1, list2, list_mapping=None):
                 output.append(element)
 
     return output
+
 
 def future_thread_executor(
     args: list, threads: int = None, override_threads: bool = False
