@@ -1,5 +1,6 @@
 from src.functions import (
     logger,
+    match_list,
     search_mapping,
 )
 
@@ -127,6 +128,49 @@ def check_whitelist_logic(
                     skip_reason = f"{library_title} is not in whitelist_library"
 
     return skip_reason
+
+def filter_libaries(
+    server_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping=None
+):
+    filtered_libaries = []
+    for library in server_libraries:
+        skip_reason = check_skip_logic(
+            library,
+            server_libraries[library],
+            blacklist_library,
+            whitelist_library,
+            blacklist_library_type,
+            whitelist_library_type,
+            library_mapping,
+        )
+
+        if skip_reason:
+            logger(
+                f"Skipping library {library}: {skip_reason}", 1
+            )
+            continue
+
+        filtered_libaries.append(library)
+
+    return filtered_libaries
+
+
+def setup_libraries(
+    server_1, server_2, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping=None
+):
+    server_1_libraries = server_1.get_libraries()
+    server_2_libraries = server_2.get_libraries()
+    logger(f"Server 1 libraries: {server_1_libraries}", 1)
+    logger(f"Server 2 libraries: {server_2_libraries}", 1)
+
+    # Filter out all blacklist, whitelist libaries
+    filtered_server_1_libraries = filter_libaries(server_1_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping)
+    filtered_server_2_libraries = filter_libaries(server_2_libraries, blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping)
+
+    output_server_1_libaries = match_list(filtered_server_1_libraries, filtered_server_2_libraries, library_mapping)
+    output_server_2_libaries = match_list(filtered_server_2_libraries, filtered_server_1_libraries, library_mapping)
+
+    return output_server_1_libaries, output_server_2_libaries
 
 
 def show_title_dict(user_list: dict):

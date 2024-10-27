@@ -466,14 +466,28 @@ class Plex:
             logger(f"Plex: Failed to get users, Error: {e}", 2)
             raise Exception(e)
 
+    def get_libraries(self):
+        try:
+            output = {}
+
+            libraries = self.plex.library.sections()
+
+            for library in libraries:
+                library_title = library.title
+                library_type = library.type
+
+                output[library_title] = library_type
+            
+            return output
+        except Exception as e:
+            logger(f"Plex: Failed to get libraries, Error: {e}", 2)
+            raise Exception(e)
+            
+
     def get_watched(
         self,
         users,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
+        sync_libraries
     ):
         try:
             # Get all libraries
@@ -500,23 +514,7 @@ class Plex:
                 libraries = user_plex.library.sections()
 
                 for library in libraries:
-                    library_title = library.title
-                    library_type = library.type
-
-                    skip_reason = check_skip_logic(
-                        library_title,
-                        library_type,
-                        blacklist_library,
-                        whitelist_library,
-                        blacklist_library_type,
-                        whitelist_library_type,
-                        library_mapping,
-                    )
-
-                    if skip_reason:
-                        logger(
-                            f"Plex: Skipping library {library_title}: {skip_reason}", 1
-                        )
+                    if library.title not in sync_libraries:
                         continue
 
                     user_watched = get_user_library_watched(user, user_plex, library)

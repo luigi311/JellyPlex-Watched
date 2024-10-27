@@ -2,6 +2,7 @@ import os, traceback, json
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
+from src.library import setup_libraries
 from src.functions import (
     logger,
     str_to_bool,
@@ -153,24 +154,20 @@ def main_loop():
                 server_1, server_2, blacklist_users, whitelist_users, user_mapping
             )
 
+            server_1_libraries, server_2_libraries = setup_libraries(
+                server_1[1], server_2[1], blacklist_library, blacklist_library_type, whitelist_library, whitelist_library_type, library_mapping
+            )
+
             logger("Creating watched lists", 1)
             server_1_watched = server_1[1].get_watched(
                 server_1_users,
-                blacklist_library,
-                whitelist_library,
-                blacklist_library_type,
-                whitelist_library_type,
-                library_mapping,
+                server_1_libraries
             )
             logger("Finished creating watched list server 1", 1)
 
             server_2_watched = server_2[1].get_watched(
                 server_2_users,
-                blacklist_library,
-                whitelist_library,
-                blacklist_library_type,
-                whitelist_library_type,
-                library_mapping,
+                server_2_libraries
             )
             logger("Finished creating watched list server 2", 1)
 

@@ -92,6 +92,18 @@ def search_mapping(dictionary: dict, key_value: str):
     else:
         return None
 
+# Return list of objects that exist in both lists including mappings
+def match_list(list1, list2, list_mapping=None):
+    output = []
+    for element in list1:
+        if element in list2:
+            output.append(element)
+        elif list_mapping:
+            element_other = search_mapping(list_mapping, element)
+            if element_other in list2:
+                output.append(element)
+
+    return output
 
 def future_thread_executor(
     args: list, threads: int = None, override_threads: bool = False
