@@ -19,10 +19,7 @@ from src.functions import (
     log_marked,
     str_to_bool,
 )
-from src.library import (
-    check_skip_logic,
-    generate_library_guids_dict,
-)
+from src.library import generate_library_guids_dict
 
 
 load_dotenv(override=True)
@@ -186,7 +183,7 @@ def get_user_library_watched(user, user_plex, library):
                 if show_guids and episode_guids:
                     watched[show_guids] = episode_guids
                     logger(
-                        f"Plex: Added {episode_guids} to {user_name} {show_guids} watched list",
+                        f"Plex: Added {episode_guids} to {user_name} watched list",
                         3,
                     )
 
@@ -317,7 +314,15 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                         else:
                             logger(msg, 6)
 
-                        log_marked(user.title, library, movies_search.title, None, None)
+                        log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
+                            user.title,
+                            library,
+                            movies_search.title,
+                            None,
+                            None,
+                        )
                     elif video_status["time"] > 60_000:
                         msg = f"Plex: {movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
                         if not dryrun:
@@ -327,6 +332,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                             logger(msg, 6)
 
                         log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
                             user.title,
                             library,
                             movies_search.title,
@@ -358,6 +365,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     logger(msg, 6)
 
                                 log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
                                     user.title,
                                     library,
                                     show_search.title,
@@ -372,6 +381,8 @@ def update_user_watched(user, user_plex, library, videos, dryrun):
                                     logger(msg, 6)
 
                                 log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
                                     user.title,
                                     library,
                                     show_search.title,
@@ -466,15 +477,24 @@ class Plex:
             logger(f"Plex: Failed to get users, Error: {e}", 2)
             raise Exception(e)
 
-    def get_watched(
-        self,
-        users,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
-    ):
+    def get_libraries(self):
+        try:
+            output = {}
+
+            libraries = self.plex.library.sections()
+
+            for library in libraries:
+                library_title = library.title
+                library_type = library.type
+
+                output[library_title] = library_type
+
+            return output
+        except Exception as e:
+            logger(f"Plex: Failed to get libraries, Error: {e}", 2)
+            raise Exception(e)
+
+    def get_watched(self, users, sync_libraries):
         try:
             # Get all libraries
             users_watched = {}
@@ -500,23 +520,7 @@ class Plex:
                 libraries = user_plex.library.sections()
 
                 for library in libraries:
-                    library_title = library.title
-                    library_type = library.type
-
-                    skip_reason = check_skip_logic(
-                        library_title,
-                        library_type,
-                        blacklist_library,
-                        whitelist_library,
-                        blacklist_library_type,
-                        whitelist_library_type,
-                        library_mapping,
-                    )
-
-                    if skip_reason:
-                        logger(
-                            f"Plex: Skipping library {library_title}: {skip_reason}", 1
-                        )
+                    if library.title not in sync_libraries:
                         continue
 
                     user_watched = get_user_library_watched(user, user_plex, library)

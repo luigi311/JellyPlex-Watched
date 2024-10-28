@@ -13,13 +13,7 @@ from src.functions import (
     log_marked,
     str_to_bool,
 )
-from src.library import (
-    check_skip_logic,
-    generate_library_guids_dict,
-)
-from src.watched import (
-    combine_watched_dicts,
-)
+from src.library import generate_library_guids_dict
 
 load_dotenv(override=True)
 
@@ -112,7 +106,6 @@ class JellyfinEmby:
     def __init__(self, server_type, baseurl, token, headers):
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
-
         self.server_type = server_type
         self.baseurl = baseurl
         self.token = token
@@ -127,6 +120,7 @@ class JellyfinEmby:
 
         self.session = requests.Session()
         self.users = self.get_users()
+        self.server_name = self.info(name_only=True)
 
     def query(self, query, query_type, identifiers=None, json=None):
         try:
@@ -178,13 +172,15 @@ class JellyfinEmby:
             )
             raise Exception(e)
 
-    def info(self) -> str:
+    def info(self, name_only: bool = False) -> str:
         try:
             query_string = "/System/Info/Public"
 
             response = self.query(query_string, "get")
 
             if response:
+                if name_only:
+                    return f"{response['ServerName']}"
                 return f"{self.server_type} {response['ServerName']}: {response['Version']}"
             else:
                 return None
@@ -223,13 +219,54 @@ class JellyfinEmby:
             logger(f"{self.server_type}: Get users failed {e}", 2)
             raise Exception(e)
 
+    def get_libraries(self):
+        try:
+            libraries = {}
+
+            # Theres no way to get all libraries so individually get list of libraries from all users
+            users = self.get_users()
+
+            for _, user_id in users.items():
+                user_libraries = self.query(f"/Users/{user_id}/Views", "get")
+                for library in user_libraries["Items"]:
+                    library_id = library["Id"]
+                    library_title = library["Name"]
+
+                    # Get library items to check the type
+                    media_info = self.query(
+                        f"/Users/{user_id}/Items"
+                        + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
+                        "get",
+                    )
+
+                    types = set(
+                        [
+                            x["Type"]
+                            for x in media_info["Items"]
+                            if x["Type"] in ["Movie", "Series", "Episode"]
+                        ]
+                    )
+                    all_types = set([x["Type"] for x in media_info["Items"]])
+
+                    if not types:
+                        logger(
+                            f"{self.server_type}: Skipping Library {library_title} found wanted types: {all_types}",
+                            1,
+                        )
+                    else:
+                        libraries[library_title] = str(types)
+
+            return libraries
+        except Exception as e:
+            logger(f"{self.server_type}: Get libraries failed {e}", 2)
+            raise Exception(e)
+
     def get_user_library_watched(
         self, user_name, user_id, library_type, library_id, library_title
     ):
         try:
             user_name = user_name.lower()
             user_watched = {}
-            user_watched[user_name] = {}
 
             logger(
                 f"{self.server_type}: Generating watched for {user_name} in library {library_title}",
@@ -238,7 +275,7 @@ class JellyfinEmby:
 
             # Movies
             if library_type == "Movie":
-                user_watched[user_name][library_title] = []
+                user_watched[library_title] = []
                 watched = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
@@ -274,7 +311,7 @@ class JellyfinEmby:
                         movie_guids = get_guids(self.server_type, movie)
 
                         # Append the movie dictionary to the list for the given user and library
-                        user_watched[user_name][library_title].append(movie_guids)
+                        user_watched[library_title].append(movie_guids)
                         logger(
                             f"{self.server_type}: Added {movie_guids} to {user_name} watched list",
                             3,
@@ -283,7 +320,7 @@ class JellyfinEmby:
             # TV Shows
             if library_type in ["Series", "Episode"]:
                 # Initialize an empty dictionary for the given user and library
-                user_watched[user_name][library_title] = {}
+                user_watched[library_title] = {}
 
                 # Retrieve a list of watched TV shows
                 watched_shows = self.query(
@@ -314,11 +351,6 @@ class JellyfinEmby:
                         tuple([show["Path"].split("/")[-1]])
                         if "Path" in show
                         else tuple()
-                    )
-                    show_display_name = (
-                        show_guids["title"]
-                        if show_guids["title"]
-                        else show_guids["locations"]
                     )
 
                     show_guids = frozenset(show_guids.items())
@@ -352,26 +384,22 @@ class JellyfinEmby:
 
                     if mark_episodes_list:
                         # Add the show dictionary to the user's watched list
-                        if show_guids not in user_watched[user_name][library_title]:
-                            user_watched[user_name][library_title][show_guids] = []
+                        if show_guids not in user_watched[library_title]:
+                            user_watched[library_title][show_guids] = []
 
-                        user_watched[user_name][library_title][
-                            show_guids
-                        ] = mark_episodes_list
+                        user_watched[library_title][show_guids] = mark_episodes_list
                         for episode in mark_episodes_list:
                             logger(
-                                f"{self.server_type}: Added {episode} to {user_name} {show_display_name} watched list",
-                                1,
+                                f"{self.server_type}: Added {episode} to {user_name} watched list",
+                                3,
                             )
 
             logger(
                 f"{self.server_type}: Got watched for {user_name} in library {library_title}",
                 1,
             )
-            if library_title in user_watched[user_name]:
-                logger(
-                    f"{self.server_type}: {user_watched[user_name][library_title]}", 3
-                )
+            if library_title in user_watched:
+                logger(f"{self.server_type}: {user_watched[library_title]}", 3)
 
             return user_watched
         except Exception as e:
@@ -383,130 +411,64 @@ class JellyfinEmby:
             logger(traceback.format_exc(), 2)
             return {}
 
-    def get_users_watched(
-        self,
-        user_name,
-        user_id,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
-    ):
+    def get_watched(self, users, sync_libraries):
         try:
-            # Get all libraries
-            user_name = user_name.lower()
+            users_watched = {}
             watched = []
 
-            libraries = []
+            for user_name, user_id in users.items():
+                libraries = []
 
-            all_libraries = self.query(f"/Users/{user_id}/Views", "get")
-            for library in all_libraries["Items"]:
-                library_id = library["Id"]
-                library_title = library["Name"]
-                identifiers = {
-                    "library_id": library_id,
-                    "library_title": library_title,
-                }
-                libraries.append(
-                    self.query(
-                        f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
-                        "get",
-                        identifiers=identifiers,
+                all_libraries = self.query(f"/Users/{user_id}/Views", "get")
+                for library in all_libraries["Items"]:
+                    library_id = library["Id"]
+                    library_title = library["Name"]
+
+                    if library_title not in sync_libraries:
+                        continue
+
+                    identifiers = {
+                        "library_id": library_id,
+                        "library_title": library_title,
+                    }
+                    libraries.append(
+                        self.query(
+                            f"/Users/{user_id}/Items"
+                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
+                            "get",
+                            identifiers=identifiers,
+                        )
                     )
-                )
 
-            for library in libraries:
-                if len(library["Items"]) == 0:
-                    continue
+                for library in libraries:
+                    if len(library["Items"]) == 0:
+                        continue
 
-                library_id = library["Identifiers"]["library_id"]
-                library_title = library["Identifiers"]["library_title"]
-                # Get all library types excluding "Folder"
-                types = set(
-                    [
-                        x["Type"]
-                        for x in library["Items"]
-                        if x["Type"] in ["Movie", "Series", "Episode"]
-                    ]
-                )
+                    library_id = library["Identifiers"]["library_id"]
+                    library_title = library["Identifiers"]["library_title"]
 
-                skip_reason = check_skip_logic(
-                    library_title,
-                    types,
-                    blacklist_library,
-                    whitelist_library,
-                    blacklist_library_type,
-                    whitelist_library_type,
-                    library_mapping,
-                )
-
-                if skip_reason:
-                    logger(
-                        f"{self.server_type}: Skipping library {library_title}: {skip_reason}",
-                        1,
+                    # Get all library types excluding "Folder"
+                    types = set(
+                        [
+                            x["Type"]
+                            for x in library["Items"]
+                            if x["Type"] in ["Movie", "Series", "Episode"]
+                        ]
                     )
-                    continue
 
-                # If there are multiple types in library raise error
-                if types is None or len(types) < 1:
-                    all_types = set([x["Type"] for x in library["Items"]])
-                    logger(
-                        f"{self.server_type}: Skipping Library {library_title} found types: {types}, all types: {all_types}",
-                        1,
-                    )
-                    continue
-
-                for library_type in types:
-                    # Get watched for user
-                    watched.append(
-                        self.get_user_library_watched(
+                    for library_type in types:
+                        # Get watched for user
+                        watched = self.get_user_library_watched(
                             user_name,
                             user_id,
                             library_type,
                             library_id,
                             library_title,
                         )
-                    )
 
-            return watched
-        except Exception as e:
-            logger(f"{self.server_type}: Failed to get users watched, Error: {e}", 2)
-            raise Exception(e)
-
-    def get_watched(
-        self,
-        users,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping=None,
-    ):
-        try:
-            users_watched = {}
-            watched = []
-
-            for user_name, user_id in users.items():
-                watched.append(
-                    self.get_users_watched(
-                        user_name,
-                        user_id,
-                        blacklist_library,
-                        whitelist_library,
-                        blacklist_library_type,
-                        whitelist_library_type,
-                        library_mapping,
-                    )
-                )
-
-            for user_watched in watched:
-                user_watched_combine = combine_watched_dicts(user_watched)
-                for user, user_watched_temp in user_watched_combine.items():
-                    if user not in users_watched:
-                        users_watched[user] = {}
-                    users_watched[user].update(user_watched_temp)
+                        if user_name.lower() not in users_watched:
+                            users_watched[user_name.lower()] = {}
+                        users_watched[user_name.lower()].update(watched)
 
             return users_watched
         except Exception as e:
@@ -570,6 +532,8 @@ class JellyfinEmby:
                                 logger(msg, 6)
 
                             log_marked(
+                                self.server_type,
+                                self.server_name,
                                 user_name,
                                 library,
                                 jellyfin_video.get("Name"),
@@ -592,6 +556,8 @@ class JellyfinEmby:
                                 logger(msg, 6)
 
                             log_marked(
+                                self.server_type,
+                                self.server_name,
                                 user_name,
                                 library,
                                 jellyfin_video.get("Name"),
@@ -698,6 +664,8 @@ class JellyfinEmby:
                                         logger(msg, 6)
 
                                     log_marked(
+                                        self.server_type,
+                                        self.server_name,
                                         user_name,
                                         library,
                                         jellyfin_episode.get("SeriesName"),
@@ -726,6 +694,8 @@ class JellyfinEmby:
                                         logger(msg, 6)
 
                                     log_marked(
+                                        self.server_type,
+                                        self.server_name,
                                         user_name,
                                         library,
                                         jellyfin_episode.get("SeriesName"),

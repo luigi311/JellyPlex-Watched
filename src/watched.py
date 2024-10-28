@@ -5,33 +5,6 @@ from src.functions import logger, search_mapping, contains_nested
 from src.library import generate_library_guids_dict
 
 
-def combine_watched_dicts(dicts: list):
-    # Ensure that the input is a list of dictionaries
-    if not all(isinstance(d, dict) for d in dicts):
-        raise ValueError("Input must be a list of dictionaries")
-
-    combined_dict = {}
-
-    for single_dict in dicts:
-        for key, value in single_dict.items():
-            if key not in combined_dict:
-                combined_dict[key] = {}
-
-            for subkey, subvalue in value.items():
-                if subkey in combined_dict[key]:
-                    # If the subkey already exists in the combined dictionary,
-                    # check if the values are different and raise an exception if they are
-                    if combined_dict[key][subkey] != subvalue:
-                        raise ValueError(
-                            f"Conflicting values for subkey '{subkey}' under key '{key}'"
-                        )
-                else:
-                    # If the subkey does not exist in the combined dictionary, add it
-                    combined_dict[key][subkey] = subvalue
-
-    return combined_dict
-
-
 def check_remove_entry(video, library, video_index, library_watched_list_2):
     if video_index is not None:
         if (
