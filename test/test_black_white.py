@@ -18,12 +18,12 @@ from src.black_white import setup_black_white_lists
 
 def test_setup_black_white_lists():
     # Simple
-    blacklist_library = "library1, library2"
-    whitelist_library = "library1, library2"
-    blacklist_library_type = "library_type1, library_type2"
-    whitelist_library_type = "library_type1, library_type2"
-    blacklist_users = "user1, user2"
-    whitelist_users = "user1, user2"
+    blacklist_library = ["library1", "library2"]
+    whitelist_library = ["library1", "library2"]
+    blacklist_library_type = ["library_type1", "library_type2"]
+    whitelist_library_type = ["library_type1", "library_type2"]
+    blacklist_users = ["user1", "user2"]
+    whitelist_users = ["user1", "user2"]
 
     (
         results_blacklist_library,
@@ -47,6 +47,14 @@ def test_setup_black_white_lists():
     assert return_whitelist_library_type == ["library_type1", "library_type2"]
     assert return_blacklist_users == ["user1", "user2"]
     assert return_whitelist_users == ["user1", "user2"]
+
+def test_library_mapping_black_white_list():
+    blacklist_library = ["library1", "library2"]
+    whitelist_library = ["library1", "library2"]
+    blacklist_library_type = ["library_type1", "library_type2"]
+    whitelist_library_type = ["library_type1", "library_type2"]
+    blacklist_users = ["user1", "user2"]
+    whitelist_users = ["user1", "user2"]
 
     # Library Mapping and user mapping
     library_mapping = {"library1": "library3"}
