@@ -545,10 +545,7 @@ class Plex:
                 user_other = None
                 # If type of user is dict
                 if user_mapping:
-                    if user in user_mapping.keys():
-                        user_other = user_mapping[user]
-                    elif user in user_mapping.values():
-                        user_other = search_mapping(user_mapping, user)
+                    user_other = search_mapping(user_mapping, user)
 
                 for index, value in enumerate(self.users):
                     username_title = (
@@ -591,10 +588,7 @@ class Plex:
                 for library, videos in libraries.items():
                     library_other = None
                     if library_mapping:
-                        if library in library_mapping.keys():
-                            library_other = library_mapping[library]
-                        elif library in library_mapping.values():
-                            library_other = search_mapping(library_mapping, library)
+                        library_other = search_mapping(library_mapping, library)
 
                     # if library in plex library list
                     library_list = user_plex.library.sections()
