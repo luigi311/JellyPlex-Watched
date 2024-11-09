@@ -1,5 +1,5 @@
 from src.jellyfin_emby import JellyfinEmby
-from packaging import version
+from packaging.version import (parse, Version)
 
 
 class Emby(JellyfinEmby):
@@ -21,5 +21,5 @@ class Emby(JellyfinEmby):
             server_type="Emby", baseurl=baseurl, token=token, headers=headers
         )
 
-    def is_partial_update_supported(self, server_version):
-        return server_version > version.parse("4.4")
+    def is_partial_update_supported(self, server_version: Version) -> bool:
+        return server_version > parse("4.4")

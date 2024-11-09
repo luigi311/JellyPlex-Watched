@@ -2,9 +2,10 @@
 
 import traceback, os
 from math import floor
+from typing import Union
 from dotenv import load_dotenv
 import requests
-from packaging import version
+from packaging.version import (parse, Version)
 
 from src.functions import (
     logger,
@@ -172,7 +173,7 @@ class JellyfinEmby:
             )
             raise Exception(e)
 
-    def info(self, name_only: bool = False) -> str:
+    def info(self, name_only: bool = False, version_only: bool = False) -> Union[str | Version]:
         try:
             query_string = "/System/Info/Public"
 
@@ -181,25 +182,15 @@ class JellyfinEmby:
             if response:
                 if name_only:
                     return f"{response['ServerName']}"
+                elif version_only:
+                    return parse(response["Version"])
+                
                 return f"{self.server_type} {response['ServerName']}: {response['Version']}"
             else:
                 return None
 
         except Exception as e:
             logger(f"{self.server_type}: Get server name failed {e}", 2)
-            raise Exception(e)
-
-    def get_server_version(self):
-        try:
-            response = self.query("/System/Info/Public", "get")
-
-            if response:
-                return version.parse(response["Version"])
-            else:
-                return None
-
-        except Exception as e:
-            logger(f"{self.server_type}: Get server version failed: {e}", 2)
             raise Exception(e)
 
     def get_users(self):
@@ -725,7 +716,7 @@ class JellyfinEmby:
         self, watched_list, user_mapping=None, library_mapping=None, dryrun=False
     ):
         try:
-            server_version = self.get_server_version()
+            server_version = self.info(version_only=True)
             update_partial = self.is_partial_update_supported(server_version)
 
             if not update_partial:
