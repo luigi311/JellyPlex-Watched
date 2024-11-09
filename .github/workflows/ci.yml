@@ -88,7 +88,7 @@ jobs:
         run: |
           mv test/ci_guids.env .env
           python main.py
-          python test/validate_ci_marklog.py --dry
+          python test/validate_ci_marklog.py --guids
           
           rm mark.log
 
@@ -96,7 +96,7 @@ jobs:
         run: |
           mv test/ci_locations.env .env
           python main.py
-          python test/validate_ci_marklog.py --dry
+          python test/validate_ci_marklog.py --locations
           
           rm mark.log
 
