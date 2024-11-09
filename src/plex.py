@@ -295,7 +295,11 @@ def update_user_watched(user, user_plex, library, watched_videos, dryrun):
             watched_movies_ids,
         ) = generate_library_guids_dict(watched_videos)
 
-        if not watched_movies_ids and not watched_shows_ids and not watched_episodes_ids:
+        if (
+            not watched_movies_ids
+            and not watched_shows_ids
+            and not watched_episodes_ids
+        ):
             logger(
                 f"Jellyfin: No videos to mark as watched for {user.title} in library {library}",
                 1,
@@ -362,7 +366,9 @@ def update_user_watched(user, user_plex, library, watched_videos, dryrun):
                 if watched_show_episodes_status:
                     for plex_episode in plex_show.episodes():
                         watched_episode_status = get_video_status(
-                            plex_episode, watched_episodes_ids, watched_show_episodes_status
+                            plex_episode,
+                            watched_episodes_ids,
+                            watched_show_episodes_status,
                         )
                         if watched_episode_status:
                             if watched_episode_status["completed"]:
@@ -385,7 +391,9 @@ def update_user_watched(user, user_plex, library, watched_videos, dryrun):
                                 msg = f"Plex: {plex_show.title} {plex_episode.title} as partially watched for {floor(watched_episode_status['time'] / 60_000)} minutes for {user.title} in {library}"
                                 if not dryrun:
                                     logger(msg, 5)
-                                    plex_episode.updateTimeline(watched_episode_status["time"])
+                                    plex_episode.updateTimeline(
+                                        watched_episode_status["time"]
+                                    )
                                 else:
                                     logger(msg, 6)
 

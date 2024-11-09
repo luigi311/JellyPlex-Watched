@@ -1,10 +1,12 @@
 import os, traceback, json
+from typing import Literal
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
 from src.library import setup_libraries
 from src.functions import (
     logger,
+    parse_string_to_list,
     str_to_bool,
 )
 from src.users import setup_users
@@ -17,7 +19,10 @@ from src.connection import generate_server_connections
 load_dotenv(override=True)
 
 
-def should_sync_server(server_1_type, server_2_type):
+def should_sync_server(
+    server_1_type: Literal["plex", "jellyfin", "emby"],
+    server_2_type: Literal["plex", "jellyfin", "emby"],
+) -> bool:
     sync_from_plex_to_jellyfin = str_to_bool(
         os.getenv("SYNC_FROM_PLEX_TO_JELLYFIN", "True")
     )
@@ -91,24 +96,26 @@ def main_loop():
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger(f"Dryrun: {dryrun}", 1)
 
-    user_mapping = os.getenv("USER_MAPPING")
-    if user_mapping:
-        user_mapping = json.loads(user_mapping.lower())
-        logger(f"User Mapping: {user_mapping}", 1)
+    user_mapping = os.getenv("USER_MAPPING", "")
+    user_mapping = json.loads(user_mapping.lower())
+    logger(f"User Mapping: {user_mapping}", 1)
 
-    library_mapping = os.getenv("LIBRARY_MAPPING")
-    if library_mapping:
-        library_mapping = json.loads(library_mapping)
-        logger(f"Library Mapping: {library_mapping}", 1)
+    library_mapping = os.getenv("LIBRARY_MAPPING", "")
+    library_mapping = json.loads(library_mapping)
+    logger(f"Library Mapping: {library_mapping}", 1)
 
     # Create (black/white)lists
     logger("Creating (black/white)lists", 1)
-    blacklist_library = os.getenv("BLACKLIST_LIBRARY", None)
-    whitelist_library = os.getenv("WHITELIST_LIBRARY", None)
-    blacklist_library_type = os.getenv("BLACKLIST_LIBRARY_TYPE", None)
-    whitelist_library_type = os.getenv("WHITELIST_LIBRARY_TYPE", None)
-    blacklist_users = os.getenv("BLACKLIST_USERS", None)
-    whitelist_users = os.getenv("WHITELIST_USERS", None)
+    blacklist_library = parse_string_to_list(os.getenv("BLACKLIST_LIBRARY", None))
+    whitelist_library = parse_string_to_list(os.getenv("WHITELIST_LIBRARY", None))
+    blacklist_library_type = parse_string_to_list(
+        os.getenv("BLACKLIST_LIBRARY_TYPE", None)
+    )
+    whitelist_library_type = parse_string_to_list(
+        os.getenv("WHITELIST_LIBRARY_TYPE", None)
+    )
+    blacklist_users = parse_string_to_list(os.getenv("BLACKLIST_USERS", None))
+    whitelist_users = parse_string_to_list(os.getenv("WHITELIST_USERS", None))
 
     (
         blacklist_library,
@@ -219,7 +226,7 @@ def main_loop():
 def main():
     run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
-    times = []
+    times: list[float] = []
     while True:
         try:
             start = perf_counter()

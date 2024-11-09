@@ -48,6 +48,7 @@ def test_setup_black_white_lists():
     assert return_blacklist_users == ["user1", "user2"]
     assert return_whitelist_users == ["user1", "user2"]
 
+
 def test_library_mapping_black_white_list():
     blacklist_library = ["library1", "library2"]
     whitelist_library = ["library1", "library2"]

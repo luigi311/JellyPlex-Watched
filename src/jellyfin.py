@@ -1,5 +1,5 @@
 from src.jellyfin_emby import JellyfinEmby
-from packaging.version import (parse, Version)
+from packaging.version import parse, Version
 
 
 class Jellyfin(JellyfinEmby):

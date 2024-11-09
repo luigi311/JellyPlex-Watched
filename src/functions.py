@@ -62,7 +62,7 @@ def log_marked(
 
 # Reimplementation of distutils.util.strtobool due to it being deprecated
 # Source: https://github.com/PostHog/posthog/blob/01e184c29d2c10c43166f1d40a334abbc3f99d8a/posthog/utils.py#L668
-def str_to_bool(value: any) -> bool:
+def str_to_bool(value: str) -> bool:
     if not value:
         return False
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
@@ -84,7 +84,7 @@ def contains_nested(element, lst):
 
 
 # Get mapped value
-def search_mapping(dictionary: dict, key_value: str):
+def search_mapping(dictionary: dict[str, str], key_value: str) -> str | None:
     if key_value in dictionary.keys():
         return dictionary[key_value]
     elif key_value.lower() in dictionary.keys():
@@ -100,8 +100,10 @@ def search_mapping(dictionary: dict, key_value: str):
 
 
 # Return list of objects that exist in both lists including mappings
-def match_list(list1, list2, list_mapping=None):
-    output = []
+def match_list(
+    list1: list[str], list2: list[str], list_mapping: dict[str, str] | None = None
+) -> list[str]:
+    output: list[str] = []
     for element in list1:
         if element in list2:
             output.append(element)
@@ -146,3 +148,11 @@ def future_thread_executor(
                 raise Exception(e)
 
     return results
+
+
+def parse_string_to_list(string: str | None) -> list[str]:
+    output: list[str] = []
+    if string and len(string) > 0:
+        output = string.split(",")
+
+    return output

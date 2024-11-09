@@ -128,8 +128,7 @@ def main():
 
     expected_locations = expected_emby + expected_plex + expected_jellyfin
     # Remove Custom Movies/TV Shows as they should not have guids
-    expected_guids = [item for item in expected_locations if "Custom" not in item ]
-
+    expected_guids = [item for item in expected_locations if "Custom" not in item]
 
     expected_write = [
         "Plex/JellyPlex-CI/jellyplex_watched/Custom Movies/Movie Two (2021)",
@@ -171,7 +170,7 @@ def main():
         "Jellyfin/Jellyfin-Server/JellyUser/Custom Movies/Movie Three (2022)",
         "Jellyfin/Jellyfin-Server/JellyUser/Custom TV Shows/Greatest Show Ever (3000)/S01E03",
         "Jellyfin/Jellyfin-Server/JellyUser/Movies/Tears of Steel",
-        "Jellyfin/Jellyfin-Server/JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4"
+        "Jellyfin/Jellyfin-Server/JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
     ]
 
     # Expected values for the mark.log file, dry-run is slightly different than write-run
