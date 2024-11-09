@@ -205,7 +205,7 @@ def get_user_library_watched(user, user_plex, library):
 def find_video(plex_search, video_ids, videos=None):
     try:
         if not generate_guids and not generate_locations:
-            return False, []
+            return None
 
         if generate_locations:
             for location in plex_search.locations:
@@ -226,7 +226,7 @@ def find_video(plex_search, video_ids, videos=None):
                                 for episode in episodes:
                                     episode_videos.append(episode)
 
-                    return True, episode_videos
+                    return episode_videos
 
         if generate_guids:
             for guid in plex_search.guids:
@@ -244,11 +244,11 @@ def find_video(plex_search, video_ids, videos=None):
                                         for episode in episodes:
                                             episode_videos.append(episode)
 
-                        return True, episode_videos
+                        return episode_videos
 
-        return False, []
+        return None
     except Exception:
-        return False, []
+        return None
 
 
 def get_video_status(plex_search, video_ids, videos):
@@ -286,125 +286,128 @@ def get_video_status(plex_search, video_ids, videos):
         return None
 
 
-def update_user_watched(user, user_plex, library, videos, dryrun):
+def update_user_watched(user, user_plex, library, watched_videos, dryrun):
     try:
         logger(f"Plex: Updating watched for {user.title} in library {library}", 1)
         (
-            videos_shows_ids,
-            videos_episodes_ids,
-            videos_movies_ids,
-        ) = generate_library_guids_dict(videos)
-        logger(
-            f"Plex: mark list\nShows: {videos_shows_ids}\nEpisodes: {videos_episodes_ids}\nMovies: {videos_movies_ids}",
-            1,
-        )
+            watched_shows_ids,
+            watched_episodes_ids,
+            watched_movies_ids,
+        ) = generate_library_guids_dict(watched_videos)
 
-        library_videos = user_plex.library.section(library)
-        if videos_movies_ids:
-            for movies_search in library_videos.search(unwatched=True):
-                video_status = get_video_status(
-                    movies_search, videos_movies_ids, videos
-                )
-                if video_status:
-                    if video_status["completed"]:
-                        msg = f"Plex: {movies_search.title} as watched for {user.title} in {library}"
-                        if not dryrun:
-                            logger(msg, 5)
-                            movies_search.markWatched()
-                        else:
-                            logger(msg, 6)
-
-                        log_marked(
-                            "Plex",
-                            user_plex.friendlyName,
-                            user.title,
-                            library,
-                            movies_search.title,
-                            None,
-                            None,
-                        )
-                    elif video_status["time"] > 60_000:
-                        msg = f"Plex: {movies_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
-                        if not dryrun:
-                            logger(msg, 5)
-                            movies_search.updateTimeline(video_status["time"])
-                        else:
-                            logger(msg, 6)
-
-                        log_marked(
-                            "Plex",
-                            user_plex.friendlyName,
-                            user.title,
-                            library,
-                            movies_search.title,
-                            duration=video_status["time"],
-                        )
-                else:
-                    logger(
-                        f"Plex: Skipping movie {movies_search.title} as it is not in mark list for {user.title}",
-                        1,
-                    )
-
-        if videos_shows_ids and videos_episodes_ids:
-            for show_search in library_videos.search(unwatched=True):
-                show_found, episode_videos = find_video(
-                    show_search, videos_shows_ids, videos
-                )
-                if show_found:
-                    for episode_search in show_search.episodes():
-                        video_status = get_video_status(
-                            episode_search, videos_episodes_ids, episode_videos
-                        )
-                        if video_status:
-                            if video_status["completed"]:
-                                msg = f"Plex: {show_search.title} {episode_search.title} as watched for {user.title} in {library}"
-                                if not dryrun:
-                                    logger(msg, 5)
-                                    episode_search.markWatched()
-                                else:
-                                    logger(msg, 6)
-
-                                log_marked(
-                                    "Plex",
-                                    user_plex.friendlyName,
-                                    user.title,
-                                    library,
-                                    show_search.title,
-                                    episode_search.title,
-                                )
-                            else:
-                                msg = f"Plex: {show_search.title} {episode_search.title} as partially watched for {floor(video_status['time'] / 60_000)} minutes for {user.title} in {library}"
-                                if not dryrun:
-                                    logger(msg, 5)
-                                    episode_search.updateTimeline(video_status["time"])
-                                else:
-                                    logger(msg, 6)
-
-                                log_marked(
-                                    "Plex",
-                                    user_plex.friendlyName,
-                                    user.title,
-                                    library,
-                                    show_search.title,
-                                    episode_search.title,
-                                    video_status["time"],
-                                )
-                        else:
-                            logger(
-                                f"Plex: Skipping episode {episode_search.title} as it is not in mark list for {user.title}",
-                                3,
-                            )
-                else:
-                    logger(
-                        f"Plex: Skipping show {show_search.title} as it is not in mark list for {user.title}",
-                        3,
-                    )
-
-        if not videos_movies_ids and not videos_shows_ids and not videos_episodes_ids:
+        if not watched_movies_ids and not watched_shows_ids and not watched_episodes_ids:
             logger(
                 f"Jellyfin: No videos to mark as watched for {user.title} in library {library}",
                 1,
             )
+
+            return
+
+        logger(
+            f"Plex: mark list\nShows: {watched_shows_ids}\nEpisodes: {watched_episodes_ids}\nMovies: {watched_movies_ids}",
+            1,
+        )
+
+        library_videos = user_plex.library.section(library)
+        if watched_movies_ids:
+            for plex_movie in library_videos.search(unwatched=True):
+                watched_movie_status = get_video_status(
+                    plex_movie, watched_movies_ids, watched_videos
+                )
+                if watched_movie_status:
+                    if watched_movie_status["completed"]:
+                        msg = f"Plex: {plex_movie.title} as watched for {user.title} in {library}"
+                        if not dryrun:
+                            logger(msg, 5)
+                            plex_movie.markWatched()
+                        else:
+                            logger(msg, 6)
+
+                        log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
+                            user.title,
+                            library,
+                            plex_movie.title,
+                            None,
+                            None,
+                        )
+                    elif watched_movie_status["time"] > 60_000:
+                        msg = f"Plex: {plex_movie.title} as partially watched for {floor(watched_movie_status['time'] / 60_000)} minutes for {user.title} in {library}"
+                        if not dryrun:
+                            logger(msg, 5)
+                            plex_movie.updateTimeline(watched_movie_status["time"])
+                        else:
+                            logger(msg, 6)
+
+                        log_marked(
+                            "Plex",
+                            user_plex.friendlyName,
+                            user.title,
+                            library,
+                            plex_movie.title,
+                            duration=watched_movie_status["time"],
+                        )
+                else:
+                    logger(
+                        f"Plex: Skipping movie {plex_movie.title} as it is not in mark list for {user.title}",
+                        1,
+                    )
+
+        if watched_shows_ids and watched_episodes_ids:
+            for plex_show in library_videos.search(unwatched=True):
+                watched_show_episodes_status = find_video(
+                    plex_show, watched_shows_ids, watched_videos
+                )
+                if watched_show_episodes_status:
+                    for plex_episode in plex_show.episodes():
+                        watched_episode_status = get_video_status(
+                            plex_episode, watched_episodes_ids, watched_show_episodes_status
+                        )
+                        if watched_episode_status:
+                            if watched_episode_status["completed"]:
+                                msg = f"Plex: {plex_show.title} {plex_episode.title} as watched for {user.title} in {library}"
+                                if not dryrun:
+                                    logger(msg, 5)
+                                    plex_episode.markWatched()
+                                else:
+                                    logger(msg, 6)
+
+                                log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
+                                    user.title,
+                                    library,
+                                    plex_show.title,
+                                    plex_episode.title,
+                                )
+                            else:
+                                msg = f"Plex: {plex_show.title} {plex_episode.title} as partially watched for {floor(watched_episode_status['time'] / 60_000)} minutes for {user.title} in {library}"
+                                if not dryrun:
+                                    logger(msg, 5)
+                                    plex_episode.updateTimeline(watched_episode_status["time"])
+                                else:
+                                    logger(msg, 6)
+
+                                log_marked(
+                                    "Plex",
+                                    user_plex.friendlyName,
+                                    user.title,
+                                    library,
+                                    plex_show.title,
+                                    plex_episode.title,
+                                    watched_episode_status["time"],
+                                )
+                        else:
+                            logger(
+                                f"Plex: Skipping episode {plex_episode.title} as it is not in mark list for {user.title}",
+                                3,
+                            )
+                else:
+                    logger(
+                        f"Plex: Skipping show {plex_show.title} as it is not in mark list for {user.title}",
+                        3,
+                    )
 
     except Exception as e:
         logger(
@@ -585,7 +588,7 @@ class Plex:
                         )
                         continue
 
-                for library, videos in libraries.items():
+                for library, watched_videos in libraries.items():
                     library_other = None
                     if library_mapping:
                         library_other = search_mapping(library_mapping, library)
@@ -621,7 +624,7 @@ class Plex:
                             user,
                             user_plex,
                             library,
-                            videos,
+                            watched_videos,
                             dryrun,
                         ]
                     )
