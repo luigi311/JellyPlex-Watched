@@ -1,5 +1,6 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Any, Callable
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -8,11 +9,11 @@ log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
 mark_file = os.getenv("MARK_FILE", os.getenv("MARKFILE", "mark.log"))
 
 
-def logger(message: str, log_type=0):
+def logger(message: str, log_type: int = 0):
     debug = str_to_bool(os.getenv("DEBUG", "False"))
     debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
 
-    output = str(message)
+    output: str | None = str(message)
     if log_type == 0:
         pass
     elif log_type == 1 and (debug and debug_level in ("info", "debug")):
@@ -42,12 +43,9 @@ def log_marked(
     username: str,
     library: str,
     movie_show: str,
-    episode: str = None,
-    duration=None,
+    episode: str | None = None,
+    duration: float | None = None,
 ):
-    if mark_file is None:
-        return
-
     output = f"{server_type}/{server_name}/{username}/{library}/{movie_show}"
 
     if episode:
@@ -69,7 +67,7 @@ def str_to_bool(value: str) -> bool:
 
 
 # Search for nested element in list
-def contains_nested(element, lst):
+def contains_nested(element: str, lst: list[tuple[str] | None] | tuple[str] | None):
     if lst is None:
         return None
 
@@ -116,33 +114,39 @@ def match_list(
 
 
 def future_thread_executor(
-    args: list, threads: int = None, override_threads: bool = False
-):
-    futures_list = []
-    results = []
+    args: list[tuple[Callable[..., Any], ...]],
+    threads: int | None = None,
+    override_threads: bool = False,
+) -> list[Any]:
+    results: list[Any] = []
 
-    workers = min(int(os.getenv("MAX_THREADS", 32)), os.cpu_count() * 2)
-    if threads:
+    # Determine the number of workers, defaulting to 1 if os.cpu_count() returns None
+    max_threads_env: int = int(os.getenv("MAX_THREADS", 32))
+    cpu_threads: int = os.cpu_count() or 1  # Default to 1 if os.cpu_count() is None
+    workers: int = min(max_threads_env, cpu_threads * 2)
+
+    # Adjust workers based on threads parameter and override_threads flag
+    if threads is not None:
         workers = min(threads, workers)
-
     if override_threads:
-        workers = threads
+        workers = threads if threads is not None else workers
 
     # If only one worker, run in main thread to avoid overhead
     if workers == 1:
-        results = []
         for arg in args:
             results.append(arg[0](*arg[1:]))
         return results
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures_list: list[Future[Any]] = []
+
         for arg in args:
             # * arg unpacks the list into actual arguments
             futures_list.append(executor.submit(*arg))
 
-        for future in futures_list:
+        for out in futures_list:
             try:
-                result = future.result()
+                result = out.result()
                 results.append(result)
             except Exception as e:
                 raise Exception(e)

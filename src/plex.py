@@ -488,7 +488,7 @@ class Plex:
             logger(f"Plex: Failed to get users, Error: {e}", 2)
             raise Exception(e)
 
-    def get_libraries(self):
+    def get_libraries(self) -> dict[str, str]:
         try:
             output = {}
 

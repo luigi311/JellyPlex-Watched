@@ -4,16 +4,15 @@ from src.functions import (
     search_mapping,
 )
 
-
 def check_skip_logic(
-    library_title,
-    library_type,
-    blacklist_library,
-    whitelist_library,
-    blacklist_library_type,
-    whitelist_library_type,
-    library_mapping=None,
-):
+    library_title: str,
+    library_type: str,
+    blacklist_library: list[str],
+    whitelist_library: list[str],
+    blacklist_library_type: list[str],
+    whitelist_library_type: list[str],
+    library_mapping: dict[str, str] | None = None,
+) -> str | None:
     skip_reason = None
     library_other = None
     if library_mapping:
@@ -48,11 +47,11 @@ def check_skip_logic(
 
 
 def check_blacklist_logic(
-    library_title,
-    library_type,
-    blacklist_library,
-    blacklist_library_type,
-    library_other=None,
+    library_title: str,
+    library_type: str,
+    blacklist_library: list[str],
+    blacklist_library_type: list[str],
+    library_other: str | None = None,
 ):
     skip_reason = None
     if isinstance(library_type, (list, tuple, set)):
@@ -84,11 +83,11 @@ def check_blacklist_logic(
 
 
 def check_whitelist_logic(
-    library_title,
-    library_type,
-    whitelist_library,
-    whitelist_library_type,
-    library_other=None,
+    library_title: str,
+    library_type: str,
+    whitelist_library: list[str],
+    whitelist_library_type: list[str],
+    library_other: str | None = None,
 ):
     skip_reason = None
     if len(whitelist_library_type) > 0:
@@ -131,14 +130,14 @@ def check_whitelist_logic(
 
 
 def filter_libaries(
-    server_libraries,
-    blacklist_library,
-    blacklist_library_type,
-    whitelist_library,
-    whitelist_library_type,
-    library_mapping=None,
-):
-    filtered_libaries = []
+    server_libraries: dict[str, str],
+    blacklist_library: list[str],
+    blacklist_library_type: list[str],
+    whitelist_library: list[str],
+    whitelist_library_type: list[str],
+    library_mapping: dict[str, str] | None = None,
+) -> list[str]:
+    filtered_libaries: list[str] = []
     for library in server_libraries:
         skip_reason = check_skip_logic(
             library,
@@ -162,12 +161,12 @@ def filter_libaries(
 def setup_libraries(
     server_1,
     server_2,
-    blacklist_library,
-    blacklist_library_type,
-    whitelist_library,
-    whitelist_library_type,
-    library_mapping=None,
-):
+    blacklist_library: list[str],
+    blacklist_library_type: list[str],
+    whitelist_library: list[str],
+    whitelist_library_type: list[str],
+    library_mapping: dict[str, str] | None = None,
+) -> tuple[list[str], list[str]]:
     server_1_libraries = server_1.get_libraries()
     server_2_libraries = server_2.get_libraries()
     logger(f"Server 1 libraries: {server_1_libraries}", 1)
@@ -201,14 +200,16 @@ def setup_libraries(
     return output_server_1_libaries, output_server_2_libaries
 
 
-def show_title_dict(user_list: dict):
+def show_title_dict(user_list) -> dict[str, list[tuple[str] | None]]:
     try:
-        show_output_dict = {}
+        if not isinstance(user_list, dict):
+            return {}
+
+        show_output_dict: dict[str, list[tuple[str] | None]] = {}
         show_output_dict["locations"] = []
         show_counter = 0  # Initialize a counter for the current show position
 
-        show_output_keys = user_list.keys()
-        show_output_keys = [dict(x) for x in list(show_output_keys)]
+        show_output_keys = [dict(x) for x in list(user_list.keys())]
         for show_key in show_output_keys:
             for provider_key, provider_value in show_key.items():
                 # Skip title
@@ -233,9 +234,19 @@ def show_title_dict(user_list: dict):
         return {}
 
 
-def episode_title_dict(user_list: dict):
+def episode_title_dict(
+    user_list,
+) -> dict[
+    str, list[str | bool | int | tuple[str] | dict[str, str | tuple[str]] | None]
+]:
     try:
-        episode_output_dict = {}
+        if not isinstance(user_list, dict):
+            return {}
+
+        episode_output_dict: dict[
+            str,
+            list[str | bool | int | tuple[str] | dict[str, str | tuple[str]] | None],
+        ] = {}
         episode_output_dict["completed"] = []
         episode_output_dict["time"] = []
         episode_output_dict["locations"] = []
@@ -293,12 +304,18 @@ def episode_title_dict(user_list: dict):
         return {}
 
 
-def movies_title_dict(user_list: dict):
+def movies_title_dict(
+    user_list,
+) -> dict[str, list[str | bool | int | tuple[str] | None]]:
     try:
-        movies_output_dict = {}
-        movies_output_dict["completed"] = []
-        movies_output_dict["time"] = []
-        movies_output_dict["locations"] = []
+        if not isinstance(user_list, list):
+            return {}
+
+        movies_output_dict: dict[str, list[str | bool | int | tuple[str] | None]] = {
+            "completed": [],
+            "time": [],
+            "locations": [],
+        }
         movie_counter = 0  # Initialize a counter for the current movie position
 
         for movie in user_list:
@@ -325,7 +342,11 @@ def movies_title_dict(user_list: dict):
         return {}
 
 
-def generate_library_guids_dict(user_list: dict):
+def generate_library_guids_dict(user_list) -> tuple[
+    dict[str, list[tuple[str] | None]],
+    dict[str, list[str | bool | int | tuple[str] | dict[str, str | tuple[str]] | None]],
+    dict[str, list[str | bool | int | tuple[str] | None]],
+]:
     # Handle the case where user_list is empty or does not contain the expected keys and values
     if not user_list:
         return {}, {}, {}
