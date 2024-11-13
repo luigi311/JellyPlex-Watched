@@ -1,4 +1,3 @@
-from typing import Literal
 from plexapi.myplex import MyPlexAccount
 from src.emby import Emby
 from src.jellyfin import Jellyfin
@@ -9,22 +8,18 @@ from src.functions import (
 )
 
 
-def generate_user_list(
-    server: tuple[Literal["plex", "jellyfin", "emby"], Plex | Jellyfin | Emby]
-) -> list[str]:
+def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
     # generate list of users from server 1 and server 2
-    server_type = server[0]
-    server_connection = server[1]
 
     server_users: list[str] = []
-    if server_type == "plex":
-        for user in server_connection.users:
+    if isinstance(server, Plex):
+        for user in server.users:
             server_users.append(
                 user.username.lower() if user.username else user.title.lower()
             )
 
-    elif server_type in ["jellyfin", "emby"]:
-        server_users = [key.lower() for key in server_connection.users.keys()]
+    elif isinstance(server, (Jellyfin, Emby)):
+        server_users = [key.lower() for key in server.users.keys()]
 
     return server_users
 
@@ -78,12 +73,12 @@ def filter_user_lists(
 
 
 def generate_server_users(
-    server: tuple[Literal["plex", "jellyfin", "emby"], Plex | Jellyfin | Emby],
+    server: Plex | Jellyfin | Emby,
     users: dict[str, str],
 ) -> list[MyPlexAccount] | dict[str, str] | None:
-    if server[0] == "plex":
+    if isinstance(server, Plex):
         plex_server_users: list[MyPlexAccount] = []
-        for plex_user in server[1].users:
+        for plex_user in server.users:
             username_title = (
                 plex_user.username if plex_user.username else plex_user.title
             )
@@ -95,9 +90,9 @@ def generate_server_users(
                 plex_server_users.append(plex_user)
 
         return plex_server_users
-    elif server[0] in ["jellyfin", "emby"]:
+    elif isinstance(server, (Jellyfin, Emby)):
         jelly_emby_server_users: dict[str, str] = {}
-        for jellyfin_user, jellyfin_id in server[1].users.items():
+        for jellyfin_user, jellyfin_id in server.users.items():
             if (
                 jellyfin_user.lower() in users.keys()
                 or jellyfin_user.lower() in users.values()
@@ -110,8 +105,8 @@ def generate_server_users(
 
 
 def setup_users(
-    server_1: tuple[Literal["plex", "jellyfin", "emby"], Plex | Jellyfin | Emby],
-    server_2: tuple[Literal["plex", "jellyfin", "emby"], Plex | Jellyfin | Emby],
+    server_1: Plex | Jellyfin | Emby,
+    server_2: Plex | Jellyfin | Emby,
     blacklist_users: list[str],
     whitelist_users: list[str],
     user_mapping: dict[str, str] | None = None,
@@ -133,12 +128,12 @@ def setup_users(
     # Check if users is none or empty
     if output_server_1_users is None or len(output_server_1_users) == 0:
         logger(
-            f"No users found for server 1 {server_1[0]}, users: {server_1_users}, overlapping users {users}, filtered users {users_filtered}, server 1 users {server_1[1].users}"
+            f"No users found for server 1 {type(server_1)}, users: {server_1_users}, overlapping users {users}, filtered users {users_filtered}, server 1 users {server_1.users}"
         )
 
     if output_server_2_users is None or len(output_server_2_users) == 0:
         logger(
-            f"No users found for server 2 {server_2[0]}, users: {server_2_users}, overlapping users {users} filtered users {users_filtered}, server 2 users {server_2[1].users}"
+            f"No users found for server 2 {type(server_2)}, users: {server_2_users}, overlapping users {users} filtered users {users_filtered}, server 2 users {server_2.users}"
         )
 
     if (

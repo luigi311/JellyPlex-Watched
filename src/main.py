@@ -1,8 +1,10 @@
 import os, traceback, json
-from typing import Literal
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 
+from src.emby import Emby
+from src.jellyfin import Jellyfin
+from src.plex import Plex
 from src.library import setup_libraries
 from src.functions import (
     logger,
@@ -20,8 +22,8 @@ load_dotenv(override=True)
 
 
 def should_sync_server(
-    server_1_type: Literal["plex", "jellyfin", "emby"],
-    server_2_type: Literal["plex", "jellyfin", "emby"],
+    server_1: Plex | Jellyfin | Emby,
+    server_2: Plex | Jellyfin | Emby,
 ) -> bool:
     sync_from_plex_to_jellyfin = str_to_bool(
         os.getenv("SYNC_FROM_PLEX_TO_JELLYFIN", "True")
@@ -45,42 +47,42 @@ def should_sync_server(
     )
     sync_from_emby_to_emby = str_to_bool(os.getenv("SYNC_FROM_EMBY_TO_EMBY", "True"))
 
-    if server_1_type == "plex":
-        if server_2_type == "jellyfin" and not sync_from_plex_to_jellyfin:
+    if isinstance(server_1, Plex):
+        if isinstance(server_2, Jellyfin) and not sync_from_plex_to_jellyfin:
             logger("Sync from plex -> jellyfin is disabled", 1)
             return False
 
-        if server_2_type == "emby" and not sync_from_plex_to_emby:
+        if isinstance(server_2, Emby) and not sync_from_plex_to_emby:
             logger("Sync from plex -> emby is disabled", 1)
             return False
 
-        if server_2_type == "plex" and not sync_from_plex_to_plex:
+        if isinstance(server_2, Plex) and not sync_from_plex_to_plex:
             logger("Sync from plex -> plex is disabled", 1)
             return False
 
-    if server_1_type == "jellyfin":
-        if server_2_type == "plex" and not sync_from_jelly_to_plex:
+    if isinstance(server_1, Jellyfin):
+        if isinstance(server_2, Plex) and not sync_from_jelly_to_plex:
             logger("Sync from jellyfin -> plex is disabled", 1)
             return False
 
-        if server_2_type == "jellyfin" and not sync_from_jelly_to_jellyfin:
+        if isinstance(server_2, Jellyfin) and not sync_from_jelly_to_jellyfin:
             logger("Sync from jellyfin -> jellyfin is disabled", 1)
             return False
 
-        if server_2_type == "emby" and not sync_from_jelly_to_emby:
+        if isinstance(server_2, Emby) and not sync_from_jelly_to_emby:
             logger("Sync from jellyfin -> emby is disabled", 1)
             return False
 
-    if server_1_type == "emby":
-        if server_2_type == "plex" and not sync_from_emby_to_plex:
+    if isinstance(server_1, Emby):
+        if isinstance(server_2, Plex) and not sync_from_emby_to_plex:
             logger("Sync from emby -> plex is disabled", 1)
             return False
 
-        if server_2_type == "jellyfin" and not sync_from_emby_to_jellyfin:
+        if isinstance(server_2, Jellyfin) and not sync_from_emby_to_jellyfin:
             logger("Sync from emby -> jellyfin is disabled", 1)
             return False
 
-        if server_2_type == "emby" and not sync_from_emby_to_emby:
+        if isinstance(server_2, Emby) and not sync_from_emby_to_emby:
             logger("Sync from emby -> emby is disabled", 1)
             return False
 
@@ -147,13 +149,13 @@ def main_loop():
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
             # Check if server 1 and server 2 are going to be synced in either direction, skip if not
-            if not should_sync_server(
-                server_1[0], server_2[0]
-            ) and not should_sync_server(server_2[0], server_1[0]):
+            if not should_sync_server(server_1, server_2) and not should_sync_server(
+                server_2, server_1
+            ):
                 continue
 
-            logger(f"Server 1: {server_1[0].capitalize()}: {server_1[1].info()}", 0)
-            logger(f"Server 2: {server_2[0].capitalize()}: {server_2[1].info()}", 0)
+            logger(f"Server 1: {type(server_1)}: {server_1.info()}", 0)
+            logger(f"Server 2: {type(server_2)}: {server_2.info()}", 0)
 
             # Create users list
             logger("Creating users list", 1)
@@ -162,8 +164,8 @@ def main_loop():
             )
 
             server_1_libraries, server_2_libraries = setup_libraries(
-                server_1[1],
-                server_2[1],
+                server_1,
+                server_2,
                 blacklist_library,
                 blacklist_library_type,
                 whitelist_library,
@@ -172,14 +174,10 @@ def main_loop():
             )
 
             logger("Creating watched lists", 1)
-            server_1_watched = server_1[1].get_watched(
-                server_1_users, server_1_libraries
-            )
+            server_1_watched = server_1.get_watched(server_1_users, server_1_libraries)
             logger("Finished creating watched list server 1", 1)
 
-            server_2_watched = server_2[1].get_watched(
-                server_2_users, server_2_libraries
-            )
+            server_2_watched = server_2.get_watched(server_2_users, server_2_libraries)
             logger("Finished creating watched list server 2", 1)
 
             logger(f"Server 1 watched: {server_1_watched}", 3)
@@ -204,18 +202,18 @@ def main_loop():
                 1,
             )
 
-            if should_sync_server(server_2[0], server_1[0]):
-                logger(f"Syncing {server_2[1].info()} -> {server_1[1].info()}", 0)
-                server_1[1].update_watched(
+            if should_sync_server(server_2, server_1):
+                logger(f"Syncing {server_2.info()} -> {server_1.info()}", 0)
+                server_1.update_watched(
                     server_2_watched_filtered,
                     user_mapping,
                     library_mapping,
                     dryrun,
                 )
 
-            if should_sync_server(server_1[0], server_2[0]):
-                logger(f"Syncing {server_1[1].info()} -> {server_2[1].info()}", 0)
-                server_2[1].update_watched(
+            if should_sync_server(server_1, server_2):
+                logger(f"Syncing {server_1.info()} -> {server_2.info()}", 0)
+                server_2.update_watched(
                     server_1_watched_filtered,
                     user_mapping,
                     library_mapping,
