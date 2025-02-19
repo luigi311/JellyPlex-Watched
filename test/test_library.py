@@ -21,10 +21,6 @@ from src.library import (
     check_skip_logic,
     check_blacklist_logic,
     check_whitelist_logic,
-    show_title_dict,
-    episode_title_dict,
-    movies_title_dict,
-    generate_library_guids_dict,
 )
 
 blacklist_library = ["TV Shows"]
@@ -280,45 +276,3 @@ def test_check_whitelist_logic():
     )
 
     assert skip_reason is None
-
-
-def test_show_title_dict():
-    show_titles_dict = show_title_dict(show_list)
-
-    assert show_titles_dict == show_titles
-
-
-def test_episode_title_dict():
-    episode_titles_dict = episode_title_dict(show_list)
-
-    assert episode_titles_dict == episode_titles
-
-
-def test_movies_title_dict():
-    movies_titles_dict = movies_title_dict(movie_list)
-
-    assert movies_titles_dict == movie_titles
-
-
-def test_generate_library_guids_dict():
-    # Test with shows
-    (
-        show_titles_dict,
-        episode_titles_dict,
-        movies_titles_dict,
-    ) = generate_library_guids_dict(show_list)
-
-    assert show_titles_dict == show_titles
-    assert episode_titles_dict == episode_titles
-    assert movies_titles_dict == {}
-
-    # Test with movies
-    (
-        show_titles_dict,
-        episode_titles_dict,
-        movies_titles_dict,
-    ) = generate_library_guids_dict(movie_list)
-
-    assert show_titles_dict == {}
-    assert episode_titles_dict == {}
-    assert movies_titles_dict == movie_titles
