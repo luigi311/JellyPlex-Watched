@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 from dotenv import load_dotenv
 
 from src.functions import logger, str_to_bool
@@ -9,39 +10,32 @@ from src.emby import Emby
 load_dotenv(override=True)
 
 
-def jellyfin_emby_server_connection(server_baseurl, server_token, server_type):
-    servers = []
+def jellyfin_emby_server_connection(
+    server_baseurl: str, server_token: str, server_type: Literal["jellyfin", "emby"]
+) -> list[Jellyfin | Emby]:
+    servers: list[Jellyfin | Emby] = []
+    server: Jellyfin | Emby
 
-    server_baseurl = server_baseurl.split(",")
-    server_token = server_token.split(",")
+    server_baseurls = server_baseurl.split(",")
+    server_tokens = server_token.split(",")
 
-    if len(server_baseurl) != len(server_token):
+    if len(server_baseurls) != len(server_tokens):
         raise Exception(
             f"{server_type.upper()}_BASEURL and {server_type.upper()}_TOKEN must have the same number of entries"
         )
 
-    for i, baseurl in enumerate(server_baseurl):
+    for i, baseurl in enumerate(server_baseurls):
         baseurl = baseurl.strip()
         if baseurl[-1] == "/":
             baseurl = baseurl[:-1]
 
         if server_type == "jellyfin":
-            server = Jellyfin(baseurl=baseurl, token=server_token[i].strip())
-            servers.append(
-                (
-                    "jellyfin",
-                    server,
-                )
-            )
+            server = Jellyfin(baseurl=baseurl, token=server_tokens[i].strip())
+            servers.append(server)
 
         elif server_type == "emby":
-            server = Emby(baseurl=baseurl, token=server_token[i].strip())
-            servers.append(
-                (
-                    "emby",
-                    server,
-                )
-            )
+            server = Emby(baseurl=baseurl, token=server_tokens[i].strip())
+            servers.append(server)
         else:
             raise Exception("Unknown server type")
 
@@ -50,19 +44,19 @@ def jellyfin_emby_server_connection(server_baseurl, server_token, server_type):
     return servers
 
 
-def generate_server_connections():
-    servers = []
+def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
+    servers: list[Plex | Jellyfin | Emby] = []
 
-    plex_baseurl = os.getenv("PLEX_BASEURL", None)
-    plex_token = os.getenv("PLEX_TOKEN", None)
-    plex_username = os.getenv("PLEX_USERNAME", None)
-    plex_password = os.getenv("PLEX_PASSWORD", None)
-    plex_servername = os.getenv("PLEX_SERVERNAME", None)
+    plex_baseurl_str: str | None = os.getenv("PLEX_BASEURL", None)
+    plex_token_str: str | None = os.getenv("PLEX_TOKEN", None)
+    plex_username_str: str | None = os.getenv("PLEX_USERNAME", None)
+    plex_password_str: str | None = os.getenv("PLEX_PASSWORD", None)
+    plex_servername_str: str | None = os.getenv("PLEX_SERVERNAME", None)
     ssl_bypass = str_to_bool(os.getenv("SSL_BYPASS", "False"))
 
-    if plex_baseurl and plex_token:
-        plex_baseurl = plex_baseurl.split(",")
-        plex_token = plex_token.split(",")
+    if plex_baseurl_str and plex_token_str:
+        plex_baseurl = plex_baseurl_str.split(",")
+        plex_token = plex_token_str.split(",")
 
         if len(plex_baseurl) != len(plex_token):
             raise Exception(
@@ -81,17 +75,12 @@ def generate_server_connections():
 
             logger(f"Plex Server {i} info: {server.info()}", 3)
 
-            servers.append(
-                (
-                    "plex",
-                    server,
-                )
-            )
+            servers.append(server)
 
-    if plex_username and plex_password and plex_servername:
-        plex_username = plex_username.split(",")
-        plex_password = plex_password.split(",")
-        plex_servername = plex_servername.split(",")
+    if plex_username_str and plex_password_str and plex_servername_str:
+        plex_username = plex_username_str.split(",")
+        plex_password = plex_password_str.split(",")
+        plex_servername = plex_servername_str.split(",")
 
         if len(plex_username) != len(plex_password) or len(plex_username) != len(
             plex_servername
@@ -111,16 +100,10 @@ def generate_server_connections():
             )
 
             logger(f"Plex Server {i} info: {server.info()}", 3)
-            servers.append(
-                (
-                    "plex",
-                    server,
-                )
-            )
+            servers.append(server)
 
     jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)
     jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
-
     if jellyfin_baseurl and jellyfin_token:
         servers.extend(
             jellyfin_emby_server_connection(
@@ -130,7 +113,6 @@ def generate_server_connections():
 
     emby_baseurl = os.getenv("EMBY_BASEURL", None)
     emby_token = os.getenv("EMBY_TOKEN", None)
-
     if emby_baseurl and emby_token:
         servers.extend(
             jellyfin_emby_server_connection(emby_baseurl, emby_token, "emby")

@@ -2,9 +2,10 @@
 
 import traceback, os
 from math import floor
+from typing import Any, Literal
 from dotenv import load_dotenv
 import requests
-from packaging import version
+from packaging.version import parse, Version
 
 from src.functions import (
     logger,
@@ -19,39 +20,6 @@ load_dotenv(override=True)
 
 generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
 generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
-
-
-def get_guids(server_type, item):
-    if item.get("Name"):
-        guids = {"title": item.get("Name")}
-    else:
-        logger(f"{server_type}: Name not found in {item.get('Id')}", 1)
-        guids = {"title": None}
-
-    if "ProviderIds" in item:
-        guids.update({k.lower(): v for k, v in item["ProviderIds"].items()})
-    else:
-        logger(f"{server_type}: ProviderIds not found in {item.get('Name')}", 1)
-
-    if "MediaSources" in item:
-        guids["locations"] = tuple(
-            [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
-        )
-    else:
-        logger(f"{server_type}: MediaSources not found in {item.get('Name')}", 1)
-        guids["locations"] = tuple()
-
-    if "UserData" in item:
-        guids["status"] = {
-            "completed": item["UserData"]["Played"],
-            # Convert ticks to milliseconds to match Plex
-            "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
-        }
-    else:
-        logger(f"{server_type}: UserData not found in {item.get('Name')}", 1)
-        guids["status"] = {}
-
-    return guids
 
 
 def get_video_status(server_video, videos_ids, videos):
@@ -103,7 +71,13 @@ def get_video_status(server_video, videos_ids, videos):
 
 
 class JellyfinEmby:
-    def __init__(self, server_type, baseurl, token, headers):
+    def __init__(
+        self,
+        server_type: Literal["Jellyfin", "Emby"],
+        baseurl: str,
+        token: str,
+        headers: dict[str, str],
+    ):
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
         self.server_type = server_type
@@ -122,9 +96,17 @@ class JellyfinEmby:
         self.users = self.get_users()
         self.server_name = self.info(name_only=True)
 
-    def query(self, query, query_type, identifiers=None, json=None):
+    def query(
+        self,
+        query: str,
+        query_type: Literal["get", "post"],
+        identifiers: dict[str, str] | None = None,
+        json: dict[str, float] | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         try:
-            results = None
+            results: (
+                dict[str, list[Any] | dict[str, str]] | list[dict[str, Any]] | None
+            ) = None
 
             if query_type == "get":
                 response = self.session.get(
@@ -160,7 +142,7 @@ class JellyfinEmby:
                     raise Exception("Query result is not of type list or dict")
 
             # append identifiers to results
-            if identifiers:
+            if identifiers and results:
                 results["Identifiers"] = identifiers
 
             return results
@@ -172,16 +154,21 @@ class JellyfinEmby:
             )
             raise Exception(e)
 
-    def info(self, name_only: bool = False) -> str:
+    def info(
+        self, name_only: bool = False, version_only: bool = False
+    ) -> str | Version | None:
         try:
             query_string = "/System/Info/Public"
 
-            response = self.query(query_string, "get")
+            response: dict[str, Any] = self.query(query_string, "get")
 
             if response:
                 if name_only:
-                    return f"{response['ServerName']}"
-                return f"{self.server_type} {response['ServerName']}: {response['Version']}"
+                    return response["ServerName"]
+                elif version_only:
+                    return parse(response["Version"])
+
+                return f"{self.server_type} {response.get('ServerName')}: {response.get('Version')}"
             else:
                 return None
 
@@ -189,37 +176,63 @@ class JellyfinEmby:
             logger(f"{self.server_type}: Get server name failed {e}", 2)
             raise Exception(e)
 
-    def get_server_version(self):
+    def get_users(self) -> dict[str, str]:
         try:
-            response = self.query("/System/Info/Public", "get")
-
-            if response:
-                return version.parse(response["Version"])
-            else:
-                return None
-
-        except Exception as e:
-            logger(f"{self.server_type}: Get server version failed: {e}", 2)
-            raise Exception(e)
-
-    def get_users(self):
-        try:
-            users = {}
+            users: dict[str, str] = {}
 
             query_string = "/Users"
-            response = self.query(query_string, "get")
+            response: list[dict[str, str | bool]] = self.query(query_string, "get")
 
             # If response is not empty
             if response:
                 for user in response:
-                    users[user["Name"]] = user["Id"]
+                    if isinstance(user["Name"], str) and isinstance(user["Id"], str):
+                        users[user["Name"]] = user["Id"]
 
             return users
         except Exception as e:
             logger(f"{self.server_type}: Get users failed {e}", 2)
             raise Exception(e)
 
-    def get_libraries(self):
+    def get_guids(self, item: dict):
+        guids: dict[str, str | tuple[str] | dict[str, bool | int]] = {}
+
+        if item.get("Name"):
+            guids["title"] = item.get("Name")
+        else:
+            logger(f"{self.server_type}: Name not found in {item.get('Id')}", 1)
+            guids["title"] = None
+
+        if "ProviderIds" in item:
+            guids.update({k.lower(): v for k, v in item["ProviderIds"].items()})
+        else:
+            logger(
+                f"{self.server_type}: ProviderIds not found in {item.get('Name')}", 1
+            )
+
+        if "MediaSources" in item:
+            guids["locations"] = tuple(
+                [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
+            )
+        else:
+            logger(
+                f"{self.server_type}: MediaSources not found in {item.get('Name')}", 1
+            )
+            guids["locations"] = tuple()
+
+        if "UserData" in item:
+            guids["status"] = {
+                "completed": item["UserData"]["Played"],
+                # Convert ticks to milliseconds to match Plex
+                "time": floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
+            }
+        else:
+            logger(f"{self.server_type}: UserData not found in {item.get('Name')}", 1)
+            guids["status"] = {}
+
+        return guids
+
+    def get_libraries(self) -> dict[str, str]:
         try:
             libraries = {}
 
@@ -227,7 +240,7 @@ class JellyfinEmby:
             users = self.get_users()
 
             for _, user_id in users.items():
-                user_libraries = self.query(f"/Users/{user_id}/Views", "get")
+                user_libraries: dict = self.query(f"/Users/{user_id}/Views", "get")
                 for library in user_libraries["Items"]:
                     library_id = library["Id"]
                     library_title = library["Name"]
@@ -308,7 +321,7 @@ class JellyfinEmby:
                         )
 
                         # Get the movie's GUIDs
-                        movie_guids = get_guids(self.server_type, movie)
+                        movie_guids = self.get_guids(movie)
 
                         # Append the movie dictionary to the list for the given user and library
                         user_watched[library_title].append(movie_guids)
@@ -379,7 +392,7 @@ class JellyfinEmby:
                             episode["UserData"]["Played"] == True
                             or episode["UserData"]["PlaybackPositionTicks"] > 600000000
                         ):
-                            episode_guids = get_guids(self.server_type, episode)
+                            episode_guids = self.get_guids(episode)
                             mark_episodes_list.append(episode_guids)
 
                     if mark_episodes_list:
@@ -411,7 +424,9 @@ class JellyfinEmby:
             logger(traceback.format_exc(), 2)
             return {}
 
-    def get_watched(self, users, sync_libraries):
+    def get_watched(
+        self, users: dict[str, str], sync_libraries: list[str]
+    ):
         try:
             users_watched = {}
             watched = []
@@ -427,7 +442,7 @@ class JellyfinEmby:
                     if library_title not in sync_libraries:
                         continue
 
-                    identifiers = {
+                    identifiers: dict[str, str] = {
                         "library_id": library_id,
                         "library_title": library_title,
                     }
@@ -444,8 +459,8 @@ class JellyfinEmby:
                     if len(library["Items"]) == 0:
                         continue
 
-                    library_id = library["Identifiers"]["library_id"]
-                    library_title = library["Identifiers"]["library_title"]
+                    library_id: str = library["Identifiers"]["library_id"]
+                    library_title: str = library["Identifiers"]["library_title"]
 
                     # Get all library types excluding "Folder"
                     types = set(
@@ -725,7 +740,7 @@ class JellyfinEmby:
         self, watched_list, user_mapping=None, library_mapping=None, dryrun=False
     ):
         try:
-            server_version = self.get_server_version()
+            server_version = self.info(version_only=True)
             update_partial = self.is_partial_update_supported(server_version)
 
             if not update_partial:
