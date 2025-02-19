@@ -66,21 +66,6 @@ def str_to_bool(value: str) -> bool:
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
 
 
-# Search for nested element in list
-def contains_nested(element: str, lst: list[tuple[str] | None] | tuple[str] | None):
-    if lst is None:
-        return None
-
-    for i, item in enumerate(lst):
-        if item is None:
-            continue
-        if element in item:
-            return i
-        elif element == item:
-            return i
-    return None
-
-
 # Get mapped value
 def search_mapping(dictionary: dict[str, str], key_value: str) -> str | None:
     if key_value in dictionary.keys():
