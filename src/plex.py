@@ -322,12 +322,14 @@ class Plex:
                     processed_shows.append(show.key)
                     show_guids = extract_guids_from_item(show)
                     episode_mediaitem = []
-                    for episode in show.episodes():
-                        if episode.isWatched or episode.viewOffset >= 60000:
 
-                            episode_mediaitem.append(
-                                get_mediaitem(episode, episode.isWatched)
-                            )
+                    # Fetch watched or partially watched episodes
+                    for episode in show.watched() + show.episodes(
+                        viewOffset__gte=60_000
+                    ):
+                        episode_mediaitem.append(
+                            get_mediaitem(episode, episode.isWatched)
+                        )
 
                     if episode_mediaitem:
                         watched.series.append(
