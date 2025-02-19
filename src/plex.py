@@ -61,18 +61,6 @@ def extract_guids_from_item(item: Movie | Show | Episode) -> dict[str, str]:
 def extract_identifiers_from_item(item: Movie | Show | Episode) -> MediaIdentifiers:
     guids = extract_guids_from_item(item)
 
-    if not item.locations:
-        logger(
-            f"Plex: {item.title} has no locations",
-            1,
-        )
-
-    if not item.guids:
-        logger(
-            f"Plex: {item.title} has no guids",
-            1,
-        )
-
     return MediaIdentifiers(
         title=item.title,
         locations=(
