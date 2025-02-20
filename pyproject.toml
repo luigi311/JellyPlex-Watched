@@ -1,0 +1,21 @@
+[project]
+name = "jellyplex-watched"
+version = "6.1.2"
+description = "Sync watched between media servers locally"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "packaging==24.2",
+    "plexapi==4.16.1",
+    "pydantic==2.10.6",
+    "python-dotenv==1.0.0",
+    "requests==2.32.3",
+]
+
+[dependency-groups]
+lint = [
+    "ruff>=0.9.6",
+]
+dev = [
+    "pytest>=8.3.4",
+]

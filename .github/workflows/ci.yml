@@ -19,28 +19,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: ".python-version"
 
       - name: "Install dependencies"
-        run: pip install -r requirements.txt && pip install -r test/requirements.txt
+        run: uv sync --all-extras --dev
 
       - name: "Run tests"
-        run: pytest -vvv
+        run: uv run pytest -vvv
   
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: ".python-version"
 
       - name: "Install dependencies"
         run: |
-          pip install -r requirements.txt
+          uv sync --all-extras --dev
           sudo apt update && sudo apt install -y docker-compose
 
       - name: "Checkout JellyPlex-Watched-CI"
@@ -63,40 +71,40 @@ jobs:
       - name: "Test Plex"
         run: |
           mv test/ci_plex.env .env
-          python main.py
-          python test/validate_ci_marklog.py --plex
+          uv run main.py
+          uv run test/validate_ci_marklog.py --plex
           
           rm mark.log
           
       - name: "Test Jellyfin"
         run: |
           mv test/ci_jellyfin.env .env
-          python main.py
-          python test/validate_ci_marklog.py --jellyfin
+          uv run main.py
+          uv run test/validate_ci_marklog.py --jellyfin
           
           rm mark.log
 
       - name: "Test Emby"
         run: |
           mv test/ci_emby.env .env
-          python main.py
-          python test/validate_ci_marklog.py --emby
+          uv run main.py
+          uv run test/validate_ci_marklog.py --emby
           
           rm mark.log
 
       - name: "Test Guids"
         run: |
           mv test/ci_guids.env .env
-          python main.py
-          python test/validate_ci_marklog.py --guids
+          uv run main.py
+          uv run test/validate_ci_marklog.py --guids
           
           rm mark.log
 
       - name: "Test Locations"
         run: |
           mv test/ci_locations.env .env
-          python main.py
-          python test/validate_ci_marklog.py --locations
+          uv run main.py
+          uv run test/validate_ci_marklog.py --locations
           
           rm mark.log
 
@@ -104,12 +112,12 @@ jobs:
         run: |
           # Test writing to the servers
           mv test/ci_write.env .env
-          python main.py
+          uv run main.py
 
           # Test again to test if it can handle existing data
-          python main.py
+          uv run main.py
 
-          python test/validate_ci_marklog.py --write
+          uv run test/validate_ci_marklog.py --write
           
           rm mark.log
 

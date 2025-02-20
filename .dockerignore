@@ -1,3 +1,4 @@
+.venv
 .dockerignore
 .env
 .env.sample
@@ -9,7 +10,3 @@
 
 Dockerfile*
 README.md
-
-test
-
-venv
