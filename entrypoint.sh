@@ -50,12 +50,13 @@ echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
 
 # If root run as the created user
 if [ "$(id -u)" = '0' ]; then
+    chown -R "$PUID:$PGID" /app/.venv
     chown -R "$PUID:$PGID" "$LOG_DIR"
     chown -R "$PUID:$PGID" "$MARK_DIR"
 
     # Run the application as the created user
     exec gosu "$PUID:$PGID" "$@"
+else
+    # Run the application as the current user
+    exec "$@"
 fi
-
-# Run the application as the current user
-exec "$@"
