@@ -1,4 +1,5 @@
-import os, requests
+import os
+import requests
 from dotenv import load_dotenv
 
 from urllib3.poolmanager import PoolManager
@@ -286,6 +287,13 @@ class Plex:
                 library_title = library.title
                 library_type = library.type
 
+                if library_type not in ["movie", "show"]:
+                    logger(
+                        f"Plex: Skipping Library {library_title} found type {library_type}",
+                        1,
+                    )
+                    continue
+
                 output[library_title] = library_type
 
             return output
@@ -397,9 +405,9 @@ class Plex:
                     if user.title.lower() not in users_watched:
                         users_watched[user.title.lower()] = UserData()
 
-                    users_watched[user.title.lower()].libraries[
-                        library.title
-                    ] = library_data
+                    users_watched[user.title.lower()].libraries[library.title] = (
+                        library_data
+                    )
 
             return users_watched
         except Exception as e:
