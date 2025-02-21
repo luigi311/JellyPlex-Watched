@@ -6,7 +6,7 @@
   "configurations": [
     {
       "name": "Python: Main",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "program": "main.py",
       "console": "integratedTerminal",
@@ -14,7 +14,7 @@
     },
     {
       "name": "Pytest",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "module": "pytest",
       "args": [
