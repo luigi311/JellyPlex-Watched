@@ -211,32 +211,17 @@ class JellyfinEmby:
             for _, user_id in users.items():
                 user_libraries: dict = self.query(f"/Users/{user_id}/Views", "get")
                 for library in user_libraries["Items"]:
-                    library_id = library["Id"]
                     library_title = library["Name"]
+                    library_type = library.get("CollectionType")
 
-                    # Get library items to check the type
-                    media_info = self.query(
-                        f"/Users/{user_id}/Items"
-                        + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
-                        "get",
-                    )
-
-                    types = set(
-                        [
-                            x["Type"]
-                            for x in media_info["Items"]
-                            if x["Type"] in ["Movie", "Series", "Episode"]
-                        ]
-                    )
-                    all_types = set([x["Type"] for x in media_info["Items"]])
-
-                    if not types:
+                    if library_type not in ["movies", "tvshows"]:
                         logger(
-                            f"{self.server_type}: Skipping Library {library_title} found wanted types: {all_types}",
+                            f"{self.server_type}: Skipping Library {library_title} found type {library_type}",
                             1,
                         )
-                    else:
-                        libraries[library_title] = str(types)
+                        continue
+
+                    libraries[library_title] = library_type
 
             return libraries
         except Exception as e:

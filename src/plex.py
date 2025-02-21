@@ -287,6 +287,13 @@ class Plex:
                 library_title = library.title
                 library_type = library.type
 
+                if library_type not in ["movie", "show"]:
+                    logger(
+                        f"Plex: Skipping Library {library_title} found type {library_type}",
+                        1,
+                    )
+                    continue
+
                 output[library_title] = library_type
 
             return output
