@@ -1,5 +1,6 @@
+from loguru import logger
+
 from src.functions import (
-    logger,
     match_list,
     search_mapping,
 )
@@ -151,7 +152,7 @@ def filter_libaries(
         )
 
         if skip_reason:
-            logger(f"Skipping library {library}: {skip_reason}", 1)
+            logger.info(f"Skipping library {library}: {skip_reason}")
             continue
 
         filtered_libaries.append(library)
@@ -170,8 +171,6 @@ def setup_libraries(
 ) -> tuple[list[str], list[str]]:
     server_1_libraries = server_1.get_libraries()
     server_2_libraries = server_2.get_libraries()
-    logger(f"Server 1 libraries: {server_1_libraries}", 1)
-    logger(f"Server 2 libraries: {server_2_libraries}", 1)
 
     # Filter out all blacklist, whitelist libaries
     filtered_server_1_libraries = filter_libaries(

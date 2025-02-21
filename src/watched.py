@@ -1,7 +1,8 @@
 import copy
 from pydantic import BaseModel
+from loguru import logger
 
-from src.functions import logger, search_mapping
+from src.functions import search_mapping
 
 
 class MediaIdentifiers(BaseModel):
@@ -134,7 +135,7 @@ def cleanup_watched(
                 remove_flag = False
                 for movie2 in library_2.movies:
                     if check_remove_entry(movie, movie2):
-                        logger(f"Removing movie: {movie.identifiers.title}", 3)
+                        logger.trace(f"Removing movie: {movie.identifiers.title}")
                         remove_flag = True
                         break
 
@@ -164,9 +165,8 @@ def cleanup_watched(
                         remove_flag = False
                         for ep2 in matching_series.episodes:
                             if check_remove_entry(ep1, ep2):
-                                logger(
+                                logger.trace(
                                     f"Removing episode '{ep1.identifiers.title}' from show '{series1.identifiers.title}'",
-                                    3,
                                 )
                                 remove_flag = True
                                 break
@@ -179,9 +179,8 @@ def cleanup_watched(
                         modified_series1.episodes = filtered_episodes
                         filtered_series_list.append(modified_series1)
                     else:
-                        logger(
+                        logger.trace(
                             f"Removing entire show '{series1.identifiers.title}' as no episodes remain after cleanup.",
-                            3,
                         )
             modified_watched_list_1[user_1].libraries[
                 library_1_key
@@ -194,7 +193,7 @@ def cleanup_watched(
             if library.movies or library.series:
                 new_libraries[lib_key] = library
             else:
-                logger(f"Removing empty library '{lib_key}' for user '{user}'", 3)
+                logger.trace(f"Removing empty library '{lib_key}' for user '{user}'")
         user_data.libraries = new_libraries
 
     return modified_watched_list_1
@@ -206,5 +205,5 @@ def get_other(watched_list, object_1, object_2):
     elif object_2 in watched_list:
         return object_2
     else:
-        logger(f"{object_1} and {object_2} not found in watched list 2", 1)
+        logger.info(f"{object_1} and {object_2} not found in watched list 2")
         return None

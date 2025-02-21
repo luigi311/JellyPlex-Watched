@@ -1,8 +1,9 @@
 import os
 from typing import Literal
 from dotenv import load_dotenv
+from loguru import logger
 
-from src.functions import logger, str_to_bool
+from src.functions import str_to_bool
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 from src.emby import Emby
@@ -39,7 +40,7 @@ def jellyfin_emby_server_connection(
         else:
             raise Exception("Unknown server type")
 
-        logger(f"{server_type} Server {i} info: {server.info()}", 3)
+        logger.debug(f"{server_type} Server {i} info: {server.info()}")
 
     return servers
 
@@ -73,7 +74,7 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
                 ssl_bypass=ssl_bypass,
             )
 
-            logger(f"Plex Server {i} info: {server.info()}", 3)
+            logger.debug(f"Plex Server {i} info: {server.info()}")
 
             servers.append(server)
 
@@ -99,7 +100,7 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
                 ssl_bypass=ssl_bypass,
             )
 
-            logger(f"Plex Server {i} info: {server.info()}", 3)
+            logger.debug(f"Plex Server {i} info: {server.info()}")
             servers.append(server)
 
     jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)

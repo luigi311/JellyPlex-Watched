@@ -1,15 +1,16 @@
 import os
 import traceback
 import json
+import sys
 from dotenv import load_dotenv
 from time import sleep, perf_counter
+from loguru import logger
 
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.library import setup_libraries
 from src.functions import (
-    logger,
     parse_string_to_list,
     str_to_bool,
 )
@@ -51,41 +52,41 @@ def should_sync_server(
 
     if isinstance(server_1, Plex):
         if isinstance(server_2, Jellyfin) and not sync_from_plex_to_jellyfin:
-            logger("Sync from plex -> jellyfin is disabled", 1)
+            logger.info("Sync from plex -> jellyfin is disabled")
             return False
 
         if isinstance(server_2, Emby) and not sync_from_plex_to_emby:
-            logger("Sync from plex -> emby is disabled", 1)
+            logger.info("Sync from plex -> emby is disabled")
             return False
 
         if isinstance(server_2, Plex) and not sync_from_plex_to_plex:
-            logger("Sync from plex -> plex is disabled", 1)
+            logger.info("Sync from plex -> plex is disabled")
             return False
 
     if isinstance(server_1, Jellyfin):
         if isinstance(server_2, Plex) and not sync_from_jelly_to_plex:
-            logger("Sync from jellyfin -> plex is disabled", 1)
+            logger.info("Sync from jellyfin -> plex is disabled")
             return False
 
         if isinstance(server_2, Jellyfin) and not sync_from_jelly_to_jellyfin:
-            logger("Sync from jellyfin -> jellyfin is disabled", 1)
+            logger.info("Sync from jellyfin -> jellyfin is disabled")
             return False
 
         if isinstance(server_2, Emby) and not sync_from_jelly_to_emby:
-            logger("Sync from jellyfin -> emby is disabled", 1)
+            logger.info("Sync from jellyfin -> emby is disabled")
             return False
 
     if isinstance(server_1, Emby):
         if isinstance(server_2, Plex) and not sync_from_emby_to_plex:
-            logger("Sync from emby -> plex is disabled", 1)
+            logger.info("Sync from emby -> plex is disabled")
             return False
 
         if isinstance(server_2, Jellyfin) and not sync_from_emby_to_jellyfin:
-            logger("Sync from emby -> jellyfin is disabled", 1)
+            logger.info("Sync from emby -> jellyfin is disabled")
             return False
 
         if isinstance(server_2, Emby) and not sync_from_emby_to_emby:
-            logger("Sync from emby -> emby is disabled", 1)
+            logger.info("Sync from emby -> emby is disabled")
             return False
 
     return True
@@ -98,18 +99,18 @@ def main_loop():
         os.remove(log_file)
 
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
-    logger(f"Dryrun: {dryrun}", 1)
+    logger.info(f"Dryrun: {dryrun}")
 
     user_mapping = os.getenv("USER_MAPPING", "")
     user_mapping = json.loads(user_mapping.lower())
-    logger(f"User Mapping: {user_mapping}", 1)
+    logger.info(f"User Mapping: {user_mapping}")
 
     library_mapping = os.getenv("LIBRARY_MAPPING", "")
     library_mapping = json.loads(library_mapping)
-    logger(f"Library Mapping: {library_mapping}", 1)
+    logger.info(f"Library Mapping: {library_mapping}")
 
     # Create (black/white)lists
-    logger("Creating (black/white)lists", 1)
+    logger.info("Creating (black/white)lists")
     blacklist_library = parse_string_to_list(os.getenv("BLACKLIST_LIBRARY", None))
     whitelist_library = parse_string_to_list(os.getenv("WHITELIST_LIBRARY", None))
     blacklist_library_type = parse_string_to_list(
@@ -140,7 +141,7 @@ def main_loop():
     )
 
     # Create server connections
-    logger("Creating server connections", 1)
+    logger.info("Creating server connections")
     servers = generate_server_connections()
 
     for server_1 in servers:
@@ -156,11 +157,11 @@ def main_loop():
             ):
                 continue
 
-            logger(f"Server 1: {type(server_1)}: {server_1.info()}", 0)
-            logger(f"Server 2: {type(server_2)}: {server_2.info()}", 0)
+            logger.info(f"Server 1: {type(server_1)}: {server_1.info()}")
+            logger.info(f"Server 2: {type(server_2)}: {server_2.info()}")
 
             # Create users list
-            logger("Creating users list", 1)
+            logger.info("Creating users list")
             server_1_users, server_2_users = setup_users(
                 server_1, server_2, blacklist_users, whitelist_users, user_mapping
             )
@@ -174,38 +175,38 @@ def main_loop():
                 whitelist_library_type,
                 library_mapping,
             )
+            logger.info(f"Server 1 syncing libraries: {server_1_libraries}")
+            logger.info(f"Server 2 syncing libraries: {server_2_libraries}")
 
-            logger("Creating watched lists", 1)
+            logger.info("Creating watched lists", 1)
             server_1_watched = server_1.get_watched(server_1_users, server_1_libraries)
-            logger("Finished creating watched list server 1", 1)
+            logger.info("Finished creating watched list server 1")
 
             server_2_watched = server_2.get_watched(server_2_users, server_2_libraries)
-            logger("Finished creating watched list server 2", 1)
+            logger.info("Finished creating watched list server 2")
 
-            logger(f"Server 1 watched: {server_1_watched}", 3)
-            logger(f"Server 2 watched: {server_2_watched}", 3)
+            logger.debug(f"Server 1 watched: {server_1_watched}")
+            logger.debug(f"Server 2 watched: {server_2_watched}")
 
-            logger("Cleaning Server 1 Watched", 1)
+            logger.info("Cleaning Server 1 Watched", 1)
             server_1_watched_filtered = cleanup_watched(
                 server_1_watched, server_2_watched, user_mapping, library_mapping
             )
 
-            logger("Cleaning Server 2 Watched", 1)
+            logger.info("Cleaning Server 2 Watched", 1)
             server_2_watched_filtered = cleanup_watched(
                 server_2_watched, server_1_watched, user_mapping, library_mapping
             )
 
-            logger(
+            logger.debug(
                 f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}",
-                1,
             )
-            logger(
+            logger.debug(
                 f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}",
-                1,
             )
 
             if should_sync_server(server_2, server_1):
-                logger(f"Syncing {server_2.info()} -> {server_1.info()}", 0)
+                logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
                 server_1.update_watched(
                     server_2_watched_filtered,
                     user_mapping,
@@ -214,7 +215,7 @@ def main_loop():
                 )
 
             if should_sync_server(server_1, server_2):
-                logger(f"Syncing {server_1.info()} -> {server_2.info()}", 0)
+                logger.info(f"Syncing {server_1.info()} -> {server_2.info()}")
                 server_2.update_watched(
                     server_1_watched_filtered,
                     user_mapping,
@@ -223,7 +224,22 @@ def main_loop():
                 )
 
 
+@logger.catch
 def main():
+    # Remove default logger to configure our own
+    logger.remove()
+
+    # Choose log level based on environment
+    # If in debug mode with a "debug" level, use DEBUG; otherwise, default to INFO.
+    level = os.getenv("DEBUG_LEVEL", "INFO").upper()
+
+    if level not in ["INFO", "DEBUG", "TRACE"]:
+        raise Exception("Invalid DEBUG_LEVEL, please choose between INFO, DEBUG, TRACE")
+
+    # Add a sink for file logging (with optional rotation) and the console.
+    logger.add("log.log", level=level, rotation="10 MB")
+    logger.add(sys.stdout, level=level)
+
     run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     times: list[float] = []
@@ -235,31 +251,31 @@ def main():
             times.append(end - start)
 
             if len(times) > 0:
-                logger(f"Average time: {sum(times) / len(times)}", 0)
+                logger.info(f"Average time: {sum(times) / len(times)}")
 
             if run_only_once:
                 break
 
-            logger(f"Looping in {sleep_duration}")
+            logger.info(f"Looping in {sleep_duration}")
             sleep(sleep_duration)
 
         except Exception as error:
             if isinstance(error, list):
                 for message in error:
-                    logger(message, log_type=2)
+                    logger.error(message)
             else:
-                logger(error, log_type=2)
+                logger.error(error)
 
-            logger(traceback.format_exc(), 2)
+            logger.error(traceback.format_exc())
 
             if run_only_once:
                 break
 
-            logger(f"Retrying in {sleep_duration}", log_type=0)
+            logger.info(f"Retrying in {sleep_duration}")
             sleep(sleep_duration)
 
         except KeyboardInterrupt:
             if len(times) > 0:
-                logger(f"Average time: {sum(times) / len(times)}", 0)
-            logger("Exiting", log_type=0)
+                logger.info(f"Average time: {sum(times) / len(times)}")
+            logger.info("Exiting")
             os._exit(0)

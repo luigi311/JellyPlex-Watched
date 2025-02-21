@@ -1,15 +1,15 @@
 # Functions for Jellyfin and Emby
 
+import requests
 import traceback
 import os
 from math import floor
 from typing import Any, Literal
 from dotenv import load_dotenv
-import requests
 from packaging.version import parse, Version
+from loguru import logger
 
 from src.functions import (
-    logger,
     search_mapping,
     log_marked,
     str_to_bool,
@@ -35,15 +35,14 @@ def extract_identifiers_from_item(server_type, item: dict) -> MediaIdentifiers:
     id = None
     if not title:
         id = item.get("Id")
-        logger(f"{server_type}: Name not found in {id}", 1)
+        logger.info(f"{server_type}: Name not found in {id}")
 
     guids = {}
     if generate_guids:
         guids = {k.lower(): v for k, v in item["ProviderIds"].items()}
         if not guids:
-            logger(
+            logger.info(
                 f"{server_type}: {title if title else id} has no guids",
-                1,
             )
 
     locations = tuple()
@@ -56,7 +55,7 @@ def extract_identifiers_from_item(server_type, item: dict) -> MediaIdentifiers:
             )
 
         if not locations:
-            logger(f"{server_type}: {title if title else id} has no locations", 1)
+            logger.info(f"{server_type}: {title if title else id} has no locations")
 
     return MediaIdentifiers(
         title=title,
@@ -155,9 +154,8 @@ class JellyfinEmby:
             return results
 
         except Exception as e:
-            logger(
+            logger.error(
                 f"{self.server_type}: Query {query_type} {query}\nResults {results}\n{e}",
-                2,
             )
             raise Exception(e)
 
@@ -180,7 +178,7 @@ class JellyfinEmby:
                 return None
 
         except Exception as e:
-            logger(f"{self.server_type}: Get server name failed {e}", 2)
+            logger.error(f"{self.server_type}: Get server name failed {e}")
             raise Exception(e)
 
     def get_users(self) -> dict[str, str]:
@@ -198,7 +196,7 @@ class JellyfinEmby:
 
             return users
         except Exception as e:
-            logger(f"{self.server_type}: Get users failed {e}", 2)
+            logger.error(f"{self.server_type}: Get users failed {e}")
             raise Exception(e)
 
     def get_libraries(self) -> dict[str, str]:
@@ -215,9 +213,8 @@ class JellyfinEmby:
                     library_type = library.get("CollectionType")
 
                     if library_type not in ["movies", "tvshows"]:
-                        logger(
+                        logger.debug(
                             f"{self.server_type}: Skipping Library {library_title} found type {library_type}",
-                            1,
                         )
                         continue
 
@@ -225,7 +222,7 @@ class JellyfinEmby:
 
             return libraries
         except Exception as e:
-            logger(f"{self.server_type}: Get libraries failed {e}", 2)
+            logger.error(f"{self.server_type}: Get libraries failed {e}")
             raise Exception(e)
 
     def get_user_library_watched(
@@ -233,9 +230,8 @@ class JellyfinEmby:
     ) -> LibraryData:
         user_name = user_name.lower()
         try:
-            logger(
+            logger.info(
                 f"{self.server_type}: Generating watched for {user_name} in library {library_title}",
-                0,
             )
             watched = LibraryData(title=library_title)
 
@@ -339,19 +335,17 @@ class JellyfinEmby:
                             )
                         )
 
-            logger(
+            logger.info(
                 f"{self.server_type}: Finished getting watched for {user_name} in library {library_title}",
-                1,
             )
 
             return watched
         except Exception as e:
-            logger(
+            logger.error(
                 f"{self.server_type}: Failed to get watched for {user_name} in library {library_title}, Error: {e}",
-                2,
             )
 
-            logger(traceback.format_exc(), 2)
+            logger.error(traceback.format_exc())
             return {}
 
     def get_watched(
@@ -419,7 +413,7 @@ class JellyfinEmby:
 
             return users_watched
         except Exception as e:
-            logger(f"{self.server_type}: Failed to get watched, Error: {e}", 2)
+            logger.error(f"{self.server_type}: Failed to get watched, Error: {e}")
             raise Exception(e)
 
     def update_user_watched(
@@ -437,9 +431,8 @@ class JellyfinEmby:
             if not library_data.series and not library_data.movies:
                 return
 
-            logger(
+            logger.info(
                 f"{self.server_type}: Updating watched for {user_name} in library {library_name}",
-                1,
             )
 
             # Update movies.
@@ -463,14 +456,12 @@ class JellyfinEmby:
                             if stored_movie.status.completed:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
                                 if not dryrun:
-                                    logger(msg, 5)
                                     self.query(
                                         f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
                                         "post",
                                     )
-                                else:
-                                    logger(msg, 6)
 
+                                logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                                 log_marked(
                                     self.server_type,
                                     self.server_name,
@@ -482,7 +473,6 @@ class JellyfinEmby:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
 
                                 if not dryrun:
-                                    logger(msg, 5)
                                     playback_position_payload = {
                                         "PlaybackPositionTicks": stored_movie.status.time
                                         * 10_000,
@@ -492,9 +482,8 @@ class JellyfinEmby:
                                         "post",
                                         json=playback_position_payload,
                                     )
-                                else:
-                                    logger(msg, 6)
 
+                                logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                                 log_marked(
                                     self.server_type,
                                     self.server_name,
@@ -504,9 +493,8 @@ class JellyfinEmby:
                                     duration=floor(stored_movie.status.time / 60_000),
                                 )
                         else:
-                            logger(
+                            logger.trace(
                                 f"{self.server_type}: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
-                                3,
                             )
 
             # Update TV Shows (series/episodes).
@@ -528,9 +516,8 @@ class JellyfinEmby:
                         if check_same_identifiers(
                             jellyfin_show_identifiers, stored_series.identifiers
                         ):
-                            logger(
+                            logger.info(
                                 f"Found matching show for '{jellyfin_show.get('Name')}'",
-                                1,
                             )
                             # Now update episodes.
                             # Get the list of Plex episodes for this show.
@@ -559,14 +546,14 @@ class JellyfinEmby:
                                                 + f" as watched for {user_name} in {library_name}"
                                             )
                                             if not dryrun:
-                                                logger(msg, 5)
                                                 self.query(
                                                     f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
                                                     "post",
                                                 )
-                                            else:
-                                                logger(msg, 6)
 
+                                            logger.success(
+                                                f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                            )
                                             log_marked(
                                                 self.server_type,
                                                 self.server_name,
@@ -582,7 +569,6 @@ class JellyfinEmby:
                                             )
 
                                             if not dryrun:
-                                                logger(msg, 5)
                                                 playback_position_payload = {
                                                     "PlaybackPositionTicks": stored_ep.status.time
                                                     * 10_000,
@@ -592,9 +578,10 @@ class JellyfinEmby:
                                                     "post",
                                                     json=playback_position_payload,
                                                 )
-                                            else:
-                                                logger(msg, 6)
 
+                                            logger.success(
+                                                f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                            )
                                             log_marked(
                                                 self.server_type,
                                                 self.server_name,
@@ -607,22 +594,19 @@ class JellyfinEmby:
                                                 ),
                                             )
                                     else:
-                                        logger(
+                                        logger.trace(
                                             f"{self.server_type}: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
-                                            3,
                                         )
                         else:
-                            logger(
+                            logger.trace(
                                 f"{self.server_type}: Skipping show {jellyfin_show.get('Name')} as it is not in mark list for {user_name}",
-                                3,
                             )
 
         except Exception as e:
-            logger(
+            logger.error(
                 f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
-                2,
             )
-            logger(traceback.format_exc(), 2)
+            logger.error(traceback.format_exc())
             raise Exception(e)
 
     def update_watched(
@@ -637,9 +621,8 @@ class JellyfinEmby:
             update_partial = self.is_partial_update_supported(server_version)
 
             if not update_partial:
-                logger(
+                logger.info(
                     f"{self.server_type}: Server version {server_version} does not support updating playback position.",
-                    2,
                 )
 
             for user, user_data in watched_list.items():
@@ -663,7 +646,7 @@ class JellyfinEmby:
                         break
 
                 if not user_id:
-                    logger(f"{user} {user_other} not found in Jellyfin", 2)
+                    logger.info(f"{user} {user_other} not found in Jellyfin")
                     continue
 
                 jellyfin_libraries = self.query(
@@ -692,21 +675,18 @@ class JellyfinEmby:
                             if library_other.lower() in [
                                 x["Name"].lower() for x in jellyfin_libraries
                             ]:
-                                logger(
+                                logger.info(
                                     f"{self.server_type}: Library {library_name} not found, but {library_other} found, using {library_other}",
-                                    1,
                                 )
                                 library_name = library_other
                             else:
-                                logger(
+                                logger.info(
                                     f"{self.server_type}: Library {library_name} or {library_other} not found in library list",
-                                    1,
                                 )
                                 continue
                         else:
-                            logger(
+                            logger.info(
                                 f"{self.server_type}: Library {library_name} not found in library list",
-                                1,
                             )
                             continue
 
@@ -728,5 +708,5 @@ class JellyfinEmby:
                         )
 
         except Exception as e:
-            logger(f"{self.server_type}: Error updating watched, {e}", 2)
+            logger.error(f"{self.server_type}: Error updating watched, {e}")
             raise Exception(e)

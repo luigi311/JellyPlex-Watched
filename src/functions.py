@@ -9,34 +9,6 @@ log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
 mark_file = os.getenv("MARK_FILE", os.getenv("MARKFILE", "mark.log"))
 
 
-def logger(message: str, log_type: int = 0):
-    debug = str_to_bool(os.getenv("DEBUG", "False"))
-    debug_level = os.getenv("DEBUG_LEVEL", "info").lower()
-
-    output: str | None = str(message)
-    if log_type == 0:
-        pass
-    elif log_type == 1 and (debug and debug_level in ("info", "debug")):
-        output = f"[INFO]: {output}"
-    elif log_type == 2:
-        output = f"[ERROR]: {output}"
-    elif log_type == 3 and (debug and debug_level == "debug"):
-        output = f"[DEBUG]: {output}"
-    elif log_type == 4:
-        output = f"[WARNING]: {output}"
-    elif log_type == 5:
-        output = f"[MARK]: {output}"
-    elif log_type == 6:
-        output = f"[DRYRUN]: {output}"
-    else:
-        output = None
-
-    if output is not None:
-        print(output)
-        with open(f"{log_file}", "a", encoding="utf-8") as file:
-            file.write(output + "\n")
-
-
 def log_marked(
     server_type: str,
     server_name: str,
