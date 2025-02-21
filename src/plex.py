@@ -1,6 +1,7 @@
 import os
 import requests
 from dotenv import load_dotenv
+from loguru import logger
 
 from urllib3.poolmanager import PoolManager
 from math import floor
@@ -12,7 +13,6 @@ from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 
 from src.functions import (
-    logger,
     search_mapping,
     log_marked,
     str_to_bool,
@@ -94,7 +94,9 @@ def update_user_watched(
         if not library_data.series and not library_data.movies:
             return
 
-        logger(f"Plex: Updating watched for {user.title} in library {library_name}", 1)
+        logger.info(
+            f"Plex: Updating watched for {user.title} in library {library_name}"
+        )
         library_section = user_plex.library.section(library_name)
 
         # Update movies.
@@ -112,11 +114,8 @@ def update_user_watched(
                         if stored_movie.status.completed:
                             msg = f"Plex: {plex_movie.title} as watched for {user.title} in {library_name}"
                             if not dryrun:
-                                logger(msg, 5)
                                 plex_movie.markWatched()
-                            else:
-                                logger(msg, 6)
-
+                            logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                             log_marked(
                                 "Plex",
                                 user_plex.friendlyName,
@@ -129,11 +128,9 @@ def update_user_watched(
                         else:
                             msg = f"Plex: {plex_movie.title} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user.title} in {library_name}"
                             if not dryrun:
-                                logger(msg, 5)
                                 plex_movie.updateTimeline(stored_movie.status.time)
-                            else:
-                                logger(msg, 6)
 
+                            logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                             log_marked(
                                 "Plex",
                                 user_plex.friendlyName,
@@ -157,7 +154,7 @@ def update_user_watched(
                     if check_same_identifiers(
                         plex_show_identifiers, stored_series.identifiers
                     ):
-                        logger(f"Found matching show for '{plex_show.title}'", 1)
+                        logger.info(f"Found matching show for '{plex_show.title}'")
                         # Now update episodes.
                         # Get the list of Plex episodes for this show.
                         plex_episodes = plex_show.episodes()
@@ -172,11 +169,11 @@ def update_user_watched(
                                     if stored_ep.status.completed:
                                         msg = f"Plex: {plex_show.title} {plex_episode.title} as watched for {user.title} in {library_name}"
                                         if not dryrun:
-                                            logger(msg, 5)
                                             plex_episode.markWatched()
-                                        else:
-                                            logger(msg, 6)
 
+                                        logger.success(
+                                            f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                        )
                                         log_marked(
                                             "Plex",
                                             user_plex.friendlyName,
@@ -188,13 +185,13 @@ def update_user_watched(
                                     else:
                                         msg = f"Plex: {plex_show.title} {plex_episode.title} as partially watched for {floor(stored_ep.status.time / 60_000)} minutes for {user.title} in {library_name}"
                                         if not dryrun:
-                                            logger(msg, 5)
                                             plex_episode.updateTimeline(
                                                 stored_ep.status.time
                                             )
-                                        else:
-                                            logger(msg, 6)
 
+                                        logger.success(
+                                            f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                        )
                                         log_marked(
                                             "Plex",
                                             user_plex.friendlyName,
@@ -206,8 +203,9 @@ def update_user_watched(
                                         )
                                     break  # Found a matching episode.
                         break  # Found a matching show.
+
     except Exception as e:
-        logger(
+        logger.error(
             f"Plex: Failed to update watched for {user.title} in library {library_name}, Error: {e}",
             2,
         )
@@ -255,11 +253,11 @@ class Plex:
 
             return plex
         except Exception as e:
-            if self.username or self.password:
+            if self.username:
                 msg = f"Failed to login via plex account {self.username}"
-                logger(f"Plex: Failed to login, {msg}, Error: {e}", 2)
+                logger.error(f"Plex: Failed to login, {msg}, Error: {e}")
             else:
-                logger(f"Plex: Failed to login, Error: {e}", 2)
+                logger.error(f"Plex: Failed to login, Error: {e}")
             raise Exception(e)
 
     def info(self) -> str:
@@ -274,7 +272,7 @@ class Plex:
 
             return users
         except Exception as e:
-            logger(f"Plex: Failed to get users, Error: {e}", 2)
+            logger.error(f"Plex: Failed to get users, Error: {e}")
             raise Exception(e)
 
     def get_libraries(self) -> dict[str, str]:
@@ -288,9 +286,8 @@ class Plex:
                 library_type = library.type
 
                 if library_type not in ["movie", "show"]:
-                    logger(
+                    logger.debug(
                         f"Plex: Skipping Library {library_title} found type {library_type}",
-                        1,
                     )
                     continue
 
@@ -298,15 +295,14 @@ class Plex:
 
             return output
         except Exception as e:
-            logger(f"Plex: Failed to get libraries, Error: {e}", 2)
+            logger.error(f"Plex: Failed to get libraries, Error: {e}")
             raise Exception(e)
 
     def get_user_library_watched(self, user, user_plex, library) -> LibraryData:
         user_name: str = user.username.lower() if user.username else user.title.lower()
         try:
-            logger(
+            logger.info(
                 f"Plex: Generating watched for {user_name} in library {library.title}",
-                0,
             )
             watched = LibraryData(title=library.title)
 
@@ -365,9 +361,8 @@ class Plex:
             return watched
 
         except Exception as e:
-            logger(
+            logger.error(
                 f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
-                2,
             )
             return LibraryData(title=library.title)
 
@@ -386,9 +381,8 @@ class Plex:
                             token,
                         )
                     else:
-                        logger(
+                        logger.error(
                             f"Plex: Failed to get token for {user.title}, skipping",
-                            2,
                         )
                         continue
 
@@ -411,7 +405,7 @@ class Plex:
 
             return users_watched
         except Exception as e:
-            logger(f"Plex: Failed to get watched, Error: {e}", 2)
+            logger.error(f"Plex: Failed to get watched, Error: {e}")
             raise Exception(e)
 
     def update_watched(
@@ -446,9 +440,8 @@ class Plex:
                     user_plex = self.plex
                 else:
                     if isinstance(user, str):
-                        logger(
+                        logger.warning(
                             f"Plex: {user} is not a plex object, attempting to get object for user",
-                            4,
                         )
                         user = self.plex.myPlexAccount().user(user)
 
@@ -460,9 +453,8 @@ class Plex:
                             session=self.session,
                         )
                     else:
-                        logger(
+                        logger.error(
                             f"Plex: Failed to get token for {user.title}, skipping",
-                            2,
                         )
                         continue
 
@@ -480,21 +472,18 @@ class Plex:
                             if library_other.lower() in [
                                 x.title.lower() for x in library_list
                             ]:
-                                logger(
+                                logger.info(
                                     f"Plex: Library {library_name} not found, but {library_other} found, using {library_other}",
-                                    1,
                                 )
                                 library_name = library_other
                             else:
-                                logger(
+                                logger.info(
                                     f"Plex: Library {library_name} or {library_other} not found in library list",
-                                    1,
                                 )
                                 continue
                         else:
-                            logger(
+                            logger.info(
                                 f"Plex: Library {library_name} not found in library list",
-                                1,
                             )
                             continue
 
@@ -507,5 +496,5 @@ class Plex:
                     )
 
         except Exception as e:
-            logger(f"Plex: Failed to update watched, Error: {e}", 2)
+            logger.error(f"Plex: Failed to update watched, Error: {e}")
             raise Exception(e)

@@ -5,6 +5,7 @@ description = "Sync watched between media servers locally"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "loguru>=0.7.3",
     "packaging==24.2",
     "plexapi==4.16.1",
     "pydantic==2.10.6",

@@ -1,4 +1,6 @@
-from src.functions import logger, search_mapping
+from loguru import logger
+
+from src.functions import search_mapping
 
 
 def setup_black_white_lists(
@@ -58,13 +60,13 @@ def setup_x_lists(
                     temp_library.append(library_other)
 
             out_library = out_library + temp_library
-        logger(f"{xlist_type}list Library: {xlist_library}", 1)
+        logger.info(f"{xlist_type}list Library: {xlist_library}")
 
     out_library_type: list[str] = []
     if xlist_library_type:
         out_library_type = [x.lower().strip() for x in xlist_library_type]
 
-        logger(f"{xlist_type}list Library Type: {out_library_type}", 1)
+        logger.info(f"{xlist_type}list Library Type: {out_library_type}")
 
     out_users: list[str] = []
     if xlist_users:
@@ -78,6 +80,6 @@ def setup_x_lists(
 
             out_users = out_users + temp_users
 
-        logger(f"{xlist_type}list Users: {out_users}", 1)
+        logger.info(f"{xlist_type}list Users: {out_users}")
 
     return out_library, out_library_type, out_users

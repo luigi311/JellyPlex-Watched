@@ -1,11 +1,10 @@
 from plexapi.myplex import MyPlexAccount
+from loguru import logger
+
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
-from src.functions import (
-    logger,
-    search_mapping,
-)
+from src.functions import search_mapping
 
 
 def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
@@ -63,7 +62,7 @@ def filter_user_lists(
         # whitelist_user is not empty and user lowercase is not in whitelist lowercase
         if len(whitelist_users) > 0:
             if user not in whitelist_users and users[user] not in whitelist_users:
-                logger(f"{user} or {users[user]} is not in whitelist", 1)
+                logger.info(f"{user} or {users[user]} is not in whitelist")
                 continue
 
         if user not in blacklist_users and users[user] not in blacklist_users:
@@ -113,26 +112,26 @@ def setup_users(
 ) -> tuple[list[MyPlexAccount] | dict[str, str], list[MyPlexAccount] | dict[str, str]]:
     server_1_users = generate_user_list(server_1)
     server_2_users = generate_user_list(server_2)
-    logger(f"Server 1 users: {server_1_users}", 1)
-    logger(f"Server 2 users: {server_2_users}", 1)
+    logger.debug(f"Server 1 users: {server_1_users}")
+    logger.debug(f"Server 2 users: {server_2_users}")
 
     users = combine_user_lists(server_1_users, server_2_users, user_mapping)
-    logger(f"User list that exist on both servers {users}", 1)
+    logger.debug(f"User list that exist on both servers {users}")
 
     users_filtered = filter_user_lists(users, blacklist_users, whitelist_users)
-    logger(f"Filtered user list {users_filtered}", 1)
+    logger.debug(f"Filtered user list {users_filtered}")
 
     output_server_1_users = generate_server_users(server_1, users_filtered)
     output_server_2_users = generate_server_users(server_2, users_filtered)
 
     # Check if users is none or empty
     if output_server_1_users is None or len(output_server_1_users) == 0:
-        logger(
+        logger.warning(
             f"No users found for server 1 {type(server_1)}, users: {server_1_users}, overlapping users {users}, filtered users {users_filtered}, server 1 users {server_1.users}"
         )
 
     if output_server_2_users is None or len(output_server_2_users) == 0:
-        logger(
+        logger.warning(
             f"No users found for server 2 {type(server_2)}, users: {server_2_users}, overlapping users {users} filtered users {users_filtered}, server 2 users {server_2.users}"
         )
 
@@ -144,7 +143,7 @@ def setup_users(
     ):
         raise Exception("No users found for one or both servers")
 
-    logger(f"Server 1 users: {output_server_1_users}", 1)
-    logger(f"Server 2 users: {output_server_2_users}", 1)
+    logger.info(f"Server 1 users: {output_server_1_users}")
+    logger.info(f"Server 2 users: {output_server_2_users}")
 
     return output_server_1_users, output_server_2_users
