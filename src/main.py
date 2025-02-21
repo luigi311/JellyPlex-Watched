@@ -1,4 +1,6 @@
-import os, traceback, json
+import os
+import traceback
+import json
 from dotenv import load_dotenv
 from time import sleep, perf_counter
 

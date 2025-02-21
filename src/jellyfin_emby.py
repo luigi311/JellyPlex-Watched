@@ -1,6 +1,7 @@
 # Functions for Jellyfin and Emby
 
-import traceback, os
+import traceback
+import os
 from math import floor
 from typing import Any, Literal
 from dotenv import load_dotenv
@@ -427,9 +428,9 @@ class JellyfinEmby:
                         if user_name.lower() not in users_watched:
                             users_watched[user_name.lower()] = UserData()
 
-                        users_watched[user_name.lower()].libraries[
-                            library_title
-                        ] = library_data
+                        users_watched[user_name.lower()].libraries[library_title] = (
+                            library_data
+                        )
 
             return users_watched
         except Exception as e:

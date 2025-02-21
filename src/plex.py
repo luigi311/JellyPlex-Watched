@@ -1,4 +1,5 @@
-import os, requests
+import os
+import requests
 from dotenv import load_dotenv
 
 from urllib3.poolmanager import PoolManager
@@ -397,9 +398,9 @@ class Plex:
                     if user.title.lower() not in users_watched:
                         users_watched[user.title.lower()] = UserData()
 
-                    users_watched[user.title.lower()].libraries[
-                        library.title
-                    ] = library_data
+                    users_watched[user.title.lower()].libraries[library.title] = (
+                        library_data
+                    )
 
             return users_watched
         except Exception as e:
