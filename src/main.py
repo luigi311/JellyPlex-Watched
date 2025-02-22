@@ -96,12 +96,14 @@ def main_loop():
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger.info(f"Dryrun: {dryrun}")
 
-    user_mapping = os.getenv("USER_MAPPING", "")
-    user_mapping = json.loads(user_mapping.lower())
+    user_mapping = os.getenv("USER_MAPPING", None)
+    if user_mapping:
+        user_mapping = json.loads(user_mapping.lower())
     logger.info(f"User Mapping: {user_mapping}")
 
-    library_mapping = os.getenv("LIBRARY_MAPPING", "")
-    library_mapping = json.loads(library_mapping)
+    library_mapping = os.getenv("LIBRARY_MAPPING", None)
+    if library_mapping:
+        library_mapping = json.loads(library_mapping)
     logger.info(f"Library Mapping: {library_mapping}")
 
     # Create (black/white)lists
