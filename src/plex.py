@@ -366,9 +366,15 @@ class Plex:
             )
             return LibraryData(title=library.title)
 
-    def get_watched(self, users, sync_libraries) -> dict[str, UserData]:
+    def get_watched(
+        self,
+        users: list[MyPlexAccount],
+        sync_libraries: list[str],
+        users_watched: dict[str, UserData] = None,
+    ) -> dict[str, UserData]:
         try:
-            users_watched: dict[str, UserData] = {}
+            if not users_watched:
+                users_watched: dict[str, UserData] = {}
 
             for user in users:
                 if self.admin_user == user:
@@ -386,18 +392,24 @@ class Plex:
                         )
                         continue
 
+                if user.title.lower() not in users_watched:
+                    users_watched[user.title.lower()] = UserData()
+
                 libraries = user_plex.library.sections()
 
                 for library in libraries:
                     if library.title not in sync_libraries:
                         continue
 
+                    if library.title in users_watched[user.title.lower()].libraries:
+                        logger.info(
+                            f"Plex: {user.title} {library.title} watched history has already been gathered, skipping"
+                        )
+                        continue
+
                     library_data = self.get_user_library_watched(
                         user, user_plex, library
                     )
-
-                    if user.title.lower() not in users_watched:
-                        users_watched[user.title.lower()] = UserData()
 
                     users_watched[user.title.lower()].libraries[library.title] = (
                         library_data
@@ -405,7 +417,7 @@ class Plex:
 
             return users_watched
         except Exception as e:
-            logger.error(f"Plex: Failed to get watched, Error: {e}")
+            logger.error(f"Plex: Failed to get users watched, Error: {e}")
             raise Exception(e)
 
     def update_watched(
