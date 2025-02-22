@@ -656,8 +656,6 @@ class JellyfinEmby:
                 jellyfin_libraries = [x for x in jellyfin_libraries["Items"]]
 
                 for library_name in user_data.libraries:
-                    if library_name == "Custom TV Shows":
-                        print("test")
                     library_data = user_data.libraries[library_name]
                     library_other = None
                     if library_mapping:
