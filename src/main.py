@@ -93,11 +93,6 @@ def should_sync_server(
 
 
 def main_loop():
-    log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
-    # Delete log_file if it exists
-    if os.path.exists(log_file):
-        os.remove(log_file)
-
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger.info(f"Dryrun: {dryrun}")
 
@@ -229,15 +224,18 @@ def main():
     # Remove default logger to configure our own
     logger.remove()
 
+    log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
+
     # Choose log level based on environment
     # If in debug mode with a "debug" level, use DEBUG; otherwise, default to INFO.
     level = os.getenv("DEBUG_LEVEL", "INFO").upper()
 
     if level not in ["INFO", "DEBUG", "TRACE"]:
+        logger.add(sys.stdout)
         raise Exception("Invalid DEBUG_LEVEL, please choose between INFO, DEBUG, TRACE")
 
-    # Add a sink for file logging (with optional rotation) and the console.
-    logger.add("log.log", level=level, rotation="10 MB")
+    # Add a sink for file logging and the console.
+    logger.add(log_file, level=level, rotation="500 MB")
     logger.add(sys.stdout, level=level)
 
     run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))

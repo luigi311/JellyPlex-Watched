@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
 mark_file = os.getenv("MARK_FILE", os.getenv("MARKFILE", "mark.log"))
 
 
