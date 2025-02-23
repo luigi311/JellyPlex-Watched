@@ -224,6 +224,7 @@ class Plex:
         ssl_bypass=False,
         session=None,
     ):
+        self.server_type = "Plex"
         self.baseurl = baseurl
         self.token = token
         self.username = username
@@ -280,6 +281,7 @@ class Plex:
             output = {}
 
             libraries = self.plex.library.sections()
+            logger.debug(f"Plex: All Libraries {[library.title for library in libraries]}")
 
             for library in libraries:
                 library_title = library.title

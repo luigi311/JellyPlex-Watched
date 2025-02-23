@@ -206,8 +206,10 @@ class JellyfinEmby:
             # Theres no way to get all libraries so individually get list of libraries from all users
             users = self.get_users()
 
-            for _, user_id in users.items():
+            for user_name, user_id in users.items():
                 user_libraries: dict = self.query(f"/Users/{user_id}/Views", "get")
+                logger.debug(f"{self.server_type}: All Libraries for {user_name} {[library.get("Name") for library in user_libraries["Items"]]}")
+
                 for library in user_libraries["Items"]:
                     library_title = library["Name"]
                     library_type = library.get("CollectionType")
