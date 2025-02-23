@@ -172,6 +172,9 @@ def setup_libraries(
     server_1_libraries = server_1.get_libraries()
     server_2_libraries = server_2.get_libraries()
 
+    logger.debug(f"{server_1.server_type}: Libraries and types {server_1_libraries}")
+    logger.debug(f"{server_2.server_type}: Libraries and types {server_2_libraries}")
+
     # Filter out all blacklist, whitelist libaries
     filtered_server_1_libraries = filter_libaries(
         server_1_libraries,
