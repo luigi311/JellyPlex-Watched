@@ -23,6 +23,25 @@ from src.connection import generate_server_connections
 
 load_dotenv(override=True)
 
+log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
+level = os.getenv("DEBUG_LEVEL", "INFO").upper()
+
+
+def configure_logger():
+    # Remove default logger to configure our own
+    logger.remove()
+
+    # Choose log level based on environment
+    # If in debug mode with a "debug" level, use DEBUG; otherwise, default to INFO.
+
+    if level not in ["INFO", "DEBUG", "TRACE"]:
+        logger.add(sys.stdout)
+        raise Exception("Invalid DEBUG_LEVEL, please choose between INFO, DEBUG, TRACE")
+
+    # Add a sink for file logging and the console.
+    logger.add(log_file, level=level, mode="w")
+    logger.add(sys.stdout, level=level)
+
 
 def should_sync_server(
     server_1: Plex | Jellyfin | Emby,
@@ -223,29 +242,14 @@ def main_loop():
 
 @logger.catch
 def main():
-    # Remove default logger to configure our own
-    logger.remove()
-
-    log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
-
-    # Choose log level based on environment
-    # If in debug mode with a "debug" level, use DEBUG; otherwise, default to INFO.
-    level = os.getenv("DEBUG_LEVEL", "INFO").upper()
-
-    if level not in ["INFO", "DEBUG", "TRACE"]:
-        logger.add(sys.stdout)
-        raise Exception("Invalid DEBUG_LEVEL, please choose between INFO, DEBUG, TRACE")
-
-    # Add a sink for file logging and the console.
-    logger.add(log_file, level=level, rotation="500 MB")
-    logger.add(sys.stdout, level=level)
-
     run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     times: list[float] = []
     while True:
         try:
             start = perf_counter()
+            # Reconfigure the logger on each loop so the logs are rotated on each run
+            configure_logger()
             main_loop()
             end = perf_counter()
             times.append(end - start)
