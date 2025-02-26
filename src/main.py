@@ -201,8 +201,8 @@ def main_loop():
             server_2_watched = server_2.get_watched(server_2_users, server_2_libraries)
             logger.info("Finished creating watched list server 2")
 
-            logger.debug(f"Server 1 watched: {server_1_watched}")
-            logger.debug(f"Server 2 watched: {server_2_watched}")
+            logger.trace(f"Server 1 watched: {server_1_watched}")
+            logger.trace(f"Server 2 watched: {server_2_watched}")
 
             logger.info("Cleaning Server 1 Watched", 1)
             server_1_watched_filtered = cleanup_watched(
