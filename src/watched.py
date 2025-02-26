@@ -1,12 +1,12 @@
 import copy
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from loguru import logger
 
 from src.functions import search_mapping
 
 
 class MediaIdentifiers(BaseModel):
-    title: str
+    title: str | None = None
 
     # File information, will be folder for series and media file for episode/movie
     locations: tuple[str, ...] = tuple()
@@ -29,17 +29,17 @@ class MediaItem(BaseModel):
 
 class Series(BaseModel):
     identifiers: MediaIdentifiers
-    episodes: list[MediaItem] = []
+    episodes: list[MediaItem] = Field(default_factory=list)
 
 
 class LibraryData(BaseModel):
     title: str
-    movies: list[MediaItem] = []
-    series: list[Series] = []
+    movies: list[MediaItem] = Field(default_factory=list)
+    series: list[Series] = Field(default_factory=list)
 
 
 class UserData(BaseModel):
-    libraries: dict[str, LibraryData] = {}
+    libraries: dict[str, LibraryData] = Field(default_factory=dict)
 
 
 def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> bool:
