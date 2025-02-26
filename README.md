@@ -48,20 +48,14 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
 
 ### Baremetal
 
-- Setup virtualenv of your choice
+- [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 
-- Install dependencies
-
-  ```bash
-    pip install -r requirements.txt
-  ```
-
-- Create a .env file similar to .env.sample, uncomment whitelist and blacklist if needed, fill in baseurls and tokens
+- Create a .env file similar to .env.sample; fill in baseurls and tokens, **remember to uncomment anything you wish to use** (e.g., user mapping, library mapping, black/whitelist, etc.)
 
 - Run
 
   ```bash
-  python main.py
+  uv run main.py
   ```
 
 ### Docker
@@ -104,6 +98,7 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
 
 - Configuration
   - Do not use quotes around variables in docker compose
+  - If you are not running all 3 supported servers, that is, Plex, Jellyfin, and Emby simultaneously, make sure to comment out the server url and token of the server you aren't using.
 
 ## Contributing
 
