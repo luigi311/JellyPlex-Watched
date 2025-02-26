@@ -281,7 +281,9 @@ class Plex:
             output = {}
 
             libraries = self.plex.library.sections()
-            logger.debug(f"Plex: All Libraries {[library.title for library in libraries]}")
+            logger.debug(
+                f"Plex: All Libraries {[library.title for library in libraries]}"
+            )
 
             for library in libraries:
                 library_title = library.title
@@ -300,8 +302,7 @@ class Plex:
             logger.error(f"Plex: Failed to get libraries, Error: {e}")
             raise Exception(e)
 
-    def get_user_library_watched(self, user, user_plex, library) -> LibraryData:
-        user_name: str = user.username.lower() if user.username else user.title.lower()
+    def get_user_library_watched(self, user_name, user_plex, library) -> LibraryData:
         try:
             logger.info(
                 f"Plex: Generating watched for {user_name} in library {library.title}",
@@ -388,6 +389,10 @@ class Plex:
                         )
                         continue
 
+                user_name: str = (
+                    user.username.lower() if user.username else user.title.lower()
+                )
+
                 libraries = user_plex.library.sections()
 
                 for library in libraries:
@@ -395,15 +400,13 @@ class Plex:
                         continue
 
                     library_data = self.get_user_library_watched(
-                        user, user_plex, library
+                        user_name, user_plex, library
                     )
 
-                    if user.title.lower() not in users_watched:
-                        users_watched[user.title.lower()] = UserData()
+                    if user_name not in users_watched:
+                        users_watched[user_name] = UserData()
 
-                    users_watched[user.title.lower()].libraries[library.title] = (
-                        library_data
-                    )
+                    users_watched[user_name].libraries[library.title] = library_data
 
             return users_watched
         except Exception as e:
