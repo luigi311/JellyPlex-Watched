@@ -18,6 +18,7 @@ from src.functions import (
 from src.users import setup_users
 from src.watched import (
     cleanup_watched,
+    merge_server_watched,
 )
 from src.black_white import setup_black_white_lists
 from src.connection import generate_server_connections
@@ -178,6 +179,9 @@ def main_loop(env) -> None:
         if server_1 == servers[-1]:
             break
 
+        # Store a copy of server_1_watched that way it can be used multiple times without having to regather everyones watch history every single time
+        server_1_watched = None
+
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
             # Check if server 1 and server 2 are going to be synced in either direction, skip if not
@@ -208,7 +212,9 @@ def main_loop(env) -> None:
             logger.info(f"Server 2 syncing libraries: {server_2_libraries}")
 
             logger.info("Creating watched lists", 1)
-            server_1_watched = server_1.get_watched(server_1_users, server_1_libraries)
+            server_1_watched = server_1.get_watched(
+                server_1_users, server_1_libraries, server_1_watched
+            )
             logger.info("Finished creating watched list server 1")
 
             server_2_watched = server_2.get_watched(server_2_users, server_2_libraries)
@@ -236,6 +242,16 @@ def main_loop(env) -> None:
 
             if should_sync_server(env, server_2, server_1):
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
+
+                # Add server_2_watched_filtered to server_1_watched that way the stored version isn't stale for the next server
+                if not dryrun:
+                    server_1_watched = merge_server_watched(
+                        server_1_watched,
+                        server_2_watched_filtered,
+                        user_mapping,
+                        library_mapping,
+                    )
+
                 server_1.update_watched(
                     server_2_watched_filtered,
                     user_mapping,

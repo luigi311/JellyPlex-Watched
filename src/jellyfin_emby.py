@@ -451,12 +451,19 @@ class JellyfinEmby:
             return LibraryData(title=library_title)
 
     def get_watched(
-        self, users: dict[str, str], sync_libraries: list[str]
+        self,
+        users: dict[str, str],
+        sync_libraries: list[str],
+        users_watched: dict[str, UserData] = None,
     ) -> dict[str, UserData]:
         try:
-            users_watched: dict[str, UserData] = {}
+            if not users_watched:
+                users_watched: dict[str, UserData] = {}
 
             for user_name, user_id in users.items():
+                if user_name.lower() not in users_watched:
+                    users_watched[user_name.lower()] = UserData()
+
                 all_libraries = self.query(f"/Users/{user_id}/Views", "get")
                 if not all_libraries or not isinstance(all_libraries, dict):
                     logger.debug(
@@ -465,16 +472,24 @@ class JellyfinEmby:
                     continue
 
                 for library in all_libraries.get("Items", []):
-                    if library.get("Name") not in sync_libraries:
-                        continue
-
                     library_id = library.get("Id")
                     library_title = library.get("Name")
                     library_type = library.get("CollectionType")
+
                     if not library_id or not library_title or not library_type:
                         logger.debug(
                             f"{self.server_type}: Failed to get library data for {user_name} {library_title}"
                         )
+                        continue
+
+                    if library_title not in sync_libraries:
+                        continue
+
+                    if library_title in users_watched:
+                        logger.info(
+                            f"{self.server_type}: {user_name} {library_title} watched history has already been gathered, skipping"
+                        )
+                        continue
 
                     # Get watched for user
                     library_data = self.get_user_library_watched(
