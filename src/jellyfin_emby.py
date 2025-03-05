@@ -351,12 +351,19 @@ class JellyfinEmby:
             return {}
 
     def get_watched(
-        self, users: dict[str, str], sync_libraries: list[str]
+        self,
+        users: dict[str, str],
+        sync_libraries: list[str],
+        users_watched: dict[str, UserData] = None,
     ) -> dict[str, UserData]:
         try:
-            users_watched: dict[str, UserData] = {}
+            if not users_watched:
+                users_watched: dict[str, UserData] = {}
 
             for user_name, user_id in users.items():
+                if user_name.lower() not in users_watched:
+                    users_watched[user_name.lower()] = UserData()
+
                 libraries = []
 
                 all_libraries = self.query(f"/Users/{user_id}/Views", "get")
@@ -365,6 +372,12 @@ class JellyfinEmby:
                     library_title = library["Name"]
 
                     if library_title not in sync_libraries:
+                        continue
+
+                    if library_title in users_watched:
+                        logger.info(
+                            f"{self.server_type}: {user_name} {library_title} watched history has already been gathered, skipping"
+                        )
                         continue
 
                     identifiers: dict[str, str] = {
@@ -405,9 +418,6 @@ class JellyfinEmby:
                             library_id,
                             library_title,
                         )
-
-                        if user_name.lower() not in users_watched:
-                            users_watched[user_name.lower()] = UserData()
 
                         users_watched[user_name.lower()].libraries[library_title] = (
                             library_data
