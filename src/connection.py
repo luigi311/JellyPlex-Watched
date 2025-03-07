@@ -66,11 +66,11 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, url in enumerate(plex_baseurl):
             server = Plex(
-                baseurl=url.strip(),
+                base_url=url.strip(),
                 token=plex_token[i].strip(),
-                username=None,
+                user_name=None,
                 password=None,
-                servername=None,
+                server_name=None,
                 ssl_bypass=ssl_bypass,
             )
 
@@ -92,11 +92,11 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, username in enumerate(plex_username):
             server = Plex(
-                baseurl=None,
+                base_url=None,
                 token=None,
-                username=username.strip(),
+                user_name=username.strip(),
                 password=plex_password[i].strip(),
-                servername=plex_servername[i].strip(),
+                server_name=plex_servername[i].strip(),
                 ssl_bypass=ssl_bypass,
             )
 
