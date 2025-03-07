@@ -16,7 +16,7 @@ def log_marked(
     movie_show: str,
     episode: str | None = None,
     duration: float | None = None,
-):
+) -> None:
     output = f"{server_type}/{server_name}/{username}/{library}/{movie_show}"
 
     if episode:

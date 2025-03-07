@@ -1,6 +1,7 @@
 import copy
 from pydantic import BaseModel, Field
 from loguru import logger
+from typing import Any
 
 from src.functions import search_mapping
 
@@ -103,8 +104,8 @@ def check_remove_entry(item1: MediaItem, item2: MediaItem) -> bool:
 def cleanup_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
-    user_mapping=None,
-    library_mapping=None,
+    user_mapping: dict[str, str] | None = None,
+    library_mapping: dict[str, str] | None = None,
 ) -> dict[str, UserData]:
     modified_watched_list_1 = copy.deepcopy(watched_list_1)
 
@@ -199,11 +200,17 @@ def cleanup_watched(
     return modified_watched_list_1
 
 
-def get_other(watched_list, object_1, object_2):
+def get_other(
+    watched_list: dict[str, Any], object_1: str, object_2: str | None
+) -> str | None:
     if object_1 in watched_list:
         return object_1
-    elif object_2 in watched_list:
+
+    if object_2 and object_2 in watched_list:
         return object_2
-    else:
-        logger.info(f"{object_1} and {object_2} not found in watched list 2")
-        return None
+
+    logger.info(
+        f"{object_1}{' and ' + object_2 if object_2 else ''} not found in watched list 2"
+    )
+
+    return None

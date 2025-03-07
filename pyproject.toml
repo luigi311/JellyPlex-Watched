@@ -18,5 +18,7 @@ lint = [
     "ruff>=0.9.6",
 ]
 dev = [
+    "mypy>=1.15.0",
     "pytest>=8.3.4",
+    "types-requests>=2.32.0.20250306",
 ]

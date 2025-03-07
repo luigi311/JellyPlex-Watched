@@ -25,17 +25,17 @@ def jellyfin_emby_server_connection(
             f"{server_type.upper()}_BASEURL and {server_type.upper()}_TOKEN must have the same number of entries"
         )
 
-    for i, baseurl in enumerate(server_baseurls):
-        baseurl = baseurl.strip()
-        if baseurl[-1] == "/":
-            baseurl = baseurl[:-1]
+    for i, base_url in enumerate(server_baseurls):
+        base_url = base_url.strip()
+        if base_url[-1] == "/":
+            base_url = base_url[:-1]
 
         if server_type == "jellyfin":
-            server = Jellyfin(baseurl=baseurl, token=server_tokens[i].strip())
+            server = Jellyfin(base_url=base_url, token=server_tokens[i].strip())
             servers.append(server)
 
         elif server_type == "emby":
-            server = Emby(baseurl=baseurl, token=server_tokens[i].strip())
+            server = Emby(base_url=base_url, token=server_tokens[i].strip())
             servers.append(server)
         else:
             raise Exception("Unknown server type")
@@ -66,11 +66,11 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, url in enumerate(plex_baseurl):
             server = Plex(
-                baseurl=url.strip(),
+                base_url=url.strip(),
                 token=plex_token[i].strip(),
-                username=None,
+                user_name=None,
                 password=None,
-                servername=None,
+                server_name=None,
                 ssl_bypass=ssl_bypass,
             )
 
@@ -92,11 +92,11 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, username in enumerate(plex_username):
             server = Plex(
-                baseurl=None,
+                base_url=None,
                 token=None,
-                username=username.strip(),
+                user_name=username.strip(),
                 password=plex_password[i].strip(),
-                servername=plex_servername[i].strip(),
+                server_name=plex_servername[i].strip(),
                 ssl_bypass=ssl_bypass,
             )
 

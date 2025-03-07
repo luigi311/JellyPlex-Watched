@@ -1,9 +1,10 @@
 from src.jellyfin_emby import JellyfinEmby
 from packaging.version import parse, Version
+from loguru import logger
 
 
 class Jellyfin(JellyfinEmby):
-    def __init__(self, baseurl, token):
+    def __init__(self, base_url: str, token: str) -> None:
         authorization = (
             "MediaBrowser , "
             'Client="JellyPlex-Watched", '
@@ -18,8 +19,14 @@ class Jellyfin(JellyfinEmby):
         }
 
         super().__init__(
-            server_type="Jellyfin", baseurl=baseurl, token=token, headers=headers
+            server_type="Jellyfin", base_url=base_url, token=token, headers=headers
         )
 
     def is_partial_update_supported(self, server_version: Version) -> bool:
-        return server_version >= parse("10.9.0")
+        if not server_version >= parse("10.9.0"):
+            logger.info(
+                f"{self.server_type}: Server version {server_version} does not support updating playback position.",
+            )
+            return False
+
+        return True
