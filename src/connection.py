@@ -25,17 +25,17 @@ def jellyfin_emby_server_connection(
             f"{server_type.upper()}_BASEURL and {server_type.upper()}_TOKEN must have the same number of entries"
         )
 
-    for i, baseurl in enumerate(server_baseurls):
-        baseurl = baseurl.strip()
-        if baseurl[-1] == "/":
-            baseurl = baseurl[:-1]
+    for i, base_url in enumerate(server_baseurls):
+        base_url = base_url.strip()
+        if base_url[-1] == "/":
+            base_url = base_url[:-1]
 
         if server_type == "jellyfin":
-            server = Jellyfin(baseurl=baseurl, token=server_tokens[i].strip())
+            server = Jellyfin(base_url=base_url, token=server_tokens[i].strip())
             servers.append(server)
 
         elif server_type == "emby":
-            server = Emby(baseurl=baseurl, token=server_tokens[i].strip())
+            server = Emby(base_url=base_url, token=server_tokens[i].strip())
             servers.append(server)
         else:
             raise Exception("Unknown server type")

@@ -12,7 +12,7 @@ def setup_black_white_lists(
     whitelist_users: list[str] | None,
     library_mapping: dict[str, str] | None = None,
     user_mapping: dict[str, str] | None = None,
-):
+) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str]]:
     blacklist_library, blacklist_library_type, blacklist_users = setup_x_lists(
         blacklist_library,
         blacklist_library_type,

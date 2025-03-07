@@ -27,7 +27,7 @@ log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
 level = os.getenv("DEBUG_LEVEL", "INFO").upper()
 
 
-def configure_logger():
+def configure_logger() -> None:
     # Remove default logger to configure our own
     logger.remove()
 
@@ -111,18 +111,20 @@ def should_sync_server(
     return True
 
 
-def main_loop():
+def main_loop() -> None:
     dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
     logger.info(f"Dryrun: {dryrun}")
 
-    user_mapping = os.getenv("USER_MAPPING", None)
-    if user_mapping:
-        user_mapping = json.loads(user_mapping.lower())
+    user_mapping_env = os.getenv("USER_MAPPING", None)
+    user_mapping = None
+    if user_mapping_env:
+        user_mapping = json.loads(user_mapping_env.lower())
     logger.info(f"User Mapping: {user_mapping}")
 
-    library_mapping = os.getenv("LIBRARY_MAPPING", None)
-    if library_mapping:
-        library_mapping = json.loads(library_mapping)
+    library_mapping_env = os.getenv("LIBRARY_MAPPING", None)
+    library_mapping = None
+    if library_mapping_env:
+        library_mapping = json.loads(library_mapping_env)
     logger.info(f"Library Mapping: {library_mapping}")
 
     # Create (black/white)lists
@@ -241,7 +243,7 @@ def main_loop():
 
 
 @logger.catch
-def main():
+def main() -> None:
     run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
     sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
     times: list[float] = []

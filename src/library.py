@@ -5,6 +5,10 @@ from src.functions import (
     search_mapping,
 )
 
+from src.emby import Emby
+from src.jellyfin import Jellyfin
+from src.plex import Plex
+
 
 def check_skip_logic(
     library_title: str,
@@ -54,7 +58,7 @@ def check_blacklist_logic(
     blacklist_library: list[str],
     blacklist_library_type: list[str],
     library_other: str | None = None,
-):
+) -> str | None:
     skip_reason = None
     if isinstance(library_type, (list, tuple, set)):
         for library_type_item in library_type:
@@ -90,7 +94,7 @@ def check_whitelist_logic(
     whitelist_library: list[str],
     whitelist_library_type: list[str],
     library_other: str | None = None,
-):
+) -> str | None:
     skip_reason = None
     if len(whitelist_library_type) > 0:
         if isinstance(library_type, (list, tuple, set)):
@@ -161,8 +165,8 @@ def filter_libaries(
 
 
 def setup_libraries(
-    server_1,
-    server_2,
+    server_1: Plex | Jellyfin | Emby,
+    server_2: Plex | Jellyfin | Emby,
     blacklist_library: list[str],
     blacklist_library_type: list[str],
     whitelist_library: list[str],

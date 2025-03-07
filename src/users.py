@@ -1,4 +1,4 @@
-from plexapi.myplex import MyPlexAccount
+from plexapi.myplex import MyPlexAccount, MyPlexUser
 from loguru import logger
 
 from src.emby import Emby
@@ -109,7 +109,10 @@ def setup_users(
     blacklist_users: list[str],
     whitelist_users: list[str],
     user_mapping: dict[str, str] | None = None,
-) -> tuple[list[MyPlexAccount] | dict[str, str], list[MyPlexAccount] | dict[str, str]]:
+) -> tuple[
+    list[MyPlexAccount | MyPlexUser] | dict[str, str],
+    list[MyPlexAccount | MyPlexUser] | dict[str, str],
+]:
     server_1_users = generate_user_list(server_1)
     server_2_users = generate_user_list(server_2)
     logger.debug(f"Server 1 users: {server_1_users}")

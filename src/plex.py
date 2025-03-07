@@ -36,7 +36,9 @@ generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
 class HostNameIgnoringAdapter(RequestsHTTPAdapter):
-    def init_poolmanager(self, connections, maxsize, block=..., **pool_kwargs):
+    def init_poolmanager(
+        self, connections: int, maxsize: int | None, block=..., **pool_kwargs
+    ) -> None:
         self.poolmanager = PoolManager(
             num_pools=connections,
             maxsize=maxsize,
@@ -89,7 +91,7 @@ def update_user_watched(
     library_data: LibraryData,
     library_name: str,
     dryrun: bool,
-):
+) -> None:
     try:
         # If there are no movies or shows to update, exit early.
         if not library_data.series and not library_data.movies:
@@ -224,8 +226,8 @@ class Plex:
         password: str | None = None,
         server_name: str | None = None,
         ssl_bypass: bool = False,
-        session=None,
-    ):
+        session: requests.Session | None = None,
+    ) -> None:
         self.server_type: str = "Plex"
         self.ssl_bypass: bool = ssl_bypass
         if ssl_bypass:
@@ -426,10 +428,10 @@ class Plex:
     def update_watched(
         self,
         watched_list: dict[str, UserData],
-        user_mapping=None,
-        library_mapping=None,
-        dryrun=False,
-    ):
+        user_mapping: dict[str, str] | None = None,
+        library_mapping: dict[str, str] | None = None,
+        dryrun: bool = False,
+    ) -> None:
         try:
             for user, user_data in watched_list.items():
                 user_other = None
