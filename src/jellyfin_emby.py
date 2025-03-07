@@ -248,7 +248,7 @@ class JellyfinEmby:
         self,
         user_name: str,
         user_id: str,
-        library_type: Literal["Movie", "Series", "Episode"],
+        library_type: Literal["movies", "tvshows"],
         library_id: str,
         library_title: str,
     ) -> LibraryData:
@@ -260,7 +260,7 @@ class JellyfinEmby:
             watched = LibraryData(title=library_title)
 
             # Movies
-            if library_type == "Movie":
+            if library_type == "movies":
                 movie_items = []
                 watched_items = self.query(
                     f"/Users/{user_id}/Items"
@@ -297,7 +297,7 @@ class JellyfinEmby:
                         watched.movies.append(get_mediaitem(self.server_type, movie))
 
             # TV Shows
-            if library_type in ["Series", "Episode"]:
+            if library_type == "tvshows":
                 # Retrieve a list of watched TV shows
                 all_shows = self.query(
                     f"/Users/{user_id}/Items"
@@ -398,61 +398,40 @@ class JellyfinEmby:
             users_watched: dict[str, UserData] = {}
 
             for user_name, user_id in users.items():
-                libraries = []
-
                 all_libraries = self.query(f"/Users/{user_id}/Views", "get")
-                for library in all_libraries["Items"]:
-                    library_id = library["Id"]
-                    library_title = library["Name"]
+                if not all_libraries or not isinstance(all_libraries, dict):
+                    logger.debug(
+                        f"{self.server_type}: Failed to get all libraries for {user_name}"
+                    )
+                    continue
 
-                    if library_title not in sync_libraries:
+                for library in all_libraries.get("Items", []):
+                    if library.get("Name") not in sync_libraries:
                         continue
 
-                    identifiers: dict[str, str] = {
-                        "library_id": library_id,
-                        "library_title": library_title,
-                    }
-                    libraries.append(
-                        self.query(
-                            f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
-                            "get",
-                            identifiers=identifiers,
+                    library_id = library.get("Id")
+                    library_title = library.get("Name")
+                    library_type = library.get("CollectionType")
+                    if not library_id or not library_title or not library_type:
+                        logger.debug(
+                            f"{self.server_type}: Failed to get library data for {user_name} {library_title}"
                         )
+
+                    # Get watched for user
+                    library_data = self.get_user_library_watched(
+                        user_name,
+                        user_id,
+                        library_type,
+                        library_id,
+                        library_title,
                     )
 
-                for library in libraries:
-                    if len(library["Items"]) == 0:
-                        continue
+                    if user_name.lower() not in users_watched:
+                        users_watched[user_name.lower()] = UserData()
 
-                    library_id: str = library["Identifiers"]["library_id"]
-                    library_title: str = library["Identifiers"]["library_title"]
-
-                    # Get all library types excluding "Folder"
-                    types = set(
-                        [
-                            x["Type"]
-                            for x in library["Items"]
-                            if x["Type"] in ["Movie", "Series", "Episode"]
-                        ]
+                    users_watched[user_name.lower()].libraries[library_title] = (
+                        library_data
                     )
-
-                    for library_type in types:
-                        # Get watched for user
-                        library_data = self.get_user_library_watched(
-                            user_name,
-                            user_id,
-                            library_type,
-                            library_id,
-                            library_title,
-                        )
-
-                        if user_name.lower() not in users_watched:
-                            users_watched[user_name.lower()] = UserData()
-
-                        users_watched[user_name.lower()].libraries[library_title] = (
-                            library_data
-                        )
 
             return users_watched
         except Exception as e:
