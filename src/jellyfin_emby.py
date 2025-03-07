@@ -30,28 +30,32 @@ generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
 generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
 
 
-def extract_identifiers_from_item(server_type, item: dict) -> MediaIdentifiers:
-    title = item.get("Name", None)
+def extract_identifiers_from_item(server_type: str, item: dict) -> MediaIdentifiers:
+    title = item.get("Name")
     id = None
     if not title:
         id = item.get("Id")
-        logger.info(f"{server_type}: Name not found in {id}")
+        logger.info(f"{server_type}: Name not found for {id}")
 
     guids = {}
     if generate_guids:
-        guids = {k.lower(): v for k, v in item["ProviderIds"].items()}
+        guids = {k.lower(): v for k, v in item.get("ProviderIds", {}).items()}
         if not guids:
             logger.info(
                 f"{server_type}: {title if title else id} has no guids",
             )
 
-    locations = tuple()
+    locations: tuple = tuple()
     if generate_locations:
-        if "Path" in item:
-            locations = tuple([item.get("Path").split("/")[-1]])
-        elif "MediaSources" in item:
+        if item.get("Path"):
+            locations = tuple([item["Path"].split("/")[-1]])
+        elif item.get("MediaSources"):
             locations = tuple(
-                [x["Path"].split("/")[-1] for x in item["MediaSources"] if "Path" in x]
+                [
+                    x["Path"].split("/")[-1]
+                    for x in item["MediaSources"]
+                    if x.get("Path")
+                ]
             )
 
         if not locations:
@@ -60,18 +64,20 @@ def extract_identifiers_from_item(server_type, item: dict) -> MediaIdentifiers:
     return MediaIdentifiers(
         title=title,
         locations=locations,
-        imdb_id=guids.get("imdb", None),
-        tvdb_id=guids.get("tvdb", None),
-        tmdb_id=guids.get("tmdb", None),
+        imdb_id=guids.get("imdb"),
+        tvdb_id=guids.get("tvdb"),
+        tmdb_id=guids.get("tmdb"),
     )
 
 
-def get_mediaitem(server_type, item: dict) -> MediaItem:
+def get_mediaitem(server_type: str, item: dict) -> MediaItem:
     return MediaItem(
         identifiers=extract_identifiers_from_item(server_type, item),
         status=WatchedStatus(
-            completed=item["UserData"]["Played"],
-            time=floor(item["UserData"]["PlaybackPositionTicks"] / 10000),
+            completed=item.get("UserData", {}).get("Played"),
+            time=floor(
+                item.get("UserData", {}).get("PlaybackPositionTicks", 0) / 10000
+            ),
         ),
     )
 
@@ -86,11 +92,11 @@ class JellyfinEmby:
     ):
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
-        self.server_type = server_type
-        self.baseurl = baseurl
-        self.token = token
-        self.headers = headers
-        self.timeout = int(os.getenv("REQUEST_TIMEOUT", 300))
+        self.server_type: str = server_type
+        self.baseurl: str = baseurl
+        self.token: str = token
+        self.headers: dict[str, str] = headers
+        self.timeout: int = int(os.getenv("REQUEST_TIMEOUT", 300))
 
         if not self.baseurl:
             raise Exception(f"{self.server_type} baseurl not set")
@@ -99,8 +105,12 @@ class JellyfinEmby:
             raise Exception(f"{self.server_type} token not set")
 
         self.session = requests.Session()
-        self.users = self.get_users()
-        self.server_name = self.info(name_only=True)
+        self.users: dict[str, str] = self.get_users()
+        self.server_name: str = self.info(name_only=True)
+        self.server_version: Version = self.info(version_only=True)
+        self.update_partial: bool = self.is_partial_update_supported(
+            self.server_version
+        )
 
     def query(
         self,
@@ -108,11 +118,9 @@ class JellyfinEmby:
         query_type: Literal["get", "post"],
         identifiers: dict[str, str] | None = None,
         json: dict[str, float] | None = None,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+    ):
         try:
-            results: (
-                dict[str, list[Any] | dict[str, str]] | list[dict[str, Any]] | None
-            ) = None
+            results = None
 
             if query_type == "get":
                 response = self.session.get(
@@ -143,12 +151,12 @@ class JellyfinEmby:
                 else:
                     results = response.json()
 
-            if results is not None:
+            if results:
                 if not isinstance(results, list) and not isinstance(results, dict):
                     raise Exception("Query result is not of type list or dict")
 
             # append identifiers to results
-            if identifiers and results:
+            if identifiers and isinstance(results, dict):
                 results["Identifiers"] = identifiers
 
             return results
@@ -165,13 +173,13 @@ class JellyfinEmby:
         try:
             query_string = "/System/Info/Public"
 
-            response: dict[str, Any] = self.query(query_string, "get")
+            response: dict[str, Any] | None = self.query(query_string, "get")
 
             if response:
                 if name_only:
-                    return response["ServerName"]
+                    return response.get("ServerName")
                 elif version_only:
-                    return parse(response["Version"])
+                    return parse(response.get("Version", ""))
 
                 return f"{self.server_type} {response.get('ServerName')}: {response.get('Version')}"
             else:
@@ -186,9 +194,10 @@ class JellyfinEmby:
             users: dict[str, str] = {}
 
             query_string = "/Users"
-            response: list[dict[str, str | bool]] = self.query(query_string, "get")
+            response: list[dict[str, str | bool]] | None = self.query(
+                query_string, "get"
+            )
 
-            # If response is not empty
             if response:
                 for user in response:
                     if isinstance(user["Name"], str) and isinstance(user["Id"], str):
@@ -201,17 +210,28 @@ class JellyfinEmby:
 
     def get_libraries(self) -> dict[str, str]:
         try:
-            libraries = {}
+            libraries: dict[str, str] = {}
 
             # Theres no way to get all libraries so individually get list of libraries from all users
             users = self.get_users()
 
             for user_name, user_id in users.items():
-                user_libraries: dict = self.query(f"/Users/{user_id}/Views", "get")
-                logger.debug(f"{self.server_type}: All Libraries for {user_name} {[library.get("Name") for library in user_libraries["Items"]]}")
+                user_libraries: dict[str, Any] | None = self.query(
+                    f"/Users/{user_id}/Views", "get"
+                )
 
-                for library in user_libraries["Items"]:
-                    library_title = library["Name"]
+                if not user_libraries:
+                    logger.error(
+                        f"{self.server_type}: Failed to get libraries for {user_name}"
+                    )
+                    return libraries
+
+                logger.debug(
+                    f"{self.server_type}: All Libraries for {user_name} {[library.get('Name') for library in user_libraries.get('Items', [])]}"
+                )
+
+                for library in user_libraries.get("Items", []):
+                    library_title = library.get("Name")
                     library_type = library.get("CollectionType")
 
                     if library_type not in ["movies", "tvshows"]:
@@ -228,7 +248,12 @@ class JellyfinEmby:
             raise Exception(e)
 
     def get_user_library_watched(
-        self, user_name, user_id, library_type, library_id, library_title
+        self,
+        user_name: str,
+        user_id: str,
+        library_type: Literal["Movie", "Series", "Episode"],
+        library_id: str,
+        library_title: str,
     ) -> LibraryData:
         user_name = user_name.lower()
         try:
@@ -253,17 +278,17 @@ class JellyfinEmby:
 
                 for movie in watched_items + in_progress_items:
                     # Skip if theres no user data which means the movie has not been watched
-                    if "UserData" not in movie:
+                    if not movie.get("UserData"):
                         continue
 
                     # Skip if theres no media tied to the movie
-                    if "MediaSources" not in movie or movie["MediaSources"] == {}:
+                    if not movie.get("MediaSources"):
                         continue
 
                     # Skip if not watched or watched less than a minute
                     if (
-                        movie["UserData"]["Played"] == True
-                        or movie["UserData"]["PlaybackPositionTicks"] > 600000000
+                        movie["UserData"].get("Played")
+                        or movie["UserData"].get("PlaybackPositionTicks", 0) > 600000000
                     ):
                         watched.movies.append(get_mediaitem(self.server_type, movie))
 
@@ -279,24 +304,25 @@ class JellyfinEmby:
                 # Filter the list of shows to only include those that have been partially or fully watched
                 watched_shows_filtered = []
                 for show in watched_shows:
-                    if "UserData" not in show:
+                    if not show.get("UserData"):
                         continue
 
-                    if "PlayedPercentage" in show["UserData"]:
-                        if show["UserData"]["PlayedPercentage"] > 0:
-                            watched_shows_filtered.append(show)
+                    if show["UserData"].get("PlayedPercentage", 0) > 0:
+                        watched_shows_filtered.append(show)
 
                 # Retrieve the watched/partially watched list of episodes of each watched show
                 for show in watched_shows_filtered:
-                    show_guids = {k.lower(): v for k, v in show["ProviderIds"].items()}
+                    show_guids = {
+                        k.lower(): v for k, v in show.get("ProviderIds", {}).items()
+                    }
                     show_locations = (
                         tuple([show["Path"].split("/")[-1]])
-                        if "Path" in show
+                        if show.get("Path")
                         else tuple()
                     )
 
                     show_episodes = self.query(
-                        f"/Shows/{show['Id']}/Episodes"
+                        f"/Shows/{show.get('Id')}/Episodes"
                         + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,MediaSources",
                         "get",
                     ).get("Items", [])
@@ -305,19 +331,17 @@ class JellyfinEmby:
                     # Create a list to store the episodes
                     episode_mediaitem = []
                     for episode in show_episodes:
-                        if "UserData" not in episode:
+                        if not episode.get("UserData"):
                             continue
 
-                        if (
-                            "MediaSources" not in episode
-                            or episode["MediaSources"] == {}
-                        ):
+                        if not episode.get("MediaSources"):
                             continue
 
                         # If watched or watched more than a minute
                         if (
-                            episode["UserData"]["Played"] == True
-                            or episode["UserData"]["PlaybackPositionTicks"] > 600000000
+                            episode["UserData"].get("Played")
+                            or episode["UserData"].get("PlaybackPositionTicks", 0)
+                            > 600000000
                         ):
                             episode_mediaitem.append(
                                 get_mediaitem(self.server_type, episode)
@@ -329,9 +353,9 @@ class JellyfinEmby:
                                 identifiers=MediaIdentifiers(
                                     title=show.get("Name"),
                                     locations=show_locations,
-                                    imdb_id=show_guids.get("imdb", None),
-                                    tvdb_id=show_guids.get("tvdb", None),
-                                    tmdb_id=show_guids.get("tmdb", None),
+                                    imdb_id=show_guids.get("imdb"),
+                                    tvdb_id=show_guids.get("tvdb"),
+                                    tmdb_id=show_guids.get("tmdb"),
                                 ),
                                 episodes=episode_mediaitem,
                             )
@@ -348,7 +372,7 @@ class JellyfinEmby:
             )
 
             logger.error(traceback.format_exc())
-            return {}
+            return LibraryData(title=library_title)
 
     def get_watched(
         self, users: dict[str, str], sync_libraries: list[str]
@@ -357,44 +381,35 @@ class JellyfinEmby:
             users_watched: dict[str, UserData] = {}
 
             for user_name, user_id in users.items():
-                libraries = []
-
-                all_libraries = self.query(f"/Users/{user_id}/Views", "get")
-                for library in all_libraries["Items"]:
-                    library_id = library["Id"]
-                    library_title = library["Name"]
-
-                    if library_title not in sync_libraries:
-                        continue
-
-                    identifiers: dict[str, str] = {
-                        "library_id": library_id,
-                        "library_title": library_title,
-                    }
-                    libraries.append(
-                        self.query(
-                            f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
-                            "get",
-                            identifiers=identifiers,
-                        )
+                libraries = [
+                    self.query(
+                        f"/Users/{user_id}/Items"
+                        f"?ParentId={lib.get('Id')}&Filters=IsPlayed&Recursive=True&excludeItemTypes=Folder&limit=100",
+                        "get",
+                        identifiers={
+                            "library_id": lib["Id"],
+                            "library_title": lib["Name"],
+                        },
                     )
+                    for lib in self.query(f"/Users/{user_id}/Views", "get").get(
+                        "Items", []
+                    )
+                    if lib.get("Name") in sync_libraries
+                ]
 
                 for library in libraries:
-                    if len(library["Items"]) == 0:
+                    if not library.get("Items"):
                         continue
 
-                    library_id: str = library["Identifiers"]["library_id"]
-                    library_title: str = library["Identifiers"]["library_title"]
+                    library_id = library.get("Identifiers", {}).get("library_id")
+                    library_title = library.get("Identifiers", {}).get("library_title")
 
                     # Get all library types excluding "Folder"
-                    types = set(
-                        [
-                            x["Type"]
-                            for x in library["Items"]
-                            if x["Type"] in ["Movie", "Series", "Episode"]
-                        ]
-                    )
+                    types = {
+                        x["Type"]
+                        for x in library.get("Items", [])
+                        if x.get("Type") in {"Movie", "Series", "Episode"}
+                    }
 
                     for library_type in types:
                         # Get watched for user
@@ -425,7 +440,6 @@ class JellyfinEmby:
         library_data: LibraryData,
         library_name: str,
         library_id: str,
-        update_partial: bool,
         dryrun: bool,
     ):
         try:
@@ -444,8 +458,9 @@ class JellyfinEmby:
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
                     + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
                     "get",
-                )
-                for jellyfin_video in jellyfin_search["Items"]:
+                ).get("Items", [])
+
+                for jellyfin_video in jellyfin_search:
                     jelly_identifiers = extract_identifiers_from_item(
                         self.server_type, jellyfin_video
                     )
@@ -454,7 +469,7 @@ class JellyfinEmby:
                         if check_same_identifiers(
                             jelly_identifiers, stored_movie.identifiers
                         ):
-                            jellyfin_video_id = jellyfin_video["Id"]
+                            jellyfin_video_id = jellyfin_video.get("Id")
                             if stored_movie.status.completed:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
                                 if not dryrun:
@@ -471,11 +486,11 @@ class JellyfinEmby:
                                     library_name,
                                     jellyfin_video.get("Name"),
                                 )
-                            elif update_partial:
+                            elif self.update_partial:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
 
                                 if not dryrun:
-                                    playback_position_payload = {
+                                    playback_position_payload: dict[str, float] = {
                                         "PlaybackPositionTicks": stored_movie.status.time
                                         * 10_000,
                                     }
@@ -507,7 +522,7 @@ class JellyfinEmby:
                     + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                     "get",
                 )
-                jellyfin_shows = [x for x in jellyfin_search["Items"]]
+                jellyfin_shows = [x for x in jellyfin_search.get("Items", [])]
 
                 for jellyfin_show in jellyfin_shows:
                     jellyfin_show_identifiers = extract_identifiers_from_item(
@@ -518,19 +533,19 @@ class JellyfinEmby:
                         if check_same_identifiers(
                             jellyfin_show_identifiers, stored_series.identifiers
                         ):
-                            logger.info(
+                            logger.trace(
                                 f"Found matching show for '{jellyfin_show.get('Name')}'",
                             )
                             # Now update episodes.
                             # Get the list of Plex episodes for this show.
-                            jellyfin_show_id = jellyfin_show["Id"]
+                            jellyfin_show_id = jellyfin_show.get("Id")
                             jellyfin_episodes = self.query(
                                 f"/Shows/{jellyfin_show_id}/Episodes"
                                 + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
                                 "get",
-                            )
+                            ).get("Items", [])
 
-                            for jellyfin_episode in jellyfin_episodes["Items"]:
+                            for jellyfin_episode in jellyfin_episodes:
                                 jellyfin_episode_identifiers = (
                                     extract_identifiers_from_item(
                                         self.server_type, jellyfin_episode
@@ -541,10 +556,10 @@ class JellyfinEmby:
                                         jellyfin_episode_identifiers,
                                         stored_ep.identifiers,
                                     ):
-                                        jellyfin_episode_id = jellyfin_episode["Id"]
+                                        jellyfin_episode_id = jellyfin_episode.get("Id")
                                         if stored_ep.status.completed:
                                             msg = (
-                                                f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                                f"{self.server_type}: {jellyfin_episode.get('SeriesName')} {jellyfin_episode.get('SeasonName')} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                                 + f" as watched for {user_name} in {library_name}"
                                             )
                                             if not dryrun:
@@ -564,9 +579,9 @@ class JellyfinEmby:
                                                 jellyfin_episode.get("SeriesName"),
                                                 jellyfin_episode.get("Name"),
                                             )
-                                        elif update_partial:
+                                        elif self.update_partial:
                                             msg = (
-                                                f"{self.server_type}: {jellyfin_episode['SeriesName']} {jellyfin_episode['SeasonName']} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
+                                                f"{self.server_type}: {jellyfin_episode.get('SeriesName')} {jellyfin_episode.get('SeasonName')} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                                 + f" as partially watched for {floor(stored_ep.status.time / 60_000)} minutes for {user_name} in {library_name}"
                                             )
 
@@ -619,14 +634,6 @@ class JellyfinEmby:
         dryrun=False,
     ):
         try:
-            server_version = self.info(version_only=True)
-            update_partial = self.is_partial_update_supported(server_version)
-
-            if not update_partial:
-                logger.info(
-                    f"{self.server_type}: Server version {server_version} does not support updating playback position.",
-                )
-
             for user, user_data in watched_list.items():
                 user_other = None
                 user_name = None
@@ -647,7 +654,7 @@ class JellyfinEmby:
                         user_name = key
                         break
 
-                if not user_id:
+                if not user_id or not user_name:
                     logger.info(f"{user} {user_other} not found in Jellyfin")
                     continue
 
@@ -655,7 +662,7 @@ class JellyfinEmby:
                     f"/Users/{user_id}/Views",
                     "get",
                 )
-                jellyfin_libraries = [x for x in jellyfin_libraries["Items"]]
+                jellyfin_libraries = [x for x in jellyfin_libraries.get("Items", [])]
 
                 for library_name in user_data.libraries:
                     library_data = user_data.libraries[library_name]
@@ -703,7 +710,6 @@ class JellyfinEmby:
                             library_data,
                             library_name,
                             library_id,
-                            update_partial,
                             dryrun,
                         )
 

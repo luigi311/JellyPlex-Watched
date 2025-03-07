@@ -1,5 +1,6 @@
 from src.jellyfin_emby import JellyfinEmby
 from packaging.version import parse, Version
+from loguru import logger
 
 
 class Emby(JellyfinEmby):
@@ -22,4 +23,10 @@ class Emby(JellyfinEmby):
         )
 
     def is_partial_update_supported(self, server_version: Version) -> bool:
-        return server_version > parse("4.4")
+        if not server_version >= parse("4.4"):
+            logger.info(
+                f"{self.server_type}: Server version {server_version} does not support updating playback position.",
+            )
+            return False
+
+        return True
