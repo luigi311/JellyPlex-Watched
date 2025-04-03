@@ -83,7 +83,7 @@ wheels = [
 
 [[package]]
 name = "jellyplex-watched"
-version = "6.1.2"
+version = "7.0.3"
 source = { virtual = "." }
 dependencies = [
     { name = "loguru" },
