@@ -231,6 +231,39 @@ class JellyfinEmby:
                     library_title = library.get("Name")
                     library_type = library.get("CollectionType")
 
+                    # If collection type is not set, fallback based on media files
+                    if not library_type:
+                        library_id = library.get("Id")
+                        # Get first 100 items in library
+                        library_items = self.query(
+                            f"/Users/{user_id}/Items"
+                            + f"?ParentId={library_id}&Recursive=True&excludeItemTypes=Folder&limit=100",
+                            "get",
+                        )
+
+                        if not library_items or not isinstance(library_items, dict):
+                            logger.debug(
+                                f"{self.server_type}: Failed to get library items for {user_name} {library_title}"
+                            )
+                            continue
+
+                        all_types = set(
+                            [x.get("Type") for x in library_items.get("Items", [])]
+                        )
+                        types = set([x for x in all_types if x in ["Movie", "Episode"]])
+
+                        if not len(types) == 1:
+                            logger.debug(
+                                f"{self.server_type}: Skipping Library {library_title} didn't find just a single type, found {all_types}",
+                            )
+                            continue
+
+                        library_type = types.pop()
+
+                        library_type = (
+                            "movies" if library_type == "Movie" else "tvshows"
+                        )
+
                     if library_type not in ["movies", "tvshows"]:
                         logger.debug(
                             f"{self.server_type}: Skipping Library {library_title} found type {library_type}",
