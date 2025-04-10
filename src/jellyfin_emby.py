@@ -764,7 +764,7 @@ class JellyfinEmby:
 
                     library_id = None
                     for jellyfin_library in jellyfin_libraries:
-                        if jellyfin_library["Name"] == library_name:
+                        if jellyfin_library["Name"].lower() == library_name.lower():
                             library_id = jellyfin_library["Id"]
                             continue
 
