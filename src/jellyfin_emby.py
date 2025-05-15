@@ -469,7 +469,7 @@ class JellyfinEmby:
             return users_watched
         except Exception as e:
             logger.error(f"{self.server_type}: Failed to get watched, Error: {e}")
-            raise Exception(e)
+            return {}
 
     def update_user_watched(
         self,
@@ -681,8 +681,6 @@ class JellyfinEmby:
             logger.error(
                 f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
             )
-            logger.error(traceback.format_exc())
-            raise Exception(e)
 
     def update_watched(
         self,
@@ -691,84 +689,82 @@ class JellyfinEmby:
         library_mapping: dict[str, str] | None = None,
         dryrun: bool = False,
     ) -> None:
-        try:
-            for user, user_data in watched_list.items():
-                user_other = None
-                user_name = None
-                if user_mapping:
-                    if user in user_mapping.keys():
-                        user_other = user_mapping[user]
-                    elif user in user_mapping.values():
-                        user_other = search_mapping(user_mapping, user)
+        for user, user_data in watched_list.items():
+            user_other = None
+            user_name = None
+            if user_mapping:
+                if user in user_mapping.keys():
+                    user_other = user_mapping[user]
+                elif user in user_mapping.values():
+                    user_other = search_mapping(user_mapping, user)
 
-                user_id = None
-                for key in self.users:
-                    if user.lower() == key.lower():
-                        user_id = self.users[key]
-                        user_name = key
-                        break
-                    elif user_other and user_other.lower() == key.lower():
-                        user_id = self.users[key]
-                        user_name = key
-                        break
+            user_id = None
+            for key in self.users:
+                if user.lower() == key.lower():
+                    user_id = self.users[key]
+                    user_name = key
+                    break
+                elif user_other and user_other.lower() == key.lower():
+                    user_id = self.users[key]
+                    user_name = key
+                    break
 
-                if not user_id or not user_name:
-                    logger.info(f"{user} {user_other} not found in Jellyfin")
-                    continue
+            if not user_id or not user_name:
+                logger.info(f"{user} {user_other} not found in Jellyfin")
+                continue
 
-                jellyfin_libraries = self.query(
-                    f"/Users/{user_id}/Views",
-                    "get",
+            jellyfin_libraries = self.query(
+                f"/Users/{user_id}/Views",
+                "get",
+            )
+
+            if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
+                logger.debug(
+                    f"{self.server_type}: Failed to get libraries for {user_name}"
                 )
+                continue
 
-                if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
-                    logger.debug(
-                        f"{self.server_type}: Failed to get libraries for {user_name}"
-                    )
-                    continue
+            jellyfin_libraries = [x for x in jellyfin_libraries.get("Items", [])]
 
-                jellyfin_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+            for library_name in user_data.libraries:
+                library_data = user_data.libraries[library_name]
+                library_other = None
+                if library_mapping:
+                    if library_name in library_mapping.keys():
+                        library_other = library_mapping[library_name]
+                    elif library_name in library_mapping.values():
+                        library_other = search_mapping(library_mapping, library_name)
 
-                for library_name in user_data.libraries:
-                    library_data = user_data.libraries[library_name]
-                    library_other = None
-                    if library_mapping:
-                        if library_name in library_mapping.keys():
-                            library_other = library_mapping[library_name]
-                        elif library_name in library_mapping.values():
-                            library_other = search_mapping(
-                                library_mapping, library_name
+                if library_name.lower() not in [
+                    x["Name"].lower() for x in jellyfin_libraries
+                ]:
+                    if library_other:
+                        if library_other.lower() in [
+                            x["Name"].lower() for x in jellyfin_libraries
+                        ]:
+                            logger.info(
+                                f"{self.server_type}: Library {library_name} not found, but {library_other} found, using {library_other}",
                             )
-
-                    if library_name.lower() not in [
-                        x["Name"].lower() for x in jellyfin_libraries
-                    ]:
-                        if library_other:
-                            if library_other.lower() in [
-                                x["Name"].lower() for x in jellyfin_libraries
-                            ]:
-                                logger.info(
-                                    f"{self.server_type}: Library {library_name} not found, but {library_other} found, using {library_other}",
-                                )
-                                library_name = library_other
-                            else:
-                                logger.info(
-                                    f"{self.server_type}: Library {library_name} or {library_other} not found in library list",
-                                )
-                                continue
+                            library_name = library_other
                         else:
                             logger.info(
-                                f"{self.server_type}: Library {library_name} not found in library list",
+                                f"{self.server_type}: Library {library_name} or {library_other} not found in library list",
                             )
                             continue
+                    else:
+                        logger.info(
+                            f"{self.server_type}: Library {library_name} not found in library list",
+                        )
+                        continue
 
-                    library_id = None
-                    for jellyfin_library in jellyfin_libraries:
-                        if jellyfin_library["Name"].lower() == library_name.lower():
-                            library_id = jellyfin_library["Id"]
-                            continue
+                library_id = None
+                for jellyfin_library in jellyfin_libraries:
+                    if jellyfin_library["Name"].lower() == library_name.lower():
+                        library_id = jellyfin_library["Id"]
+                        continue
 
-                    if library_id:
+                if library_id:
+                    try:
                         self.update_user_watched(
                             user_name,
                             user_id,
@@ -777,7 +773,7 @@ class JellyfinEmby:
                             library_id,
                             dryrun,
                         )
-
-        except Exception as e:
-            logger.error(f"{self.server_type}: Error updating watched, {e}")
-            raise Exception(e)
+                    except Exception as e:
+                        logger.error(
+                            f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
+                        )
