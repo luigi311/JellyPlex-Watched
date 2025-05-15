@@ -25,7 +25,7 @@ def log_marked(
     if duration:
         output += f"/{duration}"
 
-    with open(f"{mark_file}", "a", encoding="utf-8") as file:
+    with open(mark_file, "a", encoding="utf-8") as file:
         file.write(output + "\n")
 
 
