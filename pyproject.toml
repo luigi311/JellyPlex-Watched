@@ -6,19 +6,19 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
-    "packaging==24.2",
-    "plexapi==4.16.1",
-    "pydantic==2.10.6",
-    "python-dotenv==1.0.0",
+    "packaging==25.0",
+    "plexapi==4.17.0",
+    "pydantic==2.11.4",
+    "python-dotenv==1.1.0",
     "requests==2.32.3",
 ]
 
 [dependency-groups]
 lint = [
-    "ruff>=0.9.6",
+    "ruff>=0.11.10",
 ]
 dev = [
     "mypy>=1.15.0",
-    "pytest>=8.3.4",
-    "types-requests>=2.32.0.20250306",
+    "pytest>=8.3.5",
+    "types-requests>=2.32.0.20250515",
 ]
