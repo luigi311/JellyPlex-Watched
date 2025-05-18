@@ -70,40 +70,35 @@ jobs:
 
       - name: "Test Plex"
         run: |
-          mv test/ci_plex.env .env
-          uv run main.py
+          ENV_FILE="test/ci_plex.env" uv run main.py
           uv run test/validate_ci_marklog.py --plex
           
           rm mark.log
           
       - name: "Test Jellyfin"
         run: |
-          mv test/ci_jellyfin.env .env
-          uv run main.py
+          ENV_FILE="test/ci_jellyfin.env" uv run main.py
           uv run test/validate_ci_marklog.py --jellyfin
           
           rm mark.log
 
       - name: "Test Emby"
         run: |
-          mv test/ci_emby.env .env
-          uv run main.py
+          ENV_FILE="test/ci_emby.env" uv run main.py
           uv run test/validate_ci_marklog.py --emby
           
           rm mark.log
 
       - name: "Test Guids"
         run: |
-          mv test/ci_guids.env .env
-          uv run main.py
+          ENV_FILE="test/ci_guids.env" uv run main.py
           uv run test/validate_ci_marklog.py --guids
           
           rm mark.log
 
       - name: "Test Locations"
         run: |
-          mv test/ci_locations.env .env
-          uv run main.py
+          ENV_FILE="test/ci_locations.env" uv run main.py
           uv run test/validate_ci_marklog.py --locations
           
           rm mark.log
@@ -111,11 +106,10 @@ jobs:
       - name: "Test writing to the servers"
         run: |
           # Test writing to the servers
-          mv test/ci_write.env .env
-          uv run main.py
+          ENV_FILE="test/ci_write.env" uv run main.py
 
           # Test again to test if it can handle existing data
-          uv run main.py
+          ENV_FILE="test/ci_write.env" uv run main.py
 
           uv run test/validate_ci_marklog.py --write
           
