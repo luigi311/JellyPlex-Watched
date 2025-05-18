@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-mark_file = os.getenv("MARK_FILE", os.getenv("MARKFILE", "mark.log"))
-
 
 def log_marked(
     server_type: str,
@@ -16,6 +14,7 @@ def log_marked(
     movie_show: str,
     episode: str | None = None,
     duration: float | None = None,
+    mark_file: str = "mark.log",
 ) -> None:
     output = f"{server_type}/{server_name}/{username}/{library}/{movie_show}"
 
@@ -29,9 +28,18 @@ def log_marked(
         file.write(output + "\n")
 
 
+def get_env_value(env, key: str, default: Any = None):
+    if env and key in env:
+        return env[key]
+    elif os.getenv(key):
+        return os.getenv(key)
+    else:
+        return default
+
+
 # Reimplementation of distutils.util.strtobool due to it being deprecated
 # Source: https://github.com/PostHog/posthog/blob/01e184c29d2c10c43166f1d40a334abbc3f99d8a/posthog/utils.py#L668
-def str_to_bool(value: str) -> bool:
+def str_to_bool(value: str | None) -> bool:
     if not value:
         return False
     return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
@@ -73,13 +81,13 @@ def future_thread_executor(
     args: list[tuple[Callable[..., Any], ...]],
     threads: int | None = None,
     override_threads: bool = False,
+    max_threads: int | None = None,
 ) -> list[Any]:
     results: list[Any] = []
 
     # Determine the number of workers, defaulting to 1 if os.cpu_count() returns None
-    max_threads_env: int = int(os.getenv("MAX_THREADS", 32))
     cpu_threads: int = os.cpu_count() or 1  # Default to 1 if os.cpu_count() is None
-    workers: int = min(max_threads_env, cpu_threads * 2)
+    workers: int = min(max_threads, cpu_threads * 2) if max_threads else cpu_threads * 2
 
     # Adjust workers based on threads parameter and override_threads flag
     if threads is not None:
