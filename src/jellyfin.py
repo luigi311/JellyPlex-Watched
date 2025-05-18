@@ -4,7 +4,7 @@ from loguru import logger
 
 
 class Jellyfin(JellyfinEmby):
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(self, env, base_url: str, token: str) -> None:
         authorization = (
             "MediaBrowser , "
             'Client="JellyPlex-Watched", '
@@ -19,7 +19,7 @@ class Jellyfin(JellyfinEmby):
         }
 
         super().__init__(
-            server_type="Jellyfin", base_url=base_url, token=token, headers=headers
+            env, server_type="Jellyfin", base_url=base_url, token=token, headers=headers
         )
 
     def is_partial_update_supported(self, server_version: Version) -> bool:

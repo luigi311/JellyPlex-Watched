@@ -2,7 +2,7 @@ import os
 import traceback
 import json
 import sys
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from time import sleep, perf_counter
 from loguru import logger
 
@@ -13,6 +13,7 @@ from src.library import setup_libraries
 from src.functions import (
     parse_string_to_list,
     str_to_bool,
+    get_env_value,
 )
 from src.users import setup_users
 from src.watched import (
@@ -21,53 +22,59 @@ from src.watched import (
 from src.black_white import setup_black_white_lists
 from src.connection import generate_server_connections
 
-load_dotenv(override=True)
 
-log_file = os.getenv("LOG_FILE", os.getenv("LOGFILE", "log.log"))
-level = os.getenv("DEBUG_LEVEL", "INFO").upper()
-
-
-def configure_logger() -> None:
+def configure_logger(log_file: str = "log.log", debug_level: str = "INFO") -> None:
     # Remove default logger to configure our own
     logger.remove()
 
     # Choose log level based on environment
     # If in debug mode with a "debug" level, use DEBUG; otherwise, default to INFO.
 
-    if level not in ["INFO", "DEBUG", "TRACE"]:
+    if debug_level not in ["INFO", "DEBUG", "TRACE"]:
         logger.add(sys.stdout)
-        raise Exception("Invalid DEBUG_LEVEL, please choose between INFO, DEBUG, TRACE")
+        raise Exception(
+            f"Invalid DEBUG_LEVEL {debug_level}, please choose between INFO, DEBUG, TRACE"
+        )
 
     # Add a sink for file logging and the console.
-    logger.add(log_file, level=level, mode="w")
-    logger.add(sys.stdout, level=level)
+    logger.add(log_file, level=debug_level, mode="w")
+    logger.add(sys.stdout, level=debug_level)
 
 
 def should_sync_server(
+    env,
     server_1: Plex | Jellyfin | Emby,
     server_2: Plex | Jellyfin | Emby,
 ) -> bool:
     sync_from_plex_to_jellyfin = str_to_bool(
-        os.getenv("SYNC_FROM_PLEX_TO_JELLYFIN", "True")
+        get_env_value(env, "SYNC_FROM_PLEX_TO_JELLYFIN", "True")
     )
-    sync_from_plex_to_plex = str_to_bool(os.getenv("SYNC_FROM_PLEX_TO_PLEX", "True"))
-    sync_from_plex_to_emby = str_to_bool(os.getenv("SYNC_FROM_PLEX_TO_EMBY", "True"))
+    sync_from_plex_to_plex = str_to_bool(
+        get_env_value(env, "SYNC_FROM_PLEX_TO_PLEX", "True")
+    )
+    sync_from_plex_to_emby = str_to_bool(
+        get_env_value(env, "SYNC_FROM_PLEX_TO_EMBY", "True")
+    )
 
     sync_from_jelly_to_plex = str_to_bool(
-        os.getenv("SYNC_FROM_JELLYFIN_TO_PLEX", "True")
+        get_env_value(env, "SYNC_FROM_JELLYFIN_TO_PLEX", "True")
     )
     sync_from_jelly_to_jellyfin = str_to_bool(
-        os.getenv("SYNC_FROM_JELLYFIN_TO_JELLYFIN", "True")
+        get_env_value(env, "SYNC_FROM_JELLYFIN_TO_JELLYFIN", "True")
     )
     sync_from_jelly_to_emby = str_to_bool(
-        os.getenv("SYNC_FROM_JELLYFIN_TO_EMBY", "True")
+        get_env_value(env, "SYNC_FROM_JELLYFIN_TO_EMBY", "True")
     )
 
-    sync_from_emby_to_plex = str_to_bool(os.getenv("SYNC_FROM_EMBY_TO_PLEX", "True"))
-    sync_from_emby_to_jellyfin = str_to_bool(
-        os.getenv("SYNC_FROM_EMBY_TO_JELLYFIN", "True")
+    sync_from_emby_to_plex = str_to_bool(
+        get_env_value(env, "SYNC_FROM_EMBY_TO_PLEX", "True")
     )
-    sync_from_emby_to_emby = str_to_bool(os.getenv("SYNC_FROM_EMBY_TO_EMBY", "True"))
+    sync_from_emby_to_jellyfin = str_to_bool(
+        get_env_value(env, "SYNC_FROM_EMBY_TO_JELLYFIN", "True")
+    )
+    sync_from_emby_to_emby = str_to_bool(
+        get_env_value(env, "SYNC_FROM_EMBY_TO_EMBY", "True")
+    )
 
     if isinstance(server_1, Plex):
         if isinstance(server_2, Jellyfin) and not sync_from_plex_to_jellyfin:
@@ -111,17 +118,17 @@ def should_sync_server(
     return True
 
 
-def main_loop() -> None:
-    dryrun = str_to_bool(os.getenv("DRYRUN", "False"))
+def main_loop(env) -> None:
+    dryrun = str_to_bool(get_env_value(env, "DRYRUN", "False"))
     logger.info(f"Dryrun: {dryrun}")
 
-    user_mapping_env = os.getenv("USER_MAPPING", None)
+    user_mapping_env = get_env_value(env, "USER_MAPPING", None)
     user_mapping = None
     if user_mapping_env:
         user_mapping = json.loads(user_mapping_env.lower())
     logger.info(f"User Mapping: {user_mapping}")
 
-    library_mapping_env = os.getenv("LIBRARY_MAPPING", None)
+    library_mapping_env = get_env_value(env, "LIBRARY_MAPPING", None)
     library_mapping = None
     if library_mapping_env:
         library_mapping = json.loads(library_mapping_env)
@@ -129,16 +136,20 @@ def main_loop() -> None:
 
     # Create (black/white)lists
     logger.info("Creating (black/white)lists")
-    blacklist_library = parse_string_to_list(os.getenv("BLACKLIST_LIBRARY", None))
-    whitelist_library = parse_string_to_list(os.getenv("WHITELIST_LIBRARY", None))
+    blacklist_library = parse_string_to_list(
+        get_env_value(env, "BLACKLIST_LIBRARY", None)
+    )
+    whitelist_library = parse_string_to_list(
+        get_env_value(env, "WHITELIST_LIBRARY", None)
+    )
     blacklist_library_type = parse_string_to_list(
-        os.getenv("BLACKLIST_LIBRARY_TYPE", None)
+        get_env_value(env, "BLACKLIST_LIBRARY_TYPE", None)
     )
     whitelist_library_type = parse_string_to_list(
-        os.getenv("WHITELIST_LIBRARY_TYPE", None)
+        get_env_value(env, "WHITELIST_LIBRARY_TYPE", None)
     )
-    blacklist_users = parse_string_to_list(os.getenv("BLACKLIST_USERS", None))
-    whitelist_users = parse_string_to_list(os.getenv("WHITELIST_USERS", None))
+    blacklist_users = parse_string_to_list(get_env_value(env, "BLACKLIST_USERS", None))
+    whitelist_users = parse_string_to_list(get_env_value(env, "WHITELIST_USERS", None))
 
     (
         blacklist_library,
@@ -160,7 +171,7 @@ def main_loop() -> None:
 
     # Create server connections
     logger.info("Creating server connections")
-    servers = generate_server_connections()
+    servers = generate_server_connections(env)
 
     for server_1 in servers:
         # If server is the final server in the list, then we are done with the loop
@@ -170,9 +181,9 @@ def main_loop() -> None:
         # Start server_2 at the next server in the list
         for server_2 in servers[servers.index(server_1) + 1 :]:
             # Check if server 1 and server 2 are going to be synced in either direction, skip if not
-            if not should_sync_server(server_1, server_2) and not should_sync_server(
-                server_2, server_1
-            ):
+            if not should_sync_server(
+                env, server_1, server_2
+            ) and not should_sync_server(env, server_2, server_1):
                 continue
 
             logger.info(f"Server 1: {type(server_1)}: {server_1.info()}")
@@ -223,7 +234,7 @@ def main_loop() -> None:
                 f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}",
             )
 
-            if should_sync_server(server_2, server_1):
+            if should_sync_server(env, server_2, server_1):
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
                 server_1.update_watched(
                     server_2_watched_filtered,
@@ -232,7 +243,7 @@ def main_loop() -> None:
                     dryrun,
                 )
 
-            if should_sync_server(server_1, server_2):
+            if should_sync_server(env, server_1, server_2):
                 logger.info(f"Syncing {server_1.info()} -> {server_2.info()}")
                 server_2.update_watched(
                     server_1_watched_filtered,
@@ -244,15 +255,24 @@ def main_loop() -> None:
 
 @logger.catch
 def main() -> None:
-    run_only_once = str_to_bool(os.getenv("RUN_ONLY_ONCE", "False"))
-    sleep_duration = float(os.getenv("SLEEP_DURATION", "3600"))
+    # Get environment variables
+    env_file = get_env_value(None, "ENV_FILE", ".env")
+    env = dotenv_values(env_file)
+
+    run_only_once = str_to_bool(get_env_value(env, "RUN_ONLY_ONCE", "False"))
+    sleep_duration = float(get_env_value(env, "SLEEP_DURATION", "3600"))
+    log_file = get_env_value(env, "LOG_FILE", "log.log")
+    debug_level = get_env_value(env, "DEBUG_LEVEL", "INFO")
+    if debug_level:
+        debug_level = debug_level.upper()
+
     times: list[float] = []
     while True:
         try:
             start = perf_counter()
             # Reconfigure the logger on each loop so the logs are rotated on each run
-            configure_logger()
-            main_loop()
+            configure_logger(log_file, debug_level)
+            main_loop(env)
             end = perf_counter()
             times.append(end - start)
 
