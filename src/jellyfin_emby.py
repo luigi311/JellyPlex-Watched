@@ -5,7 +5,6 @@ import traceback
 import os
 from math import floor
 from typing import Any, Literal
-from dotenv import load_dotenv
 from packaging.version import parse, Version
 from loguru import logger
 
@@ -13,6 +12,7 @@ from src.functions import (
     search_mapping,
     log_marked,
     str_to_bool,
+    get_env_value,
 )
 from src.watched import (
     LibraryData,
@@ -24,14 +24,12 @@ from src.watched import (
     check_same_identifiers,
 )
 
-load_dotenv(override=True)
-
-generate_guids = str_to_bool(os.getenv("GENERATE_GUIDS", "True"))
-generate_locations = str_to_bool(os.getenv("GENERATE_LOCATIONS", "True"))
-
 
 def extract_identifiers_from_item(
-    server_type: str, item: dict[str, Any]
+    server_type: str,
+    item: dict[str, Any],
+    generate_guids: bool,
+    generate_locations: bool,
 ) -> MediaIdentifiers:
     title = item.get("Name")
     id = None
@@ -72,9 +70,16 @@ def extract_identifiers_from_item(
     )
 
 
-def get_mediaitem(server_type: str, item: dict[str, Any]) -> MediaItem:
+def get_mediaitem(
+    server_type: str,
+    item: dict[str, Any],
+    generate_guids: bool,
+    generate_locations: bool,
+) -> MediaItem:
     return MediaItem(
-        identifiers=extract_identifiers_from_item(server_type, item),
+        identifiers=extract_identifiers_from_item(
+            server_type, item, generate_guids, generate_locations
+        ),
         status=WatchedStatus(
             completed=item.get("UserData", {}).get("Played"),
             time=floor(
@@ -87,18 +92,21 @@ def get_mediaitem(server_type: str, item: dict[str, Any]) -> MediaItem:
 class JellyfinEmby:
     def __init__(
         self,
+        env,
         server_type: Literal["Jellyfin", "Emby"],
         base_url: str,
         token: str,
         headers: dict[str, str],
     ) -> None:
+        self.env = env
+
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
         self.server_type: str = server_type
         self.base_url: str = base_url
         self.token: str = token
         self.headers: dict[str, str] = headers
-        self.timeout: int = int(os.getenv("REQUEST_TIMEOUT", 300))
+        self.timeout: int = int(get_env_value(self.env, "REQUEST_TIMEOUT", 300))
 
         if not self.base_url:
             raise Exception(f"{self.server_type} base_url not set")
@@ -112,6 +120,12 @@ class JellyfinEmby:
         self.server_version: Version = self.info(version_only=True)
         self.update_partial: bool = self.is_partial_update_supported(
             self.server_version
+        )
+        self.generate_guids: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_GUIDS", "True")
+        )
+        self.generate_locations: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_LOCATIONS", "True")
         )
 
     def query(
@@ -327,7 +341,14 @@ class JellyfinEmby:
                         movie["UserData"].get("Played")
                         or movie["UserData"].get("PlaybackPositionTicks", 0) > 600000000
                     ):
-                        watched.movies.append(get_mediaitem(self.server_type, movie))
+                        watched.movies.append(
+                            get_mediaitem(
+                                self.server_type,
+                                movie,
+                                self.generate_guids,
+                                self.generate_locations,
+                            )
+                        )
 
             # TV Shows
             if library_type == "tvshows":
@@ -394,7 +415,12 @@ class JellyfinEmby:
                             > 600000000
                         ):
                             episode_mediaitem.append(
-                                get_mediaitem(self.server_type, episode)
+                                get_mediaitem(
+                                    self.server_type,
+                                    episode,
+                                    self.generate_guids,
+                                    self.generate_locations,
+                                )
                             )
 
                     if episode_mediaitem:
@@ -506,7 +532,10 @@ class JellyfinEmby:
 
                 for jellyfin_video in jellyfin_search.get("Items", []):
                     jelly_identifiers = extract_identifiers_from_item(
-                        self.server_type, jellyfin_video
+                        self.server_type,
+                        jellyfin_video,
+                        self.generate_guids,
+                        self.generate_locations,
                     )
                     # Check each stored movie for a match.
                     for stored_movie in library_data.movies:
@@ -529,6 +558,9 @@ class JellyfinEmby:
                                     user_name,
                                     library_name,
                                     jellyfin_video.get("Name"),
+                                    mark_file=get_env_value(
+                                        self.env, "MARK_FILE", "mark.log"
+                                    ),
                                 )
                             elif self.update_partial:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
@@ -552,6 +584,9 @@ class JellyfinEmby:
                                     library_name,
                                     jellyfin_video.get("Name"),
                                     duration=floor(stored_movie.status.time / 60_000),
+                                    mark_file=get_env_value(
+                                        self.env, "MARK_FILE", "mark.log"
+                                    ),
                                 )
                         else:
                             logger.trace(
@@ -576,7 +611,10 @@ class JellyfinEmby:
 
                 for jellyfin_show in jellyfin_shows:
                     jellyfin_show_identifiers = extract_identifiers_from_item(
-                        self.server_type, jellyfin_show
+                        self.server_type,
+                        jellyfin_show,
+                        self.generate_guids,
+                        self.generate_locations,
                     )
                     # Try to find a matching series in your stored library.
                     for stored_series in library_data.series:
@@ -606,7 +644,10 @@ class JellyfinEmby:
                             for jellyfin_episode in jellyfin_episodes.get("Items", []):
                                 jellyfin_episode_identifiers = (
                                     extract_identifiers_from_item(
-                                        self.server_type, jellyfin_episode
+                                        self.server_type,
+                                        jellyfin_episode,
+                                        self.generate_guids,
+                                        self.generate_locations,
                                     )
                                 )
                                 for stored_ep in stored_series.episodes:
@@ -636,6 +677,9 @@ class JellyfinEmby:
                                                 library_name,
                                                 jellyfin_episode.get("SeriesName"),
                                                 jellyfin_episode.get("Name"),
+                                                mark_file=get_env_value(
+                                                    self.env, "MARK_FILE", "mark.log"
+                                                ),
                                             )
                                         elif self.update_partial:
                                             msg = (
@@ -666,6 +710,9 @@ class JellyfinEmby:
                                                 jellyfin_episode.get("Name"),
                                                 duration=floor(
                                                     stored_ep.status.time / 60_000
+                                                ),
+                                                mark_file=get_env_value(
+                                                    self.env, "MARK_FILE", "mark.log"
                                                 ),
                                             )
                                     else:

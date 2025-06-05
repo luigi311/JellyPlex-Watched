@@ -1,18 +1,17 @@
-import os
 from typing import Literal
-from dotenv import load_dotenv
 from loguru import logger
 
-from src.functions import str_to_bool
+from src.functions import str_to_bool, get_env_value
 from src.plex import Plex
 from src.jellyfin import Jellyfin
 from src.emby import Emby
 
-load_dotenv(override=True)
-
 
 def jellyfin_emby_server_connection(
-    server_baseurl: str, server_token: str, server_type: Literal["jellyfin", "emby"]
+    env,
+    server_baseurl: str,
+    server_token: str,
+    server_type: Literal["jellyfin", "emby"],
 ) -> list[Jellyfin | Emby]:
     servers: list[Jellyfin | Emby] = []
     server: Jellyfin | Emby
@@ -31,11 +30,13 @@ def jellyfin_emby_server_connection(
             base_url = base_url[:-1]
 
         if server_type == "jellyfin":
-            server = Jellyfin(base_url=base_url, token=server_tokens[i].strip())
+            server = Jellyfin(
+                env=env, base_url=base_url, token=server_tokens[i].strip()
+            )
             servers.append(server)
 
         elif server_type == "emby":
-            server = Emby(base_url=base_url, token=server_tokens[i].strip())
+            server = Emby(env=env, base_url=base_url, token=server_tokens[i].strip())
             servers.append(server)
         else:
             raise Exception("Unknown server type")
@@ -45,15 +46,15 @@ def jellyfin_emby_server_connection(
     return servers
 
 
-def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
+def generate_server_connections(env) -> list[Plex | Jellyfin | Emby]:
     servers: list[Plex | Jellyfin | Emby] = []
 
-    plex_baseurl_str: str | None = os.getenv("PLEX_BASEURL", None)
-    plex_token_str: str | None = os.getenv("PLEX_TOKEN", None)
-    plex_username_str: str | None = os.getenv("PLEX_USERNAME", None)
-    plex_password_str: str | None = os.getenv("PLEX_PASSWORD", None)
-    plex_servername_str: str | None = os.getenv("PLEX_SERVERNAME", None)
-    ssl_bypass = str_to_bool(os.getenv("SSL_BYPASS", "False"))
+    plex_baseurl_str: str | None = get_env_value(env, "PLEX_BASEURL", None)
+    plex_token_str: str | None = get_env_value(env, "PLEX_TOKEN", None)
+    plex_username_str: str | None = get_env_value(env, "PLEX_USERNAME", None)
+    plex_password_str: str | None = get_env_value(env, "PLEX_PASSWORD", None)
+    plex_servername_str: str | None = get_env_value(env, "PLEX_SERVERNAME", None)
+    ssl_bypass = str_to_bool(get_env_value(env, "SSL_BYPASS", "False"))
 
     if plex_baseurl_str and plex_token_str:
         plex_baseurl = plex_baseurl_str.split(",")
@@ -66,6 +67,7 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, url in enumerate(plex_baseurl):
             server = Plex(
+                env,
                 base_url=url.strip(),
                 token=plex_token[i].strip(),
                 user_name=None,
@@ -92,6 +94,7 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
 
         for i, username in enumerate(plex_username):
             server = Plex(
+                env,
                 base_url=None,
                 token=None,
                 user_name=username.strip(),
@@ -103,20 +106,20 @@ def generate_server_connections() -> list[Plex | Jellyfin | Emby]:
             logger.debug(f"Plex Server {i} info: {server.info()}")
             servers.append(server)
 
-    jellyfin_baseurl = os.getenv("JELLYFIN_BASEURL", None)
-    jellyfin_token = os.getenv("JELLYFIN_TOKEN", None)
+    jellyfin_baseurl = get_env_value(env, "JELLYFIN_BASEURL", None)
+    jellyfin_token = get_env_value(env, "JELLYFIN_TOKEN", None)
     if jellyfin_baseurl and jellyfin_token:
         servers.extend(
             jellyfin_emby_server_connection(
-                jellyfin_baseurl, jellyfin_token, "jellyfin"
+                env, jellyfin_baseurl, jellyfin_token, "jellyfin"
             )
         )
 
-    emby_baseurl = os.getenv("EMBY_BASEURL", None)
-    emby_token = os.getenv("EMBY_TOKEN", None)
+    emby_baseurl = get_env_value(env, "EMBY_BASEURL", None)
+    emby_token = get_env_value(env, "EMBY_TOKEN", None)
     if emby_baseurl and emby_token:
         servers.extend(
-            jellyfin_emby_server_connection(emby_baseurl, emby_token, "emby")
+            jellyfin_emby_server_connection(env, emby_baseurl, emby_token, "emby")
         )
 
     return servers
