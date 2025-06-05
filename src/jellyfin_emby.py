@@ -28,8 +28,8 @@ from src.watched import (
 def extract_identifiers_from_item(
     server_type: str,
     item: dict[str, Any],
-    generate_guids: bool = True,
-    generate_locations: bool = True,
+    generate_guids: bool,
+    generate_locations: bool,
 ) -> MediaIdentifiers:
     title = item.get("Name")
     id = None
@@ -73,8 +73,8 @@ def extract_identifiers_from_item(
 def get_mediaitem(
     server_type: str,
     item: dict[str, Any],
-    generate_guids: bool = True,
-    generate_locations: bool = True,
+    generate_guids: bool,
+    generate_locations: bool,
 ) -> MediaItem:
     return MediaItem(
         identifiers=extract_identifiers_from_item(
@@ -120,6 +120,12 @@ class JellyfinEmby:
         self.server_version: Version = self.info(version_only=True)
         self.update_partial: bool = self.is_partial_update_supported(
             self.server_version
+        )
+        self.generate_guids: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_GUIDS", "True")
+        )
+        self.generate_locations: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_LOCATIONS", "True")
         )
 
     def query(
@@ -339,14 +345,8 @@ class JellyfinEmby:
                             get_mediaitem(
                                 self.server_type,
                                 movie,
-                                str_to_bool(
-                                    get_env_value(self.env, "GENERATE_GUIDS", "True")
-                                ),
-                                str_to_bool(
-                                    get_env_value(
-                                        self.env, "GENERATE_LOCATIONS", "True"
-                                    )
-                                ),
+                                self.generate_guids,
+                                self.generate_locations,
                             )
                         )
 
@@ -418,16 +418,8 @@ class JellyfinEmby:
                                 get_mediaitem(
                                     self.server_type,
                                     episode,
-                                    str_to_bool(
-                                        get_env_value(
-                                            self.env, "GENERATE_GUIDS", "True"
-                                        )
-                                    ),
-                                    str_to_bool(
-                                        get_env_value(
-                                            self.env, "GENERATE_LOCATIONS", "True"
-                                        )
-                                    ),
+                                    self.generate_guids,
+                                    self.generate_locations,
                                 )
                             )
 
@@ -540,7 +532,10 @@ class JellyfinEmby:
 
                 for jellyfin_video in jellyfin_search.get("Items", []):
                     jelly_identifiers = extract_identifiers_from_item(
-                        self.server_type, jellyfin_video
+                        self.server_type,
+                        jellyfin_video,
+                        self.generate_guids,
+                        self.generate_locations,
                     )
                     # Check each stored movie for a match.
                     for stored_movie in library_data.movies:
@@ -616,7 +611,10 @@ class JellyfinEmby:
 
                 for jellyfin_show in jellyfin_shows:
                     jellyfin_show_identifiers = extract_identifiers_from_item(
-                        self.server_type, jellyfin_show
+                        self.server_type,
+                        jellyfin_show,
+                        self.generate_guids,
+                        self.generate_locations,
                     )
                     # Try to find a matching series in your stored library.
                     for stored_series in library_data.series:
@@ -646,7 +644,10 @@ class JellyfinEmby:
                             for jellyfin_episode in jellyfin_episodes.get("Items", []):
                                 jellyfin_episode_identifiers = (
                                     extract_identifiers_from_item(
-                                        self.server_type, jellyfin_episode
+                                        self.server_type,
+                                        jellyfin_episode,
+                                        self.generate_guids,
+                                        self.generate_locations,
                                     )
                                 )
                                 for stored_ep in stored_series.episodes:

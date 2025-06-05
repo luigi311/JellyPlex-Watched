@@ -43,7 +43,7 @@ class HostNameIgnoringAdapter(RequestsHTTPAdapter):
 
 
 def extract_guids_from_item(
-    item: Movie | Show | Episode, generate_guids: bool = True
+    item: Movie | Show | Episode, generate_guids: bool
 ) -> dict[str, str]:
     # If GENERATE_GUIDS is set to False, then return an empty dict
     if not generate_guids:
@@ -60,11 +60,10 @@ def extract_guids_from_item(
 
 def extract_identifiers_from_item(
     item: Movie | Show | Episode,
-    generate_guids: bool = True,
-    generate_locations: bool = True,
+    generate_guids: bool,
+    generate_locations: bool,
 ) -> MediaIdentifiers:
-    guids = extract_guids_from_item(item)
-
+    guids = extract_guids_from_item(item, generate_guids)
     return MediaIdentifiers(
         title=item.title,
         locations=(
@@ -123,6 +122,12 @@ class Plex:
 
         self.admin_user: MyPlexAccount = self.plex.myPlexAccount()
         self.users: list[MyPlexUser | MyPlexAccount] = self.get_users()
+        self.generate_guids: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_GUIDS", "True")
+        )
+        self.generate_locations: bool = str_to_bool(
+            get_env_value(self.env, "GENERATE_LOCATIONS", "True")
+        )
 
     def login(
         self,
@@ -212,14 +217,8 @@ class Plex:
                             get_mediaitem(
                                 video,
                                 video.isWatched,
-                                str_to_bool(
-                                    get_env_value(self.env, "GENERATE_GUIDS", "True")
-                                ),
-                                str_to_bool(
-                                    get_env_value(
-                                        self.env, "GENERATE_LOCATIONS", "True"
-                                    )
-                                ),
+                                self.generate_guids,
+                                self.generate_locations,
                             )
                         )
 
@@ -232,7 +231,7 @@ class Plex:
                     if show.key in processed_shows:
                         continue
                     processed_shows.append(show.key)
-                    show_guids = extract_guids_from_item(show)
+                    show_guids = extract_guids_from_item(show, self.generate_guids)
                     episode_mediaitem = []
 
                     # Fetch watched or partially watched episodes
@@ -243,14 +242,8 @@ class Plex:
                             get_mediaitem(
                                 episode,
                                 episode.isWatched,
-                                str_to_bool(
-                                    get_env_value(self.env, "GENERATE_GUIDS", "True")
-                                ),
-                                str_to_bool(
-                                    get_env_value(
-                                        self.env, "GENERATE_LOCATIONS", "True"
-                                    )
-                                ),
+                                self.generate_guids,
+                                self.generate_locations,
                             )
                         )
 
@@ -266,11 +259,7 @@ class Plex:
                                                 for location in show.locations
                                             ]
                                         )
-                                        if str_to_bool(
-                                            get_env_value(
-                                                self.env, "GENERATE_LOCATIONS", "True"
-                                            )
-                                        )
+                                        if self.generate_locations
                                         else tuple()
                                     ),
                                     imdb_id=show_guids.get("imdb"),
@@ -358,7 +347,9 @@ class Plex:
         if library_data.movies:
             # Search for Plex movies that are currently marked as unwatched.
             for plex_movie in library_section.search(unwatched=True):
-                plex_identifiers = extract_identifiers_from_item(plex_movie)
+                plex_identifiers = extract_identifiers_from_item(
+                    plex_movie, self.generate_guids, self.generate_locations
+                )
                 # Check each stored movie for a match.
                 for stored_movie in library_data.movies:
                     if check_same_identifiers(
@@ -422,7 +413,9 @@ class Plex:
             plex_shows = library_section.search(unwatched=True)
             for plex_show in plex_shows:
                 # Extract identifiers from the Plex show.
-                plex_show_identifiers = extract_identifiers_from_item(plex_show)
+                plex_show_identifiers = extract_identifiers_from_item(
+                    plex_show, self.generate_guids, self.generate_locations
+                )
                 # Try to find a matching series in your stored library.
                 for stored_series in library_data.series:
                     if check_same_identifiers(
@@ -434,7 +427,9 @@ class Plex:
                         plex_episodes = plex_show.episodes()
                         for plex_episode in plex_episodes:
                             plex_episode_identifiers = extract_identifiers_from_item(
-                                plex_episode
+                                plex_episode,
+                                self.generate_guids,
+                                self.generate_locations,
                             )
                             for stored_ep in stored_series.episodes:
                                 if check_same_identifiers(
