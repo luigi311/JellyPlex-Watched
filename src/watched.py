@@ -43,6 +43,111 @@ class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
 
 
+def merge_mediaitem_data(ep1: MediaItem, ep2: MediaItem) -> MediaItem:
+    """
+    Merge two MediaItem episodes by comparing their watched status.
+    If one is completed while the other isn't, choose the completed one.
+    If both are completed or both are not, choose the one with the higher time.
+    """
+    if ep1.status.completed != ep2.status.completed:
+        return ep1 if ep1.status.completed else ep2
+    return ep1 if ep1.status.time >= ep2.status.time else ep2
+
+
+def merge_series_data(series1: Series, series2: Series) -> Series:
+    """
+    Merge two Series objects by combining their episodes.
+    For duplicate episodes (determined by check_same_identifiers), merge their watched status.
+    """
+    merged_series = copy.deepcopy(series1)
+    for ep in series2.episodes:
+        for idx, merged_ep in enumerate(merged_series.episodes):
+            if check_same_identifiers(ep.identifiers, merged_ep.identifiers):
+                merged_series.episodes[idx] = merge_mediaitem_data(merged_ep, ep)
+                break
+        else:
+            merged_series.episodes.append(copy.deepcopy(ep))
+    return merged_series
+
+
+def merge_library_data(lib1: LibraryData, lib2: LibraryData) -> LibraryData:
+    """
+    Merge two LibraryData objects by extending movies and merging series.
+    For series, duplicates are determined using check_same_identifiers.
+    """
+    merged = copy.deepcopy(lib1)
+
+    # Merge movies.
+    for movie in lib2.movies:
+        for idx, merged_movie in enumerate(merged.movies):
+            if check_same_identifiers(movie.identifiers, merged_movie.identifiers):
+                merged.movies[idx] = merge_mediaitem_data(merged_movie, movie)
+                break
+        else:
+            merged.movies.append(copy.deepcopy(movie))
+
+    # Merge series.
+    for series2 in lib2.series:
+        for idx, series1 in enumerate(merged.series):
+            if check_same_identifiers(series1.identifiers, series2.identifiers):
+                merged.series[idx] = merge_series_data(series1, series2)
+                break
+        else:
+            merged.series.append(copy.deepcopy(series2))
+
+    return merged
+
+
+def merge_user_data(user1: UserData, user2: UserData) -> UserData:
+    """
+    Merge two UserData objects by merging their libraries.
+    If a library exists in both, merge its content; otherwise, add the new library.
+    """
+    merged_libraries = copy.deepcopy(user1.libraries)
+    for lib_key, lib_data in user2.libraries.items():
+        if lib_key in merged_libraries:
+            merged_libraries[lib_key] = merge_library_data(
+                merged_libraries[lib_key], lib_data
+            )
+        else:
+            merged_libraries[lib_key] = copy.deepcopy(lib_data)
+    return UserData(libraries=merged_libraries)
+
+
+def merge_server_watched(
+    watched_list_1: dict[str, UserData],
+    watched_list_2: dict[str, UserData],
+    user_mapping: dict[str, str] | None = None,
+    library_mapping: dict[str, str] | None = None,
+) -> dict[str, UserData]:
+    """
+    Merge two dictionaries of UserData while taking into account possible
+    differences in user and library keys via the provided mappings.
+    """
+    merged_watched = copy.deepcopy(watched_list_1)
+
+    for user_2, user_data in watched_list_2.items():
+        # Determine matching user key.
+        user_key = user_mapping.get(user_2, user_2) if user_mapping else user_2
+        if user_key not in merged_watched:
+            merged_watched[user_2] = copy.deepcopy(user_data)
+            continue
+
+        for lib_key, lib_data in user_data.libraries.items():
+            mapped_lib_key = (
+                library_mapping.get(lib_key, lib_key) if library_mapping else lib_key
+            )
+            if mapped_lib_key not in merged_watched[user_key].libraries:
+                merged_watched[user_key].libraries[lib_key] = copy.deepcopy(lib_data)
+            else:
+                merged_watched[user_key].libraries[mapped_lib_key] = merge_library_data(
+                    merged_watched[user_key].libraries[mapped_lib_key],
+                    lib_data,
+                )
+
+    return merged_watched
+
+
 def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> bool:
     # Check for duplicate based on file locations:
     if item1.locations and item2.locations:
