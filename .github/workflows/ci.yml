@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
@@ -28,7 +28,7 @@ jobs:
           python-version-file: ".python-version"
 
       - name: "Install dependencies"
-        run: uv sync --all-extras --dev
+        run: uv sync --frozen
 
       - name: "Run tests"
         run: uv run pytest -vvv
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
@@ -48,7 +48,7 @@ jobs:
 
       - name: "Install dependencies"
         run: |
-          uv sync --all-extras --dev
+          uv sync --frozen
           sudo apt update && sudo apt install -y docker-compose
 
       - name: "Checkout JellyPlex-Watched-CI"
@@ -172,6 +172,7 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         if: "${{ env.DOCKER_USERNAME != '' }}"
+        id: docker_login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -185,26 +186,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build
-        id: build
-        if: "${{ steps.docker_meta.outputs.tags == '' }}"
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: false
-          tags: jellyplex-watched:action
-
       - name: Build Push
         id: build_push
-        if: "${{ steps.docker_meta.outputs.tags != '' }}"
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ steps.docker_login.outcome == 'success' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
 
