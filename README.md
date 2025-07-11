@@ -50,12 +50,16 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
 
 - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 
-- Create a .env file similar to .env.sample; fill in baseurls and tokens, **remember to uncomment anything you wish to use** (e.g., user mapping, library mapping, black/whitelist, etc.)
+- Create a .env file similar to .env.sample; fill in baseurls and tokens, **remember to uncomment anything you wish to use** (e.g., user mapping, library mapping, black/whitelist, etc.). If you want to store your .env file anywhere else or under a different name you can use ENV_FILE variable to specify the location.
 
 - Run
 
   ```bash
   uv run main.py
+  ```
+
+  ```bash
+  ENV_FILE="Test.env" uv run main.py
   ```
 
 ### Docker
