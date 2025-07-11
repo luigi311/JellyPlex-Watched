@@ -35,13 +35,13 @@ def extract_identifiers_from_item(
     id = None
     if not title:
         id = item.get("Id")
-        logger.info(f"{server_type}: Name not found for {id}")
+        logger.debug(f"{server_type}: Name not found for {id}")
 
     guids = {}
     if generate_guids:
         guids = {k.lower(): v for k, v in item.get("ProviderIds", {}).items()}
         if not guids:
-            logger.info(
+            logger.debug(
                 f"{server_type}: {title if title else id} has no guids",
             )
 
@@ -59,7 +59,7 @@ def extract_identifiers_from_item(
             )
 
         if not locations:
-            logger.info(f"{server_type}: {title if title else id} has no locations")
+            logger.debug(f"{server_type}: {title if title else id} has no locations")
 
     return MediaIdentifiers(
         title=title,
