@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import requests
 from loguru import logger
 
@@ -83,11 +84,19 @@ def get_mediaitem(
     generate_guids: bool = True,
     generate_locations: bool = True,
 ) -> MediaItem:
+    last_viewed_at = item.lastViewedAt
+    viewed_date = datetime.today()
+
+    if last_viewed_at:
+        viewed_date = last_viewed_at.replace(tzinfo=timezone.utc)
+
     return MediaItem(
         identifiers=extract_identifiers_from_item(
             item, generate_guids, generate_locations
         ),
-        status=WatchedStatus(completed=completed, time=item.viewOffset),
+        status=WatchedStatus(
+            completed=completed, time=item.viewOffset, viewed_date=viewed_date
+        ),
     )
 
 
