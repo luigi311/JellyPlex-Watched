@@ -7,7 +7,6 @@ from math import floor
 from typing import Any, Literal
 from packaging.version import parse, Version
 from loguru import logger
-from urllib.parse import quote
 
 from src.functions import (
     search_mapping,
@@ -575,9 +574,18 @@ class JellyfinEmby:
                             if stored_movie.status.completed:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
                                 if not dryrun:
+                                    user_data_payload: dict[
+                                        str, float | bool | datetime
+                                    ] = {
+                                        "PlayCount": 1,
+                                        "Played": True,
+                                        "PlaybackPositionTicks": 0,
+                                        "LastPlayedDate": viewed_date,
+                                    }
                                     self.query(
-                                        f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}?DatePlayed={quote(viewed_date)}",
+                                        f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
                                         "post",
+                                        json=user_data_payload,
                                     )
 
                                 logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
@@ -595,7 +603,11 @@ class JellyfinEmby:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
 
                                 if not dryrun:
-                                    user_data_payload: dict[str, float] = {
+                                    user_data_payload: dict[
+                                        str, float | bool | datetime
+                                    ] = {
+                                        "PlayCount": 0,
+                                        "Played": False,
                                         "PlaybackPositionTicks": stored_movie.status.time
                                         * 10_000,
                                         "LastPlayedDate": viewed_date,
@@ -699,9 +711,18 @@ class JellyfinEmby:
                                                 + f" as watched for {user_name} in {library_name}"
                                             )
                                             if not dryrun:
+                                                user_data_payload: dict[
+                                                    str, float | bool | datetime
+                                                ] = {
+                                                    "PlayCount": 1,
+                                                    "Played": True,
+                                                    "PlaybackPositionTicks": 0,
+                                                    "LastPlayedDate": viewed_date,
+                                                }
                                                 self.query(
-                                                    f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}?DatePlayed={quote(viewed_date)}",
+                                                    f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
                                                     "post",
+                                                    json=user_data_payload,
                                                 )
 
                                             logger.success(
@@ -725,7 +746,11 @@ class JellyfinEmby:
                                             )
 
                                             if not dryrun:
-                                                user_data_payload = {
+                                                user_data_payload: dict[
+                                                    str, float | bool | datetime
+                                                ] = {
+                                                    "PlayCount": 0,
+                                                    "Played": False,
                                                     "PlaybackPositionTicks": stored_ep.status.time
                                                     * 10_000,
                                                     "LastPlayedDate": viewed_date,
