@@ -1,3 +1,4 @@
+from datetime import datetime
 import sys
 import os
 
@@ -23,6 +24,8 @@ from src.watched import (
     cleanup_watched,
 )
 
+viewed_date = datetime.today()
+
 tv_shows_watched_list_1: list[Series] = [
     Series(
         identifiers=MediaIdentifiers(
@@ -41,7 +44,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="968589",
                     tvdb_id="295296",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -51,7 +54,9 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="968590",
                     tvdb_id="295297",
                 ),
-                status=WatchedStatus(completed=False, time=240000),
+                status=WatchedStatus(
+                    completed=False, time=240000, viewed_date=viewed_date
+                ),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -61,7 +66,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="968592",
                     tvdb_id="295298",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -82,7 +87,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="4661246",
                     tvdb_id="10009418",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -92,7 +97,9 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="4712059",
                     tvdb_id="10009419",
                 ),
-                status=WatchedStatus(completed=False, time=240000),
+                status=WatchedStatus(
+                    completed=False, time=240000, viewed_date=viewed_date
+                ),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -102,7 +109,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="4712061",
                     tvdb_id="10009420",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -123,7 +130,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="3070048",
                     tvdb_id="8438181",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -133,7 +140,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="4568681",
                     tvdb_id="9829910",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -143,7 +150,7 @@ tv_shows_watched_list_1: list[Series] = [
                     tmdb_id="4497012",
                     tvdb_id="9870382",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -170,7 +177,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="295294",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -180,7 +187,9 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="295295",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=False, time=300670),
+                status=WatchedStatus(
+                    completed=False, time=300670, viewed_date=viewed_date
+                ),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -190,7 +199,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="295298",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -211,7 +220,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="9959300",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -221,7 +230,9 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="10009417",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=False, time=300741),
+                status=WatchedStatus(
+                    completed=False, time=300741, viewed_date=viewed_date
+                ),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -231,7 +242,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="10009420",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -252,7 +263,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="8438181",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -262,7 +273,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="9829910",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -272,7 +283,7 @@ tv_shows_watched_list_2: list[Series] = [
                     tvdb_id="9870382",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
         ],
     ),
@@ -299,7 +310,7 @@ expected_tv_show_watched_list_1: list[Series] = [
                     tmdb_id="968589",
                     tvdb_id="295296",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -309,7 +320,9 @@ expected_tv_show_watched_list_1: list[Series] = [
                     tmdb_id="968590",
                     tvdb_id="295297",
                 ),
-                status=WatchedStatus(completed=False, time=240000),
+                status=WatchedStatus(
+                    completed=False, time=240000, viewed_date=viewed_date
+                ),
             ),
         ],
     ),
@@ -330,7 +343,7 @@ expected_tv_show_watched_list_1: list[Series] = [
                     tmdb_id="4661246",
                     tvdb_id="10009418",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -340,7 +353,9 @@ expected_tv_show_watched_list_1: list[Series] = [
                     tmdb_id="4712059",
                     tvdb_id="10009419",
                 ),
-                status=WatchedStatus(completed=False, time=240000),
+                status=WatchedStatus(
+                    completed=False, time=240000, viewed_date=viewed_date
+                ),
             ),
         ],
     ),
@@ -367,7 +382,7 @@ expected_tv_show_watched_list_2: list[Series] = [
                     tvdb_id="295294",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -377,7 +392,9 @@ expected_tv_show_watched_list_2: list[Series] = [
                     tvdb_id="295295",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=False, time=300670),
+                status=WatchedStatus(
+                    completed=False, time=300670, viewed_date=viewed_date
+                ),
             ),
         ],
     ),
@@ -398,7 +415,7 @@ expected_tv_show_watched_list_2: list[Series] = [
                     tvdb_id="9959300",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             ),
             MediaItem(
                 identifiers=MediaIdentifiers(
@@ -408,7 +425,9 @@ expected_tv_show_watched_list_2: list[Series] = [
                     tvdb_id="10009417",
                     tmdb_id=None,
                 ),
-                status=WatchedStatus(completed=False, time=300741),
+                status=WatchedStatus(
+                    completed=False, time=300741, viewed_date=viewed_date
+                ),
             ),
         ],
     ),
@@ -426,7 +445,7 @@ movies_watched_list_1: list[MediaItem] = [
             tmdb_id="10378",
             tvdb_id="12352",
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -436,7 +455,7 @@ movies_watched_list_1: list[MediaItem] = [
             tmdb_id="1029575",
             tvdb_id="351194",
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -446,7 +465,7 @@ movies_watched_list_1: list[MediaItem] = [
             tmdb_id="466420",
             tvdb_id="135852",
         ),
-        status=WatchedStatus(completed=False, time=240000),
+        status=WatchedStatus(completed=False, time=240000, viewed_date=viewed_date),
     ),
 ]
 
@@ -462,7 +481,7 @@ movies_watched_list_2: list[MediaItem] = [
             tmdb_id="1029575",
             tvdb_id=None,
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -472,7 +491,7 @@ movies_watched_list_2: list[MediaItem] = [
             tmdb_id="507089",
             tvdb_id=None,
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -482,7 +501,7 @@ movies_watched_list_2: list[MediaItem] = [
             tmdb_id="695721",
             tvdb_id=None,
         ),
-        status=WatchedStatus(completed=False, time=301215),
+        status=WatchedStatus(completed=False, time=301215, viewed_date=viewed_date),
     ),
 ]
 
@@ -498,7 +517,7 @@ expected_movie_watched_list_1: list[MediaItem] = [
             tmdb_id="10378",
             tvdb_id="12352",
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -508,7 +527,7 @@ expected_movie_watched_list_1: list[MediaItem] = [
             tmdb_id="466420",
             tvdb_id="135852",
         ),
-        status=WatchedStatus(completed=False, time=240000),
+        status=WatchedStatus(completed=False, time=240000, viewed_date=viewed_date),
     ),
 ]
 
@@ -524,7 +543,7 @@ expected_movie_watched_list_2: list[MediaItem] = [
             tmdb_id="507089",
             tvdb_id=None,
         ),
-        status=WatchedStatus(completed=True, time=0),
+        status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
     ),
     MediaItem(
         identifiers=MediaIdentifiers(
@@ -534,7 +553,7 @@ expected_movie_watched_list_2: list[MediaItem] = [
             tmdb_id="695721",
             tvdb_id=None,
         ),
-        status=WatchedStatus(completed=False, time=301215),
+        status=WatchedStatus(completed=False, time=301215, viewed_date=viewed_date),
     ),
 ]
 
@@ -562,7 +581,7 @@ tv_shows_2_watched_list_1: list[Series] = [
                     tmdb_id="282843",
                     tvdb_id="176357",
                 ),
-                status=WatchedStatus(completed=True, time=0),
+                status=WatchedStatus(completed=True, time=0, viewed_date=viewed_date),
             )
         ],
     )

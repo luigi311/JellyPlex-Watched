@@ -1,8 +1,8 @@
 # Functions for Jellyfin and Emby
 
+from datetime import datetime
 import requests
 import traceback
-import os
 from math import floor
 from typing import Any, Literal
 from packaging.version import parse, Version
@@ -76,15 +76,21 @@ def get_mediaitem(
     generate_guids: bool,
     generate_locations: bool,
 ) -> MediaItem:
+    user_data = item.get("UserData", {})
+    last_played_date = user_data.get("LastPlayedDate")
+
+    viewed_date = datetime.today()
+    if last_played_date:
+        viewed_date = datetime.fromisoformat(last_played_date.replace("Z", "+00:00"))
+
     return MediaItem(
         identifiers=extract_identifiers_from_item(
             server_type, item, generate_guids, generate_locations
         ),
         status=WatchedStatus(
-            completed=item.get("UserData", {}).get("Played"),
-            time=floor(
-                item.get("UserData", {}).get("PlaybackPositionTicks", 0) / 10000
-            ),
+            completed=user_data.get("Played"),
+            time=floor(user_data.get("PlaybackPositionTicks", 0) / 10000),
+            viewed_date=viewed_date,
         ),
     )
 
@@ -311,7 +317,7 @@ class JellyfinEmby:
                 movie_items = []
                 watched_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
+                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -320,7 +326,7 @@ class JellyfinEmby:
 
                 in_progress_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources",
+                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -388,7 +394,7 @@ class JellyfinEmby:
 
                     show_episodes = self.query(
                         f"/Shows/{show.get('Id')}/Episodes"
-                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,MediaSources",
+                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,MediaSources,UserDataLastPlayedDate",
                         "get",
                     )
 
@@ -558,12 +564,28 @@ class JellyfinEmby:
                             jelly_identifiers, stored_movie.identifiers
                         ):
                             jellyfin_video_id = jellyfin_video.get("Id")
+
+                            viewed_date: str = (
+                                stored_movie.status.viewed_date.isoformat(
+                                    timespec="milliseconds"
+                                ).replace("+00:00", "Z")
+                            )
+
                             if stored_movie.status.completed:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
                                 if not dryrun:
+                                    user_data_payload: dict[
+                                        str, float | bool | datetime
+                                    ] = {
+                                        "PlayCount": 1,
+                                        "Played": True,
+                                        "PlaybackPositionTicks": 0,
+                                        "LastPlayedDate": viewed_date,
+                                    }
                                     self.query(
-                                        f"/Users/{user_id}/PlayedItems/{jellyfin_video_id}",
+                                        f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
                                         "post",
+                                        json=user_data_payload,
                                     )
 
                                 logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
@@ -581,14 +603,19 @@ class JellyfinEmby:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
 
                                 if not dryrun:
-                                    playback_position_payload: dict[str, float] = {
+                                    user_data_payload: dict[
+                                        str, float | bool | datetime
+                                    ] = {
+                                        "PlayCount": 0,
+                                        "Played": False,
                                         "PlaybackPositionTicks": stored_movie.status.time
                                         * 10_000,
+                                        "LastPlayedDate": viewed_date,
                                     }
                                     self.query(
                                         f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
                                         "post",
-                                        json=playback_position_payload,
+                                        json=user_data_payload,
                                     )
 
                                 logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
@@ -671,15 +698,31 @@ class JellyfinEmby:
                                         stored_ep.identifiers,
                                     ):
                                         jellyfin_episode_id = jellyfin_episode.get("Id")
+
+                                        viewed_date: str = (
+                                            stored_ep.status.viewed_date.isoformat(
+                                                timespec="milliseconds"
+                                            ).replace("+00:00", "Z")
+                                        )
+
                                         if stored_ep.status.completed:
                                             msg = (
                                                 f"{self.server_type}: {jellyfin_episode.get('SeriesName')} {jellyfin_episode.get('SeasonName')} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
                                                 + f" as watched for {user_name} in {library_name}"
                                             )
                                             if not dryrun:
+                                                user_data_payload: dict[
+                                                    str, float | bool | datetime
+                                                ] = {
+                                                    "PlayCount": 1,
+                                                    "Played": True,
+                                                    "PlaybackPositionTicks": 0,
+                                                    "LastPlayedDate": viewed_date,
+                                                }
                                                 self.query(
-                                                    f"/Users/{user_id}/PlayedItems/{jellyfin_episode_id}",
+                                                    f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
                                                     "post",
+                                                    json=user_data_payload,
                                                 )
 
                                             logger.success(
@@ -703,14 +746,19 @@ class JellyfinEmby:
                                             )
 
                                             if not dryrun:
-                                                playback_position_payload = {
+                                                user_data_payload: dict[
+                                                    str, float | bool | datetime
+                                                ] = {
+                                                    "PlayCount": 0,
+                                                    "Played": False,
                                                     "PlaybackPositionTicks": stored_ep.status.time
                                                     * 10_000,
+                                                    "LastPlayedDate": viewed_date,
                                                 }
                                                 self.query(
                                                     f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
                                                     "post",
-                                                    json=playback_position_payload,
+                                                    json=user_data_payload,
                                                 )
 
                                             logger.success(

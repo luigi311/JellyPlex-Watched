@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime
 from pydantic import BaseModel, Field
 from loguru import logger
 from typing import Any
@@ -21,6 +22,7 @@ class MediaIdentifiers(BaseModel):
 class WatchedStatus(BaseModel):
     completed: bool
     time: int
+    viewed_date: datetime
 
 
 class MediaItem(BaseModel):

@@ -19,6 +19,7 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 - \[x] One way/multi way sync
 - \[x] Sync watched
 - \[x] Sync in progress
+- \[ ] Sync view dates
 
 ### Jellyfin
 
@@ -29,6 +30,8 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 - \[x] One way/multi way sync
 - \[x] Sync watched
 - \[x] Sync in progress
+- \[x] Sync view dates
+
 
 ### Emby
 
@@ -39,6 +42,8 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 - \[x] One way/multi way sync
 - \[x] Sync watched
 - \[x] Sync in progress
+- \[x] Sync view dates
+
 
 ## Configuration
 
