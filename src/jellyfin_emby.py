@@ -377,8 +377,24 @@ class JellyfinEmby:
                     if not show.get("UserData"):
                         continue
 
-                    if show["UserData"].get("PlayedPercentage", 0) > 0:
-                        watched_shows_filtered.append(show)
+                    played_percentage = show["UserData"].get("PlayedPercentage")
+                    if played_percentage is None:
+                        # Emby no longer shows PlayedPercentage
+                        total_episodes = show.get("RecursiveItemCount")
+                        unplayed_episodes = show["UserData"].get("UnplayedItemCount")
+
+                        if total_episodes is None:
+                            # Failed to get total count of episodes
+                            continue
+
+                        if (
+                            unplayed_episodes is not None
+                            and unplayed_episodes < total_episodes
+                        ):
+                            watched_shows_filtered.append(show)
+                    else:
+                        if played_percentage > 0:
+                            watched_shows_filtered.append(show)
 
                 # Retrieve the watched/partially watched list of episodes of each watched show
                 for show in watched_shows_filtered:
