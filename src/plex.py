@@ -65,13 +65,27 @@ def extract_identifiers_from_item(
     generate_locations: bool,
 ) -> MediaIdentifiers:
     guids = extract_guids_from_item(item, generate_guids)
+    locations = (
+        tuple([location.split("/")[-1] for location in item.locations])
+        if generate_locations
+        else tuple()
+    )
+
+    if generate_guids:
+        if not guids:
+            logger.debug(
+                f"Plex: {item.title} has no guids{f', locations: {" ".join(item.locations)}' if generate_locations else ''}",
+            )
+
+    if generate_locations:
+        if not locations:
+            logger.debug(
+                f"Plex: {item.title} has no locations{f', guids: {guids}' if generate_guids else ''}",
+            )
+
     return MediaIdentifiers(
         title=item.title,
-        locations=(
-            tuple([location.split("/")[-1] for location in item.locations])
-            if generate_locations
-            else tuple()
-        ),
+        locations=locations,
         imdb_id=guids.get("imdb"),
         tvdb_id=guids.get("tvdb"),
         tmdb_id=guids.get("tmdb"),
