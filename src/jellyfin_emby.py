@@ -40,26 +40,29 @@ def extract_identifiers_from_item(
     guids = {}
     if generate_guids:
         guids = {k.lower(): v for k, v in item.get("ProviderIds", {}).items()}
-        if not guids:
-            logger.debug(
-                f"{server_type}: {title if title else id} has no guids",
-            )
 
     locations: tuple[str, ...] = tuple()
+    full_path: str = ""
     if generate_locations:
         if item.get("Path"):
-            locations = tuple([item["Path"].split("/")[-1]])
+            full_path = item["Path"]
+            locations = tuple([full_path.split("/")[-1]])
         elif item.get("MediaSources"):
-            locations = tuple(
-                [
-                    x["Path"].split("/")[-1]
-                    for x in item["MediaSources"]
-                    if x.get("Path")
-                ]
+            full_paths = [x["Path"] for x in item["MediaSources"] if x.get("Path")]
+            locations = tuple([x.split("/")[-1] for x in full_paths])
+            full_path = " ".join(full_paths)
+
+    if generate_guids:
+        if not guids:
+            logger.debug(
+                f"{server_type}: {title if title else id} has no guids{f', locations: {full_path}' if full_path else ''}",
             )
 
+    if generate_locations:
         if not locations:
-            logger.debug(f"{server_type}: {title if title else id} has no locations")
+            logger.debug(
+                f"{server_type}: {title if title else id} has no locations{f', guids: {guids}' if guids else ''}",
+            )
 
     return MediaIdentifiers(
         title=title,
