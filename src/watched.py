@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 from typing import Any
 
-from src.functions import search_mapping
+from src.functions import search_mapping, get_env_value
 
 
 class MediaIdentifiers(BaseModel):
@@ -43,6 +43,19 @@ class LibraryData(BaseModel):
 
 class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
+
+
+MATCH_LEVEL: int = get_env_value(None, "MEDIA_LOCATION_MATCH_LEVEL", 0)
+try:
+    MATCH_LEVEL = int(MATCH_LEVEL)
+except (ValueError, TypeError):
+    logger.warning(f"Invalid MEDIA_LOCATION_MATCH_LEVEL value `{MATCH_LEVEL}`; defaulting to 0")
+    MATCH_LEVEL = 0
+if MATCH_LEVEL < 0:
+    logger.warning(f"Negative MEDIA_LOCATION_MATCH_LEVEL value `{MATCH_LEVEL}`; defaulting to 0")
+    MATCH_LEVEL = 0
+
+logger.info(f"Using MEDIA_LOCATION_MATCH_LEVEL = {MATCH_LEVEL}")
 
 
 def merge_mediaitem_data(ep1: MediaItem, ep2: MediaItem) -> MediaItem:
@@ -151,9 +164,16 @@ def merge_server_watched(
 
 
 def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> bool:
+    """Check if two MediaIdentifiers refer to the same media item.
+    Use the following criteria:
+      - If they share any file location (after normalizing paths), they are the same.
+      - If any of their imdb_id, tvdb_id, or tmdb_id match, they are the same.
+    """
     # Check for duplicate based on file locations:
     if item1.locations and item2.locations:
-        if set(item1.locations) & set(item2.locations):
+        locs1 = {'/'.join(loc.replace("\\", '/').split('/')[-MATCH_LEVEL:]) for loc in item1.locations}
+        locs2 = {'/'.join(loc.replace("\\", '/').split('/')[-MATCH_LEVEL:]) for loc in item2.locations}
+        if locs1 & locs2:
             return True
 
     # Check for duplicate based on GUIDs:
