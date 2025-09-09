@@ -13,6 +13,7 @@ from plexapi.myplex import MyPlexAccount, MyPlexUser
 from plexapi.library import MovieSection, ShowSection
 
 from src.functions import (
+    filename_from_any_path,
     search_mapping,
     log_marked,
     str_to_bool,
@@ -66,7 +67,7 @@ def extract_identifiers_from_item(
 ) -> MediaIdentifiers:
     guids = extract_guids_from_item(item, generate_guids)
     locations = (
-        tuple([location.split("/")[-1] for location in item.locations])
+        tuple([filename_from_any_path(loc) for loc in item.locations])
         if generate_locations
         else tuple()
     )
@@ -278,7 +279,7 @@ class Plex:
                                     locations=(
                                         tuple(
                                             [
-                                                location.split("/")[-1]
+                                                filename_from_any_path(location)
                                                 for location in show.locations
                                             ]
                                         )

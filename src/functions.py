@@ -2,6 +2,8 @@ import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
 from dotenv import load_dotenv
+import re
+from pathlib import PureWindowsPath, PurePosixPath
 
 load_dotenv(override=True)
 
@@ -124,3 +126,13 @@ def parse_string_to_list(string: str | None) -> list[str]:
         output = string.split(",")
 
     return output
+
+
+_WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")  # e.g. C: D:
+
+
+def filename_from_any_path(p: str) -> str:
+    # Windows-y if UNC (\\server\share), drive letter, or has backslashes
+    if p.startswith("\\\\") or _WINDOWS_DRIVE.match(p) or ("\\" in p and "/" not in p):
+        return PureWindowsPath(p).name
+    return PurePosixPath(p).name
