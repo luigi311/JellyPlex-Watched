@@ -9,6 +9,7 @@ from packaging.version import parse, Version
 from loguru import logger
 
 from src.functions import (
+    filename_from_any_path,
     search_mapping,
     log_marked,
     str_to_bool,
@@ -46,10 +47,10 @@ def extract_identifiers_from_item(
     if generate_locations:
         if item.get("Path"):
             full_path = item["Path"]
-            locations = tuple([full_path.split("/")[-1]])
+            locations = tuple([filename_from_any_path(full_path)])
         elif item.get("MediaSources"):
             full_paths = [x["Path"] for x in item["MediaSources"] if x.get("Path")]
-            locations = tuple([x.split("/")[-1] for x in full_paths])
+            locations = tuple([filename_from_any_path(x) for x in full_paths])
             full_path = " ".join(full_paths)
 
     if generate_guids:
@@ -406,7 +407,7 @@ class JellyfinEmby:
                         k.lower(): v for k, v in show.get("ProviderIds", {}).items()
                     }
                     show_locations = (
-                        tuple([show["Path"].split("/")[-1]])
+                        tuple([filename_from_any_path(show["Path"])])
                         if show.get("Path")
                         else tuple()
                     )
