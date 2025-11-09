@@ -1,3 +1,4 @@
+from datetime import timezone
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
@@ -136,3 +137,13 @@ def filename_from_any_path(p: str) -> str:
     if p.startswith("\\\\") or _WINDOWS_DRIVE.match(p) or ("\\" in p and "/" not in p):
         return PureWindowsPath(p).name
     return PurePosixPath(p).name
+
+
+def to_aware_utc(dt):
+    """Return a timezone-aware UTC datetime or None."""
+    if dt is None:
+        return None
+    # If naive, decide what it *means* in your app. Here we treat naive as UTC.
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)

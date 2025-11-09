@@ -1,10 +1,17 @@
 import copy
 from datetime import datetime
+from enum import IntEnum
 from pydantic import BaseModel, Field
 from loguru import logger
 from typing import Any
 
-from src.functions import search_mapping
+from src.functions import search_mapping, to_aware_utc
+
+
+class Ord(IntEnum):
+    A_BETTER = -1
+    TIE = 0
+    B_BETTER = 1
 
 
 class MediaIdentifiers(BaseModel):
@@ -45,15 +52,58 @@ class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
 
 
-def merge_mediaitem_data(ep1: MediaItem, ep2: MediaItem) -> MediaItem:
+def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
+    media1_viewed_date, media2_viewed_date = (
+        to_aware_utc(media1.status.viewed_date),
+        to_aware_utc(media2.status.viewed_date),
+    )
+
+    # If both are completed, it's a tie.
+    if media1.status.completed and media2.status.completed:
+        return Ord.TIE
+
+    # If both are not completed, and have the same time, it's a tie.
+    if (
+        not media1.status.completed
+        and not media2.status.completed
+        and media1.status.time == media2.status.time
+    ):
+        return Ord.TIE
+
+    # Compare viewed_date first
+    if (
+        media1_viewed_date
+        and media2_viewed_date
+        and media1_viewed_date != media2_viewed_date
+    ):
+        return Ord.A_BETTER if media1_viewed_date > media2_viewed_date else Ord.B_BETTER
+
+    if media1_viewed_date and not media2_viewed_date:
+        return Ord.A_BETTER
+
+    if media2_viewed_date and not media1_viewed_date:
+        return Ord.B_BETTER
+
+    # Next, compare completed status
+    if media1.status.completed != media2.status.completed:
+        return Ord.A_BETTER if media1.status.completed else Ord.B_BETTER
+
+    # Finally, compare time
+    if media1.status.time != media2.status.time:
+        return Ord.A_BETTER if media1.status.time > media2.status.time else Ord.B_BETTER
+
+    return Ord.TIE
+
+
+def merge_mediaitem_data(media1: MediaItem, media2: MediaItem) -> MediaItem:
     """
     Merge two MediaItem episodes by comparing their watched status.
     If one is completed while the other isn't, choose the completed one.
     If both are completed or both are not, choose the one with the higher time.
     """
-    if ep1.status.completed != ep2.status.completed:
-        return ep1 if ep1.status.completed else ep2
-    return ep1 if ep1.status.time >= ep2.status.time else ep2
+
+    ord_ = compare_media_items(media1, media2)
+    return media1 if ord_ in (Ord.A_BETTER, Ord.TIE) else media2
 
 
 def merge_series_data(series1: Series, series2: Series) -> Series:
@@ -170,42 +220,13 @@ def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> 
 def check_remove_entry(item1: MediaItem, item2: MediaItem) -> bool:
     """
     Returns True if item1 (from watched_list_1) should be removed
-    in favor of item2 (from watched_list_2), based on:
-      - Duplicate criteria:
-          * They match if any file location is shared OR
-            at least one of imdb_id, tvdb_id, or tmdb_id matches.
-      - Watched status:
-          * If one is complete and the other is not, remove the incomplete one.
-          * If both are incomplete, remove the one with lower progress (time).
-          * If both are complete, remove item1 as duplicate.
+    in favor of item2 (from watched_list_2)
     """
     if not check_same_identifiers(item1.identifiers, item2.identifiers):
         return False
 
-    # Compare watched statuses.
-    status1 = item1.status
-    status2 = item2.status
-
-    # If one is complete and the other isn't, remove the one that's not complete.
-    if status1.completed != status2.completed:
-        if not status1.completed and status2.completed:
-            return True  # Remove item1 since it's not complete.
-        else:
-            return False  # Do not remove item1; it's complete.
-
-    # Both have the same completed status.
-    if not status1.completed and not status2.completed:
-        # Both incomplete: remove the one with lower progress (time)
-        if status1.time < status2.time:
-            return True  # Remove item1 because it has watched less.
-        elif status1.time > status2.time:
-            return False  # Keep item1 because it has more progress.
-        else:
-            # Same progress; Remove duplicate
-            return True
-
-    # If both are complete, consider item1 the duplicate and remove it.
-    return True
+    # Removal policy for cleanup: drop item1 if item2 is as-good-or-better.
+    return compare_media_items(item1, item2) in (Ord.B_BETTER, Ord.TIE)
 
 
 def cleanup_watched(
