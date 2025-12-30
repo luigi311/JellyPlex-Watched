@@ -70,7 +70,7 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
     ):
         return Ord.TIE
 
-    # Compare viewed_date first
+    # Compare viewed_date first (only if both have dates)
     if (
         media1_viewed_date
         and media2_viewed_date
@@ -78,11 +78,8 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
     ):
         return Ord.A_BETTER if media1_viewed_date > media2_viewed_date else Ord.B_BETTER
 
-    if media1_viewed_date and not media2_viewed_date:
-        return Ord.A_BETTER
-
-    if media2_viewed_date and not media1_viewed_date:
-        return Ord.B_BETTER
+    # If one or both items are missing viewed_date, skip date comparison
+    # and fall through to completion status and time comparisons
 
     # Next, compare completed status
     if media1.status.completed != media2.status.completed:

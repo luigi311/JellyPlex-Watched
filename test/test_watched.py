@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 import os
 
@@ -672,6 +672,113 @@ def test_simple_cleanup_watched():
 
     assert return_watched_list_1 == expected_watched_list_1
     assert return_watched_list_2 == expected_watched_list_2
+
+
+def test_issue_322_skip_date_comparison():
+    """
+    Test for issue #322: Verify that completed watch status
+    is not overwritten by partial watch status.
+
+    Scenario:
+    - Plex has partial watch (50%) - simulating stale data
+    - Jellyfin has completed watch
+    - With date comparison removed for missing dates, completion status takes priority
+    - Completed status should win over partial
+    """
+    # Both use same date (so date comparison doesn't determine winner)
+    same_date = datetime(2024, 12, 30, 10, 30, 0, tzinfo=timezone.utc)
+
+    # Plex watched list: partial watch with sentinel date (stale data)
+    plex_watched = {
+        "alice": UserData(
+            libraries={
+                "TV Shows": LibraryData(
+                    title="TV Shows",
+                    movies=[],
+                    series=[
+                        Series(
+                            identifiers=MediaIdentifiers(
+                                title="Breaking Bad",
+                                locations=("Breaking Bad {tvdb-81189}",),
+                                tvdb_id="81189",
+                            ),
+                            episodes=[
+                                MediaItem(
+                                    identifiers=MediaIdentifiers(
+                                        title="Pilot",
+                                        locations=("S01E01.mkv",),
+                                        tvdb_id="349232",
+                                    ),
+                                    status=WatchedStatus(
+                                        completed=False,  # Partial watch
+                                        time=720000,  # 12 minutes (50%)
+                                        viewed_date=same_date,
+                                    ),
+                                )
+                            ],
+                        )
+                    ],
+                )
+            }
+        )
+    }
+
+    # Jellyfin watched list: completed watch with recent real date
+    jellyfin_watched = {
+        "alice": UserData(
+            libraries={
+                "TV Shows": LibraryData(
+                    title="TV Shows",
+                    movies=[],
+                    series=[
+                        Series(
+                            identifiers=MediaIdentifiers(
+                                title="Breaking Bad",
+                                locations=("Breaking Bad {tvdb-81189}",),
+                                tvdb_id="81189",
+                            ),
+                            episodes=[
+                                MediaItem(
+                                    identifiers=MediaIdentifiers(
+                                        title="Pilot",
+                                        locations=("S01E01.mkv",),
+                                        tvdb_id="349232",
+                                    ),
+                                    status=WatchedStatus(
+                                        completed=True,  # Completed!
+                                        time=0,
+                                        viewed_date=same_date,
+                                    ),
+                                )
+                            ],
+                        )
+                    ],
+                )
+            }
+        )
+    }
+
+    # Cleanup: Remove stale data from Plex
+    # Plex's partial watch with sentinel date should be removed
+    # because Jellyfin has newer completed watch
+    plex_cleaned = cleanup_watched(plex_watched, jellyfin_watched)
+
+    # Plex's partial watch should be completely removed
+    assert "alice" in plex_cleaned
+    assert "TV Shows" not in plex_cleaned["alice"].libraries or \
+           len(plex_cleaned["alice"].libraries["TV Shows"].series) == 0
+
+    # Cleanup: Remove stale data from Jellyfin
+    # Jellyfin's completed watch should NOT be removed
+    # because it's newer and better than Plex's partial watch
+    jellyfin_cleaned = cleanup_watched(jellyfin_watched, plex_watched)
+
+    # Jellyfin's completed watch should remain
+    assert "alice" in jellyfin_cleaned
+    assert "TV Shows" in jellyfin_cleaned["alice"].libraries
+    assert len(jellyfin_cleaned["alice"].libraries["TV Shows"].series) == 1
+    assert jellyfin_cleaned["alice"].libraries["TV Shows"].series[0].episodes[0].status.completed is True
+    assert jellyfin_cleaned["alice"].libraries["TV Shows"].series[0].episodes[0].status.viewed_date == same_date
 
 
 # def test_mapping_cleanup_watched():
