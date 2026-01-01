@@ -99,6 +99,14 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
    docker run --rm -it -v "$(pwd)/.env:/app/.env" luigi311/jellyplex-watched:latest
   ```
 
+#### With Plex Cache File
+- `PLEX_CACHE_FILE` defaults to `plex_cache.json`.
+- Mount this file if you want the cache to persist across container rebuilds.
+
+  ```bash
+   docker run --rm -it -v "$(pwd)/.env:/app/.env" -v "$(pwd)/plex_cache.json:/app/plex_cache.json" luigi311/jellyplex-watched:latest
+  ```
+
 ## Troubleshooting/Issues
 
 - Jellyfin

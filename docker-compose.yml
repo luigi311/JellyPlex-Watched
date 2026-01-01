@@ -5,6 +5,8 @@ services:
     image: luigi311/jellyplex-watched:latest
     container_name: jellyplex-watched
     restart: unless-stopped
+    volumes:
+      - ./plex_cache.json:/app/plex_cache.json
     environment:
       - PUID=1000
       - PGID=1000

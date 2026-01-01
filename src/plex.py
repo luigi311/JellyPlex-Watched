@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import requests
 from loguru import logger
 
@@ -28,6 +27,7 @@ from src.watched import (
     UserData,
     check_same_identifiers,
 )
+from src.plex_cache import PlexCache, resolve_viewed_date
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
@@ -93,28 +93,6 @@ def extract_identifiers_from_item(
     )
 
 
-def get_mediaitem(
-    item: Movie | Episode,
-    completed: bool,
-    generate_guids: bool = True,
-    generate_locations: bool = True,
-) -> MediaItem:
-    last_viewed_at = item.lastViewedAt
-    viewed_date = datetime.today()
-
-    if last_viewed_at:
-        viewed_date = last_viewed_at.replace(tzinfo=timezone.utc)
-
-    return MediaItem(
-        identifiers=extract_identifiers_from_item(
-            item, generate_guids, generate_locations
-        ),
-        status=WatchedStatus(
-            completed=completed, time=item.viewOffset, viewed_date=viewed_date
-        ),
-    )
-
-
 # class plex accept base url and token and username and password but default with none
 class Plex:
     def __init__(
@@ -146,11 +124,44 @@ class Plex:
 
         self.admin_user: MyPlexAccount = self.plex.myPlexAccount()
         self.users: list[MyPlexUser | MyPlexAccount] = self.get_users()
+        sleep_duration = get_env_value(self.env, "SLEEP_DURATION", 3600)
+        try:
+            sleep_duration = int(sleep_duration)
+        except (TypeError, ValueError):
+            sleep_duration = 3600
+        # TTL max of either 1 day or 3x sleep duration if thats longer than a day
+        ttl_seconds = max(86_400, sleep_duration * 3)
+        self.plex_cache = PlexCache(
+            get_env_value(self.env, "PLEX_CACHE_FILE", "plex_cache.json"),
+            ttl_seconds=ttl_seconds,
+        )
         self.generate_guids: bool = str_to_bool(
             get_env_value(self.env, "GENERATE_GUIDS", "True")
         )
         self.generate_locations: bool = str_to_bool(
             get_env_value(self.env, "GENERATE_LOCATIONS", "True")
+        )
+
+    def _get_mediaitem(
+        self,
+        item: Movie | Episode,
+        completed: bool,
+        user_key: str,
+    ) -> MediaItem:
+        state_entry = self.plex_cache.get(
+            self.plex.machineIdentifier, user_key, item.ratingKey
+        )
+        viewed_date = resolve_viewed_date(
+            item.lastViewedAt, completed, item.viewOffset, state_entry
+        )
+
+        return MediaItem(
+            identifiers=extract_identifiers_from_item(
+                item, self.generate_guids, self.generate_locations
+            ),
+            status=WatchedStatus(
+                completed=completed, time=item.viewOffset, viewed_date=viewed_date
+            ),
         )
 
     def login(
@@ -238,12 +249,7 @@ class Plex:
                 ) + library_videos.search(inProgress=True):
                     if video.isWatched or video.viewOffset >= 60000:
                         watched.movies.append(
-                            get_mediaitem(
-                                video,
-                                video.isWatched,
-                                self.generate_guids,
-                                self.generate_locations,
-                            )
+                            self._get_mediaitem(video, video.isWatched, user_name)
                         )
 
             elif library.type == "show":
@@ -263,12 +269,7 @@ class Plex:
                         viewOffset__gte=60_000
                     ):
                         episode_mediaitem.append(
-                            get_mediaitem(
-                                episode,
-                                episode.isWatched,
-                                self.generate_guids,
-                                self.generate_locations,
-                            )
+                            self._get_mediaitem(episode, episode.isWatched, user_name)
                         )
 
                     if episode_mediaitem:
@@ -366,6 +367,7 @@ class Plex:
         # If there are no movies or shows to update, exit early.
         if not library_data.series and not library_data.movies:
             return
+        user_key = (user.username or user.title).lower()
 
         logger.info(
             f"Plex: Updating watched for {user.title} in library {library_name}"
@@ -396,6 +398,14 @@ class Plex:
                             if not dryrun:
                                 try:
                                     plex_movie.markWatched()
+                                    self.plex_cache.set(
+                                        self.plex.machineIdentifier,
+                                        user_key,
+                                        plex_movie.ratingKey,
+                                        stored_movie.status.completed,
+                                        stored_movie.status.time,
+                                        stored_movie.status.viewed_date,
+                                    )
                                 except Exception as e:
                                     logger.error(
                                         f"Plex: Failed to mark {plex_movie.title} as watched, Error: {e}"
@@ -420,6 +430,14 @@ class Plex:
                             if not dryrun:
                                 try:
                                     plex_movie.updateTimeline(stored_movie.status.time)
+                                    self.plex_cache.set(
+                                        self.plex.machineIdentifier,
+                                        user_key,
+                                        plex_movie.ratingKey,
+                                        stored_movie.status.completed,
+                                        stored_movie.status.time,
+                                        stored_movie.status.viewed_date,
+                                    )
                                 except Exception as e:
                                     logger.error(
                                         f"Plex: Failed to update {plex_movie.title} timeline, Error: {e}"
@@ -474,6 +492,14 @@ class Plex:
                                         if not dryrun:
                                             try:
                                                 plex_episode.markWatched()
+                                                self.plex_cache.set(
+                                                    self.plex.machineIdentifier,
+                                                    user_key,
+                                                    plex_episode.ratingKey,
+                                                    stored_ep.status.completed,
+                                                    stored_ep.status.time,
+                                                    stored_ep.status.viewed_date,
+                                                )
                                             except Exception as e:
                                                 logger.error(
                                                     f"Plex: Failed to mark {plex_show.title} {plex_episode.title} as watched, Error: {e}"
@@ -500,6 +526,14 @@ class Plex:
                                             try:
                                                 plex_episode.updateTimeline(
                                                     stored_ep.status.time
+                                                )
+                                                self.plex_cache.set(
+                                                    self.plex.machineIdentifier,
+                                                    user_key,
+                                                    plex_episode.ratingKey,
+                                                    stored_ep.status.completed,
+                                                    stored_ep.status.time,
+                                                    stored_ep.status.viewed_date,
                                                 )
                                             except Exception as e:
                                                 logger.error(
@@ -620,3 +654,4 @@ class Plex:
                         f"Plex: Failed to update watched for {user.title} in {library_name}, Error: {e}",
                     )
                     continue
+        self.plex_cache.save()
