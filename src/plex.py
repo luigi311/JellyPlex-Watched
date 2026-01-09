@@ -103,7 +103,10 @@ def get_mediaitem(
     viewed_date = datetime.today()
 
     if last_viewed_at:
-        viewed_date = last_viewed_at.replace(tzinfo=timezone.utc)
+        # PlexAPI returns naive datetime in local system timezone
+        # Get the local timezone and convert to UTC for consistent comparison
+        local_tz = datetime.now().astimezone().tzinfo
+        viewed_date = last_viewed_at.replace(tzinfo=local_tz).astimezone(timezone.utc)
 
     return MediaItem(
         identifiers=extract_identifiers_from_item(
