@@ -1,24 +1,24 @@
 [project]
 name = "jellyplex-watched"
-version = "8.4.0"
+version = "8.5.0"
 description = "Sync watched between media servers locally"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
     "packaging>=25.0",
-    "plexapi>=4.17.1",
-    "pydantic>=2.11.7",
+    "plexapi>=4.17.2",
+    "pydantic>=2.12.5",
     "python-dotenv>=1.1.1",
     "requests>=2.32.5",
 ]
 
 [dependency-groups]
 lint = [
-    "ruff>=0.12.3",
+    "ruff>=0.14.11",
 ]
 dev = [
-    "mypy>=1.16.1",
-    "pytest>=8.4.1",
-    "types-requests>=2.32.0.20250611",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "types-requests>=2.32.4.20260107",
 ]
