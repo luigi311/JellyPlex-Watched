@@ -1,4 +1,3 @@
-from plexapi import log
 import copy
 from datetime import datetime
 from enum import IntEnum
