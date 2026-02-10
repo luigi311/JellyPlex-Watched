@@ -105,7 +105,6 @@ def main():
         "Plex/JellyPlex-CI/jellyplex_watched/Custom TV Shows/Greatest Show Ever 3000/Episode 3",
         "Plex/JellyPlex-CI/jellyplex_watched/Movies/Tears of Steel",
         "Plex/JellyPlex-CI/jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Aftermath",
-        "Plex/JellyPlex-CI/jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
         "Jellyfin/Jellyfin-Server/JellyUser/Custom Movies/Movie Three (2022)",
         "Jellyfin/Jellyfin-Server/JellyUser/Custom TV Shows/Greatest Show Ever (3000)/S01E03",
         "Jellyfin/Jellyfin-Server/JellyUser/Movies/Tears of Steel",
@@ -155,7 +154,6 @@ def main():
         "Plex/JellyPlex-CI/jellyplex_watched/Custom Movies/Movie Three (2022)",
         "Plex/JellyPlex-CI/jellyplex_watched/Custom TV Shows/Greatest Show Ever 3000/Episode 3",
         "Plex/JellyPlex-CI/jellyplex_watched/Movies/Tears of Steel",
-        "Plex/JellyPlex-CI/jellyplex_watched/TV Shows/Monarch: Legacy of Monsters/Parallels and Interiors/240429",
         "Emby/Emby-Server/jellyplex_watched/Movies/Big Buck Bunny",
         "Emby/Emby-Server/jellyplex_watched/Movies/The Family Plan",
         "Emby/Emby-Server/jellyplex_watched/Movies/Five Nights at Freddy's",
@@ -175,7 +173,6 @@ def main():
         "Jellyfin/Jellyfin-Server/JellyUser/Custom Movies/Movie Three (2022)",
         "Jellyfin/Jellyfin-Server/JellyUser/Custom TV Shows/Greatest Show Ever (3000)/S01E03",
         "Jellyfin/Jellyfin-Server/JellyUser/Movies/Tears of Steel",
-        "Jellyfin/Jellyfin-Server/JellyUser/Shows/Monarch: Legacy of Monsters/Parallels and Interiors/4",
     ]
 
     # Determine which expected values to use based on the command-line flag

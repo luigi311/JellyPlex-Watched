@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import timezone, datetime
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
@@ -139,7 +139,7 @@ def filename_from_any_path(p: str) -> str:
     return PurePosixPath(p).name
 
 
-def to_aware_utc(dt):
+def to_aware_utc(dt: datetime | None) -> datetime | None:
     """Return a timezone-aware UTC datetime or None."""
     if dt is None:
         return None

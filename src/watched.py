@@ -62,30 +62,34 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
     if media1.status.completed and media2.status.completed:
         return Ord.TIE
 
-    # If both are not completed, and have the same time, it's a tie.
-    if (
-        not media1.status.completed
-        and not media2.status.completed
-        and media1.status.time == media2.status.time
-    ):
+    # If both are not completed, but their time is within 10 seconds, it's also a tie.
+    if (not media1.status.completed and not media2.status.completed) and abs(
+        media1.status.time - media2.status.time
+    ) <= 10 * 1_000:
         return Ord.TIE
 
-    # Compare viewed_date first
-    if (
-        media1_viewed_date
-        and media2_viewed_date
-        and media1_viewed_date != media2_viewed_date
-    ):
-        return Ord.A_BETTER if media1_viewed_date > media2_viewed_date else Ord.B_BETTER
+    # If both have viewed dates, compare them. If they are close enough, consider it a tie.
+    if media1_viewed_date and media2_viewed_date:
+        # If not within 5 seconds of each other, consider the more recent one as better.
+        if abs((media1_viewed_date - media2_viewed_date).total_seconds()) > 5:
+            return (
+                Ord.A_BETTER
+                if media1_viewed_date > media2_viewed_date
+                else Ord.B_BETTER
+            )
+        else:
+            # Time is close enough to be considered a tie
+            return Ord.TIE
 
-    # Next, compare completed status
+    # If one is completed and the other isn't, the completed one is better.
     if media1.status.completed != media2.status.completed:
         return Ord.A_BETTER if media1.status.completed else Ord.B_BETTER
 
-    # Finally, compare time
+    # If both are not completed, compare their time. The one with the higher time is better.
     if media1.status.time != media2.status.time:
         return Ord.A_BETTER if media1.status.time > media2.status.time else Ord.B_BETTER
 
+    # If we can't determine a clear winner based on the above criteria, consider it a tie.
     return Ord.TIE
 
 
