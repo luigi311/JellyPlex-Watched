@@ -108,12 +108,17 @@ def get_mediaitem(
         local_tz = datetime.now().astimezone().tzinfo
         viewed_date = last_viewed_at.replace(tzinfo=local_tz).astimezone(timezone.utc)
 
+    # Plex does not remove completion status if a user has watched it before but then rewatches but does not finish.
+    # So if the item is marked as complete but the view status is not less than 60 seconds, we will consider it as not completed.
+    # Viewoffset gets set to 0 when a video is marked as watched
+    actually_completed = completed and item.viewOffset < 60_000
+
     return MediaItem(
         identifiers=extract_identifiers_from_item(
             item, generate_guids, generate_locations
         ),
         status=WatchedStatus(
-            completed=completed, time=item.viewOffset, viewed_date=viewed_date
+            completed=actually_completed, time=item.viewOffset, viewed_date=viewed_date
         ),
     )
 
@@ -309,7 +314,7 @@ class Plex:
         self,
         users: list[MyPlexUser | MyPlexAccount],
         sync_libraries: list[str],
-        users_watched: dict[str, UserData] = None,
+        users_watched: dict[str, UserData] | None = None,
     ) -> dict[str, UserData]:
         try:
             if not users_watched:
@@ -422,6 +427,7 @@ class Plex:
                             msg = f"Plex: {plex_movie.title} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user.title} in {library_name}"
                             if not dryrun:
                                 try:
+                                    plex_movie.markUnwatched()  # Unmark as watched first so completed status is set to false
                                     plex_movie.updateTimeline(stored_movie.status.time)
                                 except Exception as e:
                                     logger.error(
