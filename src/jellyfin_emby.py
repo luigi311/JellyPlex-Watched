@@ -321,7 +321,7 @@ class JellyfinEmby:
                 movie_items = []
                 watched_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources,UserDataLastPlayedDate",
+                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -330,7 +330,7 @@ class JellyfinEmby:
 
                 in_progress_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,MediaSources,UserDataLastPlayedDate",
+                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -343,7 +343,7 @@ class JellyfinEmby:
                         continue
 
                     # Skip if theres no media tied to the movie
-                    if not movie.get("MediaSources"):
+                    if not movie.get("MediaSources") and not movie.get("Path"):
                         continue
 
                     # Skip if not watched or watched less than a minute
@@ -414,7 +414,7 @@ class JellyfinEmby:
 
                     show_episodes = self.query(
                         f"/Shows/{show.get('Id')}/Episodes"
-                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,MediaSources,UserDataLastPlayedDate",
+                        + f"?userId={user_id}&isPlaceHolder=false&Fields=ProviderIds,Path,UserDataLastPlayedDate",
                         "get",
                     )
 
@@ -431,7 +431,7 @@ class JellyfinEmby:
                         if not episode.get("UserData"):
                             continue
 
-                        if not episode.get("MediaSources"):
+                        if not episode.get("MediaSources") and not episode.get("Path"):
                             continue
 
                         # If watched or watched more than a minute
@@ -561,7 +561,7 @@ class JellyfinEmby:
                 jellyfin_search = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                    + "&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
+                    + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Movie",
                     "get",
                 )
 
@@ -687,7 +687,7 @@ class JellyfinEmby:
                             jellyfin_show_id = jellyfin_show.get("Id")
                             jellyfin_episodes = self.query(
                                 f"/Shows/{jellyfin_show_id}/Episodes"
-                                + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,MediaSources",
+                                + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,Path",
                                 "get",
                             )
 
