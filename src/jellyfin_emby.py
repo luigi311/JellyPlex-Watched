@@ -143,7 +143,7 @@ class JellyfinEmby:
         query: str,
         query_type: Literal["get", "post"],
         identifiers: dict[str, str] | None = None,
-        json: dict[str, float] | None = None,
+        json: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]] | dict[str, Any] | None:
         try:
             results = None
@@ -480,7 +480,7 @@ class JellyfinEmby:
         self,
         users: dict[str, str],
         sync_libraries: list[str],
-        users_watched: dict[str, UserData] = None,
+        users_watched: dict[str, UserData] | None = None,
     ) -> dict[str, UserData]:
         try:
             if not users_watched:
@@ -561,7 +561,7 @@ class JellyfinEmby:
                 jellyfin_search = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                    + "&isPlayed=false&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
+                    + "&Fields=ItemCounts,ProviderIds,MediaSources&IncludeItemTypes=Movie",
                     "get",
                 )
 
@@ -594,9 +594,7 @@ class JellyfinEmby:
                             if stored_movie.status.completed:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
                                 if not dryrun:
-                                    user_data_payload: dict[
-                                        str, float | bool | datetime
-                                    ] = {
+                                    user_data_payload: dict[str, Any] = {
                                         "PlayCount": 1,
                                         "Played": True,
                                         "PlaybackPositionTicks": 0,
@@ -623,9 +621,7 @@ class JellyfinEmby:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
 
                                 if not dryrun:
-                                    user_data_payload: dict[
-                                        str, float | bool | datetime
-                                    ] = {
+                                    user_data_payload: dict[str, Any] = {
                                         "PlayCount": 0,
                                         "Played": False,
                                         "PlaybackPositionTicks": stored_movie.status.time
@@ -731,9 +727,7 @@ class JellyfinEmby:
                                                 + f" as watched for {user_name} in {library_name}"
                                             )
                                             if not dryrun:
-                                                user_data_payload: dict[
-                                                    str, float | bool | datetime
-                                                ] = {
+                                                user_data_payload: dict[str, Any] = {
                                                     "PlayCount": 1,
                                                     "Played": True,
                                                     "PlaybackPositionTicks": 0,
@@ -766,9 +760,7 @@ class JellyfinEmby:
                                             )
 
                                             if not dryrun:
-                                                user_data_payload: dict[
-                                                    str, float | bool | datetime
-                                                ] = {
+                                                user_data_payload: dict[str, Any] = {
                                                     "PlayCount": 0,
                                                     "Played": False,
                                                     "PlaybackPositionTicks": stored_ep.status.time
