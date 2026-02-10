@@ -383,7 +383,7 @@ class Plex:
         # Update movies.
         if library_data.movies:
             # Search for Plex movies that are currently marked as unwatched.
-            for plex_movie in library_section.search(unwatched=True):
+            for plex_movie in library_section.search():
                 plex_identifiers = extract_identifiers_from_item(
                     plex_movie, self.generate_guids, self.generate_locations
                 )
@@ -447,7 +447,7 @@ class Plex:
         # Update TV Shows (series/episodes).
         if library_data.series:
             # For each Plex show in the library section:
-            plex_shows = library_section.search(unwatched=True)
+            plex_shows = library_section.search()
             for plex_show in plex_shows:
                 # Extract identifiers from the Plex show.
                 plex_show_identifiers = extract_identifiers_from_item(
