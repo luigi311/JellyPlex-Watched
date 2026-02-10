@@ -1,3 +1,4 @@
+from plexapi import log
 import copy
 from datetime import datetime
 from enum import IntEnum
@@ -53,6 +54,11 @@ class UserData(BaseModel):
 
 
 def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
+    logger.trace(
+        f"Comparing '{media1.identifiers}' (completed={media1.status.completed}, time={media1.status.time}, viewed_date={media1.status.viewed_date}) "
+        f"with '{media2.identifiers}' (completed={media2.status.completed}, time={media2.status.time}, viewed_date={media2.status.viewed_date})"
+    )
+
     media1_viewed_date, media2_viewed_date = (
         to_aware_utc(media1.status.viewed_date),
         to_aware_utc(media2.status.viewed_date),
@@ -60,18 +66,26 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
 
     # If both are completed, it's a tie.
     if media1.status.completed and media2.status.completed:
+        logger.trace("Both media items are completed. Considering it a tie.")
         return Ord.TIE
 
     # If both are not completed, but their time is within 10 seconds, it's also a tie.
     if (not media1.status.completed and not media2.status.completed) and abs(
         media1.status.time - media2.status.time
     ) <= 10 * 1_000:
+        logger.trace(
+            "Both media items are not completed but their time is within 10 seconds. Considering it a tie."
+        )
         return Ord.TIE
 
     # If both have viewed dates, compare them. If they are close enough, consider it a tie.
     if media1_viewed_date and media2_viewed_date:
         # If not within 5 seconds of each other, consider the more recent one as better.
         if abs((media1_viewed_date - media2_viewed_date).total_seconds()) > 5:
+            logger.trace(
+                "Both media items have viewed dates that are more than 5 seconds apart. Chosing the more recent one as better."
+            )
+
             return (
                 Ord.A_BETTER
                 if media1_viewed_date > media2_viewed_date
@@ -79,17 +93,29 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
             )
         else:
             # Time is close enough to be considered a tie
+            logger.trace(
+                "Both media items have viewed dates that are within 5 seconds of each other. Considering it a tie."
+            )
             return Ord.TIE
 
     # If one is completed and the other isn't, the completed one is better.
     if media1.status.completed != media2.status.completed:
+        logger.trace(
+            "One media item is completed while the other is not. Choosing the completed one as better."
+        )
         return Ord.A_BETTER if media1.status.completed else Ord.B_BETTER
 
     # If both are not completed, compare their time. The one with the higher time is better.
     if media1.status.time != media2.status.time:
+        logger.trace(
+            "Both media items are not completed but have different times. Choosing the one with the higher time as better."
+        )
         return Ord.A_BETTER if media1.status.time > media2.status.time else Ord.B_BETTER
 
     # If we can't determine a clear winner based on the above criteria, consider it a tie.
+    logger.trace(
+        "Unable to determine a clear winner based on watched status. Considering it a tie."
+    )
     return Ord.TIE
 
 
