@@ -62,7 +62,7 @@ jobs:
           JellyPlex-Watched-CI/start_containers.sh
 
           # Wait for containers to start
-          sleep 10
+          sleep 15
 
           for FOLDER in $(find "JellyPlex-Watched-CI" -type f -name "docker-compose.yml" -exec dirname {} \;); do
             docker compose -f "${FOLDER}/docker-compose.yml" logs

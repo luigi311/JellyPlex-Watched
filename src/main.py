@@ -119,7 +119,7 @@ def should_sync_server(
     return True
 
 
-def main_loop(env) -> None:
+def main_loop(env: dict[str, str | float | None]) -> None:
     dryrun = str_to_bool(get_env_value(env, "DRYRUN", "False"))
     logger.info(f"Dryrun: {dryrun}")
 
@@ -225,12 +225,20 @@ def main_loop(env) -> None:
 
             logger.info("Cleaning Server 1 Watched", 1)
             server_1_watched_filtered = cleanup_watched(
-                server_1_watched, server_2_watched, user_mapping, library_mapping
+                server_1_watched,
+                server_2_watched,
+                env,
+                user_mapping,
+                library_mapping,
             )
 
             logger.info("Cleaning Server 2 Watched", 1)
             server_2_watched_filtered = cleanup_watched(
-                server_2_watched, server_1_watched, user_mapping, library_mapping
+                server_2_watched,
+                server_1_watched,
+                env,
+                user_mapping,
+                library_mapping,
             )
 
             logger.debug(
@@ -248,6 +256,7 @@ def main_loop(env) -> None:
                     server_1_watched = merge_server_watched(
                         server_1_watched,
                         server_2_watched_filtered,
+                        env,
                         user_mapping,
                         library_mapping,
                     )
@@ -293,7 +302,9 @@ def main() -> None:
             times.append(end - start)
 
             if len(times) > 0:
-                logger.info(f"Average time: {sum(times) / len(times)}")
+                average_time = sum(times) / len(times)
+                logger.info(f"Average time: {average_time}")
+                env["AVERAGE_TIME"] = average_time
 
             if run_only_once:
                 break

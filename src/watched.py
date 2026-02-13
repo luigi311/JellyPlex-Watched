@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 from typing import Any
 
-from src.functions import search_mapping, to_aware_utc
+from src.functions import search_mapping, to_aware_utc, get_env_value
 
 
 class Ord(IntEnum):
@@ -52,7 +52,9 @@ class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
 
 
-def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
+def compare_media_items(
+    media1: MediaItem, media2: MediaItem, env: dict[str, str | float | None]
+) -> Ord:
     logger.trace(
         f"Comparing '{media1.identifiers}' (completed={media1.status.completed}, time={media1.status.time}, viewed_date={media1.status.viewed_date}) "
         f"with '{media2.identifiers}' (completed={media2.status.completed}, time={media2.status.time}, viewed_date={media2.status.viewed_date})"
@@ -79,10 +81,17 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
 
     # If both have viewed dates, compare them. If they are close enough, consider it a tie.
     if media1_viewed_date and media2_viewed_date:
-        # If not within 5 seconds of each other, consider the more recent one as better.
-        if abs((media1_viewed_date - media2_viewed_date).total_seconds()) > 5:
+        # Define threshold time as 25% above the average time plus sleep duration to account for minor discrepancies in viewing times.
+        threshold_time = (
+            float(get_env_value(env, "AVERAGE_TIME", "100.0")) * 1.25
+        ) + float(get_env_value(env, "SLEEP_DURATION", "5.0"))
+        # If not within threshold_time of each other, choose the more recent one as better.
+        if (
+            abs((media1_viewed_date - media2_viewed_date).total_seconds())
+            > threshold_time
+        ):
             logger.trace(
-                "Both media items have viewed dates that are more than 5 seconds apart. Chosing the more recent one as better."
+                f"Both media items have viewed dates that are more than {threshold_time} seconds apart. Chosing the more recent one as better."
             )
 
             return (
@@ -90,12 +99,6 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
                 if media1_viewed_date > media2_viewed_date
                 else Ord.B_BETTER
             )
-        else:
-            # Time is close enough to be considered a tie
-            logger.trace(
-                "Both media items have viewed dates that are within 5 seconds of each other. Considering it a tie."
-            )
-            return Ord.TIE
 
     # If one is completed and the other isn't, the completed one is better.
     if media1.status.completed != media2.status.completed:
@@ -118,18 +121,22 @@ def compare_media_items(media1: MediaItem, media2: MediaItem) -> Ord:
     return Ord.TIE
 
 
-def merge_mediaitem_data(media1: MediaItem, media2: MediaItem) -> MediaItem:
+def merge_mediaitem_data(
+    media1: MediaItem, media2: MediaItem, env: dict[str, str | float | None]
+) -> MediaItem:
     """
     Merge two MediaItem episodes by comparing their watched status.
     If one is completed while the other isn't, choose the completed one.
     If both are completed or both are not, choose the one with the higher time.
     """
 
-    ord_ = compare_media_items(media1, media2)
+    ord_ = compare_media_items(media1, media2, env)
     return media1 if ord_ in (Ord.A_BETTER, Ord.TIE) else media2
 
 
-def merge_series_data(series1: Series, series2: Series) -> Series:
+def merge_series_data(
+    series1: Series, series2: Series, env: dict[str, str | float | None]
+) -> Series:
     """
     Merge two Series objects by combining their episodes.
     For duplicate episodes (determined by check_same_identifiers), merge their watched status.
@@ -138,14 +145,16 @@ def merge_series_data(series1: Series, series2: Series) -> Series:
     for ep in series2.episodes:
         for idx, merged_ep in enumerate(merged_series.episodes):
             if check_same_identifiers(ep.identifiers, merged_ep.identifiers):
-                merged_series.episodes[idx] = merge_mediaitem_data(merged_ep, ep)
+                merged_series.episodes[idx] = merge_mediaitem_data(merged_ep, ep, env)
                 break
         else:
             merged_series.episodes.append(copy.deepcopy(ep))
     return merged_series
 
 
-def merge_library_data(lib1: LibraryData, lib2: LibraryData) -> LibraryData:
+def merge_library_data(
+    lib1: LibraryData, lib2: LibraryData, env: dict[str, str | float | None]
+) -> LibraryData:
     """
     Merge two LibraryData objects by extending movies and merging series.
     For series, duplicates are determined using check_same_identifiers.
@@ -156,7 +165,7 @@ def merge_library_data(lib1: LibraryData, lib2: LibraryData) -> LibraryData:
     for movie in lib2.movies:
         for idx, merged_movie in enumerate(merged.movies):
             if check_same_identifiers(movie.identifiers, merged_movie.identifiers):
-                merged.movies[idx] = merge_mediaitem_data(merged_movie, movie)
+                merged.movies[idx] = merge_mediaitem_data(merged_movie, movie, env)
                 break
         else:
             merged.movies.append(copy.deepcopy(movie))
@@ -165,7 +174,7 @@ def merge_library_data(lib1: LibraryData, lib2: LibraryData) -> LibraryData:
     for series2 in lib2.series:
         for idx, series1 in enumerate(merged.series):
             if check_same_identifiers(series1.identifiers, series2.identifiers):
-                merged.series[idx] = merge_series_data(series1, series2)
+                merged.series[idx] = merge_series_data(series1, series2, env)
                 break
         else:
             merged.series.append(copy.deepcopy(series2))
@@ -173,7 +182,9 @@ def merge_library_data(lib1: LibraryData, lib2: LibraryData) -> LibraryData:
     return merged
 
 
-def merge_user_data(user1: UserData, user2: UserData) -> UserData:
+def merge_user_data(
+    user1: UserData, user2: UserData, env: dict[str, str | float | None]
+) -> UserData:
     """
     Merge two UserData objects by merging their libraries.
     If a library exists in both, merge its content; otherwise, add the new library.
@@ -182,7 +193,7 @@ def merge_user_data(user1: UserData, user2: UserData) -> UserData:
     for lib_key, lib_data in user2.libraries.items():
         if lib_key in merged_libraries:
             merged_libraries[lib_key] = merge_library_data(
-                merged_libraries[lib_key], lib_data
+                merged_libraries[lib_key], lib_data, env
             )
         else:
             merged_libraries[lib_key] = copy.deepcopy(lib_data)
@@ -192,6 +203,7 @@ def merge_user_data(user1: UserData, user2: UserData) -> UserData:
 def merge_server_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
+    env: dict[str, str | float | None],
     user_mapping: dict[str, str] | None = None,
     library_mapping: dict[str, str] | None = None,
 ) -> dict[str, UserData]:
@@ -218,6 +230,7 @@ def merge_server_watched(
                 merged_watched[user_key].libraries[mapped_lib_key] = merge_library_data(
                     merged_watched[user_key].libraries[mapped_lib_key],
                     lib_data,
+                    env,
                 )
 
     return merged_watched
@@ -240,7 +253,9 @@ def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> 
     return False
 
 
-def check_remove_entry(item1: MediaItem, item2: MediaItem) -> bool:
+def check_remove_entry(
+    item1: MediaItem, item2: MediaItem, env: dict[str, str | float | None]
+) -> bool:
     """
     Returns True if item1 (from watched_list_1) should be removed
     in favor of item2 (from watched_list_2)
@@ -249,12 +264,13 @@ def check_remove_entry(item1: MediaItem, item2: MediaItem) -> bool:
         return False
 
     # Removal policy for cleanup: drop item1 if item2 is as-good-or-better.
-    return compare_media_items(item1, item2) in (Ord.B_BETTER, Ord.TIE)
+    return compare_media_items(item1, item2, env) in (Ord.B_BETTER, Ord.TIE)
 
 
 def cleanup_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
+    env: dict[str, str | float | None],
     user_mapping: dict[str, str] | None = None,
     library_mapping: dict[str, str] | None = None,
 ) -> dict[str, UserData]:
@@ -286,7 +302,7 @@ def cleanup_watched(
             for movie in library_1.movies:
                 remove_flag = False
                 for movie2 in library_2.movies:
-                    if check_remove_entry(movie, movie2):
+                    if check_remove_entry(movie, movie2, env):
                         logger.trace(f"Removing movie: {movie.identifiers.title}")
                         remove_flag = True
                         break
@@ -316,7 +332,7 @@ def cleanup_watched(
                     for ep1 in series1.episodes:
                         remove_flag = False
                         for ep2 in matching_series.episodes:
-                            if check_remove_entry(ep1, ep2):
+                            if check_remove_entry(ep1, ep2, env):
                                 logger.trace(
                                     f"Removing episode '{ep1.identifiers.title}' from show '{series1.identifiers.title}'",
                                 )

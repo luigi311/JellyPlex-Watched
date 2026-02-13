@@ -667,8 +667,12 @@ def test_simple_cleanup_watched():
         )
     }
 
-    return_watched_list_1 = cleanup_watched(user_watched_list_1, user_watched_list_2)
-    return_watched_list_2 = cleanup_watched(user_watched_list_2, user_watched_list_1)
+    return_watched_list_1 = cleanup_watched(
+        user_watched_list_1, user_watched_list_2, env={}
+    )
+    return_watched_list_2 = cleanup_watched(
+        user_watched_list_2, user_watched_list_1, env={}
+    )
 
     assert return_watched_list_1 == expected_watched_list_1
     assert return_watched_list_2 == expected_watched_list_2
