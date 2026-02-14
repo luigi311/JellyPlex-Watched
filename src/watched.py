@@ -56,8 +56,9 @@ def compare_media_items(
     media1: MediaItem, media2: MediaItem, env: dict[str, str | float | None]
 ) -> Ord:
     logger.trace(
-        f"Comparing '{media1.identifiers}' (completed={media1.status.completed}, time={media1.status.time}, viewed_date={media1.status.viewed_date}) "
-        f"with '{media2.identifiers}' (completed={media2.status.completed}, time={media2.status.time}, viewed_date={media2.status.viewed_date})"
+        "Comparing the following media items:"
+        f"\n'{media1.identifiers}' (completed={media1.status.completed}, time={media1.status.time}, viewed_date={media1.status.viewed_date})"
+        f"\n'{media2.identifiers}' (completed={media2.status.completed}, time={media2.status.time}, viewed_date={media2.status.viewed_date})"
     )
 
     media1_viewed_date, media2_viewed_date = (
