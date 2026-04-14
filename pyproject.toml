@@ -19,6 +19,6 @@ lint = [
 ]
 dev = [
     "mypy>=1.19.1",
-    "pytest>=9.0.2",
+    "pytest>=9.0.3",
     "types-requests>=2.32.4.20260107",
 ]
