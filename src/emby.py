@@ -1,10 +1,18 @@
-from src.jellyfin_emby import JellyfinEmby
-from packaging.version import parse, Version
 from loguru import logger
+from packaging.version import Version, parse
+
+from src.jellyfin_emby import JellyfinEmby
+from src.settings import AppSettings, EmbySettings
 
 
 class Emby(JellyfinEmby):
-    def __init__(self, env, base_url: str, token: str) -> None:
+    def __init__(
+        self,
+        app_settings: AppSettings,
+        server_settings: EmbySettings,
+        base_url: str,
+        token: str,
+    ) -> None:
         authorization = (
             "Emby , "
             'Client="JellyPlex-Watched", '
@@ -19,7 +27,12 @@ class Emby(JellyfinEmby):
         }
 
         super().__init__(
-            env, server_type="Emby", base_url=base_url, token=token, headers=headers
+            app_settings=app_settings,
+            server_settings=server_settings,
+            server_type="Emby",
+            base_url=base_url,
+            token=token,
+            headers=headers,
         )
 
     def is_partial_update_supported(self, server_version: Version) -> bool:

@@ -1,6 +1,6 @@
-from datetime import datetime
-import sys
 import os
+import sys
+from datetime import datetime
 
 # getting the name of the directory
 # where the this file is present.
@@ -14,6 +14,9 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.settings import AppSettings
 from src.watched import (
     LibraryData,
     MediaIdentifiers,
@@ -23,6 +26,77 @@ from src.watched import (
     WatchedStatus,
     cleanup_watched,
 )
+
+
+class _IsolatedAppSettings(AppSettings):
+    """
+    AppSettings that ignores all external configuration sources (env vars,
+    .env, legacy .env, config.yaml) so tests depend only on the kwargs passed
+    in. Without this, constructing AppSettings would read the developer's real
+    .env / config.yaml, which can both contaminate results and raise
+    validation errors when the ambient config conflicts with the test config.
+    """
+
+    model_config = SettingsConfigDict(
+        yaml_file=None,
+        yaml_file_encoding=None,
+        nested_model_default_partial_update=True,
+        extra="forbid",
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (init_settings,)
+
+
+class _FakeServerSettings:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _FakeServer:
+    """
+    Minimal stand-in for a connected server. cleanup_watched only reads
+    `server.server_settings.name` to drive the settings-model lookups.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.server_settings = _FakeServerSettings(name)
+
+
+def _settings() -> AppSettings:
+    """
+    A minimal two-server AppSettings. No user_mappings / library_mappings are
+    declared, so cleanup_watched resolves users and libraries via the implicit
+    same-name fallback — matching how these test fixtures key everything by
+    identical names ('user1', 'TV Shows', 'Movies', ...).
+    """
+    return _IsolatedAppSettings(
+        plex=[
+            {
+                "name": "server1",
+                "baseurl": "http://server1",
+                "token": "x",
+                "sync_to": ["server2"],
+            }
+        ],
+        jellyfin=[
+            {
+                "name": "server2",
+                "baseurl": "http://server2",
+                "token": "x",
+                "sync_to": ["server1"],
+            }
+        ],
+    )
+
 
 viewed_date = datetime.today()
 
@@ -589,6 +663,11 @@ tv_shows_2_watched_list_1: list[Series] = [
 
 
 def test_simple_cleanup_watched():
+    settings = _settings()
+    server_1 = _FakeServer("server1")
+    server_2 = _FakeServer("server2")
+    average_time = 0.0
+
     user_watched_list_1: dict[str, UserData] = {
         "user1": UserData(
             libraries={
@@ -668,61 +747,21 @@ def test_simple_cleanup_watched():
     }
 
     return_watched_list_1 = cleanup_watched(
-        user_watched_list_1, user_watched_list_2, env={}
+        user_watched_list_1,
+        user_watched_list_2,
+        server_1,
+        server_2,
+        settings,
+        average_time,
     )
     return_watched_list_2 = cleanup_watched(
-        user_watched_list_2, user_watched_list_1, env={}
+        user_watched_list_2,
+        user_watched_list_1,
+        server_2,
+        server_1,
+        settings,
+        average_time,
     )
 
     assert return_watched_list_1 == expected_watched_list_1
     assert return_watched_list_2 == expected_watched_list_2
-
-
-# def test_mapping_cleanup_watched():
-#    user_watched_list_1 = {
-#        "user1": {
-#            "TV Shows": tv_shows_watched_list_1,
-#            "Movies": movies_watched_list_1,
-#            "Other Shows": tv_shows_2_watched_list_1,
-#        },
-#    }
-#    user_watched_list_2 = {
-#        "user2": {
-#            "Shows": tv_shows_watched_list_2,
-#            "Movies": movies_watched_list_2,
-#            "Other Shows": tv_shows_2_watched_list_1,
-#        }
-#    }
-#
-#    expected_watched_list_1 = {
-#        "user1": {
-#            "TV Shows": expected_tv_show_watched_list_1,
-#            "Movies": expected_movie_watched_list_1,
-#        }
-#    }
-#
-#    expected_watched_list_2 = {
-#        "user2": {
-#            "Shows": expected_tv_show_watched_list_2,
-#            "Movies": expected_movie_watched_list_2,
-#        }
-#    }
-#
-#    user_mapping = {"user1": "user2"}
-#    library_mapping = {"TV Shows": "Shows"}
-#
-#    return_watched_list_1 = cleanup_watched(
-#        user_watched_list_1,
-#        user_watched_list_2,
-#        user_mapping=user_mapping,
-#        library_mapping=library_mapping,
-#    )
-#    return_watched_list_2 = cleanup_watched(
-#        user_watched_list_2,
-#        user_watched_list_1,
-#        user_mapping=user_mapping,
-#        library_mapping=library_mapping,
-#    )
-#
-#    assert return_watched_list_1 == expected_watched_list_1
-#    assert return_watched_list_2 == expected_watched_list_2

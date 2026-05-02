@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 # getting the name of the directory
 # where the this file is present.
@@ -13,266 +13,182 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.functions import (
-    search_mapping,
-)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from src.library import (
-    check_skip_logic,
-    check_blacklist_logic,
-    check_whitelist_logic,
-)
+from src.library import combine_library_lists
+from src.settings import AppSettings
 
-blacklist_library = ["TV Shows"]
-whitelist_library = ["Movies"]
-blacklist_library_type = ["episodes"]
-whitelist_library_type = ["movies"]
-library_mapping = {"Shows": "TV Shows", "Movie": "Movies"}
 
-show_list = {
-    frozenset(
-        {
-            ("locations", ("The Last of Us",)),
-            ("tmdb", "100088"),
-            ("imdb", "tt3581920"),
-            ("tvdb", "392256"),
-            ("title", "The Last of Us"),
-        }
-    ): [
-        {
-            "imdb": "tt11957006",
-            "tmdb": "2181581",
-            "tvdb": "8444132",
-            "locations": (
-                (
-                    "The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",
-                )
-            ),
-            "status": {"completed": True, "time": 0},
-        }
-    ]
-}
-movie_list = [
-    {
-        "title": "Coco",
-        "imdb": "tt2380307",
-        "tmdb": "354912",
-        "locations": [("Coco (2017) Remux-2160p.mkv", "Coco (2017) Remux-1080p.mkv")],
-        "status": {"completed": True, "time": 0},
+class _IsolatedAppSettings(AppSettings):
+    """
+    AppSettings that ignores all external configuration sources (env vars,
+    .env, legacy .env, config.yaml) so tests depend only on the kwargs passed
+    in. Without this, constructing AppSettings would read the developer's real
+    .env / config.yaml and contaminate the test.
+    """
+
+    model_config = SettingsConfigDict(
+        yaml_file=None,
+        yaml_file_encoding=None,
+        nested_model_default_partial_update=True,
+        extra="forbid",
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (init_settings,)
+
+
+class _FakeServerSettings:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _FakeServer:
+    """
+    Minimal stand-in for a connected server. combine_library_lists only reads
+    `server.server_settings.name`, so that's all we need.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.server_settings = _FakeServerSettings(name)
+
+
+def _settings(**overrides) -> AppSettings:
+    base = {
+        "plex": [
+            {
+                "name": "plex-main",
+                "baseurl": "http://plex",
+                "token": "x",
+                "sync_to": ["jellyfin-main"],
+            }
+        ],
+        "jellyfin": [
+            {
+                "name": "jellyfin-main",
+                "baseurl": "http://jellyfin",
+                "token": "x",
+                "sync_to": ["plex-main"],
+            }
+        ],
     }
-]
-
-show_titles = {
-    "imdb": ["tt3581920"],
-    "locations": [("The Last of Us",)],
-    "tmdb": ["100088"],
-    "tvdb": ["392256"],
-}
-episode_titles = {
-    "imdb": ["tt11957006"],
-    "locations": [
-        ("The Last of Us - S01E01 - When You're Lost in the Darkness WEBDL-1080p.mkv",)
-    ],
-    "tmdb": ["2181581"],
-    "tvdb": ["8444132"],
-    "completed": [True],
-    "time": [0],
-    "show": [
-        {
-            "imdb": "tt3581920",
-            "locations": ("The Last of Us",),
-            "title": "The Last of Us",
-            "tmdb": "100088",
-            "tvdb": "392256",
-        }
-    ],
-}
-movie_titles = {
-    "imdb": ["tt2380307"],
-    "locations": [
-        [
-            (
-                "Coco (2017) Remux-2160p.mkv",
-                "Coco (2017) Remux-1080p.mkv",
-            )
-        ]
-    ],
-    "title": ["coco"],
-    "tmdb": ["354912"],
-    "completed": [True],
-    "time": [0],
-}
+    base.update(overrides)
+    return _IsolatedAppSettings(**base)
 
 
-def test_check_skip_logic():
-    # Failes
-    library_title = "Test"
-    library_type = "movies"
-    skip_reason = check_skip_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
+def test_combine_library_lists_implicit_same_name():
+    """Libraries with the same name on both servers sync without a mapping."""
+    settings = _settings()
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    # {library_name: type}
+    server_1_libs = {"Movies": "movie", "TV Shows": "show"}
+    server_2_libs = {"Movies": "movies", "Music": "music"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    assert skip_reason == "Test is not in whitelist_library"
+    # Only 'Movies' exists on both -> matched to itself. 'TV Shows' has no
+    # counterpart on server 2; 'Music' has none on server 1.
+    assert combined == {"Movies": ["Movies"]}
 
-    library_title = "Shows"
-    library_type = "episodes"
-    skip_reason = check_skip_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
+
+def test_combine_library_lists_with_mapping():
+    """A library_mappings entry links differently-named libraries."""
+    settings = _settings(
+        library_mappings=[
+            {
+                "canonical": "Shows",
+                "aliases": [
+                    {"server": "plex-main", "library": "TV Shows"},
+                    {"server": "jellyfin-main", "library": "Shows"},
+                ],
+            }
+        ],
+    )
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    server_1_libs = {"TV Shows": "show"}
+    server_2_libs = {"Shows": "tvshows"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    assert (
-        skip_reason
-        == "episodes is in blacklist_library_type and TV Shows is in blacklist_library and "
-        + "episodes is not in whitelist_library_type and Shows is not in whitelist_library"
+    assert combined == {"TV Shows": ["Shows"]}
+
+
+def test_combine_library_lists_type_blacklist():
+    """A library whose type is blacklisted is dropped regardless of name match."""
+    settings = _settings(blacklist_library_types=["music"])
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    server_1_libs = {"Movies": "movie", "Music": "music"}
+    server_2_libs = {"Movies": "movies", "Music": "music"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    # Passes
-    library_title = "Movie"
-    library_type = "movies"
-    skip_reason = check_skip_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        whitelist_library,
-        blacklist_library_type,
-        whitelist_library_type,
-        library_mapping,
+    # 'Music' is dropped by the type blacklist; only 'Movies' remains.
+    assert combined == {"Movies": ["Movies"]}
+
+
+def test_combine_library_lists_type_whitelist():
+    """With a type whitelist set, only matching types sync."""
+    settings = _settings(whitelist_library_types=["movie", "movies"])
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    server_1_libs = {"Movies": "movie", "TV Shows": "show"}
+    server_2_libs = {"Movies": "movies", "Shows": "tvshows"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    assert skip_reason is None
+    assert combined == {"Movies": ["Movies"]}
 
 
-def test_check_blacklist_logic():
-    # Fails
-    library_title = "Shows"
-    library_type = "episodes"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_blacklist_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        blacklist_library_type,
-        library_other,
+def test_combine_library_lists_name_blacklist():
+    """A blacklisted library name is filtered out by should_sync_library."""
+    settings = _settings(blacklist_libraries=["TV Shows"])
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    server_1_libs = {"Movies": "movie", "TV Shows": "show"}
+    server_2_libs = {"Movies": "movies", "TV Shows": "tvshows"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    assert (
-        skip_reason
-        == "episodes is in blacklist_library_type and TV Shows is in blacklist_library"
+    assert combined == {"Movies": ["Movies"]}
+
+
+def test_combine_library_lists_name_whitelist():
+    """With a library whitelist set, only whitelisted libraries sync."""
+    settings = _settings(whitelist_libraries=["Movies"])
+    server_1 = _FakeServer("plex-main")
+    server_2 = _FakeServer("jellyfin-main")
+
+    server_1_libs = {"Movies": "movie", "TV Shows": "show"}
+    server_2_libs = {"Movies": "movies", "TV Shows": "tvshows"}
+
+    combined = combine_library_lists(
+        server_1, server_2, server_1_libs, server_2_libs, settings
     )
 
-    library_title = "TV Shows"
-    library_type = "episodes"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_blacklist_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        blacklist_library_type,
-        library_other,
-    )
-
-    assert (
-        skip_reason
-        == "episodes is in blacklist_library_type and TV Shows is in blacklist_library"
-    )
-
-    # Passes
-    library_title = "Movie"
-    library_type = "movies"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_blacklist_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        blacklist_library_type,
-        library_other,
-    )
-
-    assert skip_reason is None
-
-    library_title = "Movies"
-    library_type = "movies"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_blacklist_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        blacklist_library_type,
-        library_other,
-    )
-
-    assert skip_reason is None
-
-
-def test_check_whitelist_logic():
-    # Fails
-    library_title = "Shows"
-    library_type = "episodes"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_whitelist_logic(
-        library_title,
-        library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_other,
-    )
-
-    assert (
-        skip_reason
-        == "episodes is not in whitelist_library_type and Shows is not in whitelist_library"
-    )
-
-    library_title = "TV Shows"
-    library_type = "episodes"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_whitelist_logic(
-        library_title,
-        library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_other,
-    )
-
-    assert (
-        skip_reason
-        == "episodes is not in whitelist_library_type and TV Shows is not in whitelist_library"
-    )
-
-    # Passes
-    library_title = "Movie"
-    library_type = "movies"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_whitelist_logic(
-        library_title,
-        library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_other,
-    )
-
-    assert skip_reason is None
-
-    library_title = "Movies"
-    library_type = "movies"
-    library_other = search_mapping(library_mapping, library_title)
-    skip_reason = check_whitelist_logic(
-        library_title,
-        library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_other,
-    )
-
-    assert skip_reason is None
+    assert combined == {"Movies": ["Movies"]}

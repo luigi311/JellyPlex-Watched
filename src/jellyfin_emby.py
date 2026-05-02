@@ -1,29 +1,35 @@
 # Functions for Jellyfin and Emby
 
-from datetime import datetime
-import requests
+from __future__ import annotations
+
 import traceback
+from datetime import datetime
 from math import floor
-from typing import Any, Literal
-from packaging.version import parse, Version
+from typing import TYPE_CHECKING, Any, Literal
+
+import requests
 from loguru import logger
+from packaging.version import Version, parse
 
 from src.functions import (
     filename_from_any_path,
-    search_mapping,
     log_marked,
-    str_to_bool,
-    get_env_value,
 )
+from src.settings import AppSettings, EmbySettings, JellyfinSettings
 from src.watched import (
     LibraryData,
     MediaIdentifiers,
     MediaItem,
-    WatchedStatus,
     Series,
     UserData,
+    WatchedStatus,
     check_same_identifiers,
 )
+
+if TYPE_CHECKING:
+    from src.emby import Emby
+    from src.jellyfin import Jellyfin
+    from src.plex import Plex
 
 
 def extract_identifiers_from_item(
@@ -102,13 +108,15 @@ def get_mediaitem(
 class JellyfinEmby:
     def __init__(
         self,
-        env,
+        app_settings: AppSettings,
+        server_settings: JellyfinSettings | EmbySettings,
         server_type: Literal["Jellyfin", "Emby"],
         base_url: str,
         token: str,
         headers: dict[str, str],
     ) -> None:
-        self.env = env
+        self.app_settings: AppSettings = app_settings
+        self.server_settings = server_settings
 
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
@@ -116,7 +124,6 @@ class JellyfinEmby:
         self.base_url: str = base_url
         self.token: str = token
         self.headers: dict[str, str] = headers
-        self.timeout: int = int(get_env_value(self.env, "REQUEST_TIMEOUT", 300))
 
         if not self.base_url:
             raise Exception(f"{self.server_type} base_url not set")
@@ -131,12 +138,6 @@ class JellyfinEmby:
         self.update_partial: bool = self.is_partial_update_supported(
             self.server_version
         )
-        self.generate_guids: bool = str_to_bool(
-            get_env_value(self.env, "GENERATE_GUIDS", "True")
-        )
-        self.generate_locations: bool = str_to_bool(
-            get_env_value(self.env, "GENERATE_LOCATIONS", "True")
-        )
 
     def query(
         self,
@@ -150,7 +151,9 @@ class JellyfinEmby:
 
             if query_type == "get":
                 response = self.session.get(
-                    self.base_url + query, headers=self.headers, timeout=self.timeout
+                    self.base_url + query,
+                    headers=self.headers,
+                    timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
                     raise Exception(
@@ -166,7 +169,7 @@ class JellyfinEmby:
                     self.base_url + query,
                     headers=self.headers,
                     json=json,
-                    timeout=self.timeout,
+                    timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
                     raise Exception(
@@ -355,8 +358,8 @@ class JellyfinEmby:
                             get_mediaitem(
                                 self.server_type,
                                 movie,
-                                self.generate_guids,
-                                self.generate_locations,
+                                self.app_settings.generate_guids,
+                                self.app_settings.generate_locations,
                             )
                         )
 
@@ -462,8 +465,8 @@ class JellyfinEmby:
                                 get_mediaitem(
                                     self.server_type,
                                     episode,
-                                    self.generate_guids,
-                                    self.generate_locations,
+                                    self.app_settings.generate_guids,
+                                    self.app_settings.generate_locations,
                                 )
                             )
 
@@ -529,7 +532,7 @@ class JellyfinEmby:
                     if library_title not in sync_libraries:
                         continue
 
-                    if library_title in users_watched:
+                    if library_title in users_watched[user_name.lower()].libraries:
                         logger.info(
                             f"{self.server_type}: {user_name} {library_title} watched history has already been gathered, skipping"
                         )
@@ -593,8 +596,8 @@ class JellyfinEmby:
                     jelly_identifiers = extract_identifiers_from_item(
                         self.server_type,
                         jellyfin_video,
-                        self.generate_guids,
-                        self.generate_locations,
+                        self.app_settings.generate_guids,
+                        self.app_settings.generate_locations,
                     )
                     # Check each stored movie for a match.
                     for stored_movie in library_data.movies:
@@ -631,9 +634,7 @@ class JellyfinEmby:
                                     user_name,
                                     library_name,
                                     jellyfin_video.get("Name"),
-                                    mark_file=get_env_value(
-                                        self.env, "MARK_FILE", "mark.log"
-                                    ),
+                                    mark_file=self.app_settings.mark_file,
                                 )
                             elif self.update_partial:
                                 msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
@@ -660,9 +661,7 @@ class JellyfinEmby:
                                     library_name,
                                     jellyfin_video.get("Name"),
                                     duration=floor(stored_movie.status.time / 60_000),
-                                    mark_file=get_env_value(
-                                        self.env, "MARK_FILE", "mark.log"
-                                    ),
+                                    mark_file=self.app_settings.mark_file,
                                 )
                         else:
                             logger.trace(
@@ -689,8 +688,8 @@ class JellyfinEmby:
                     jellyfin_show_identifiers = extract_identifiers_from_item(
                         self.server_type,
                         jellyfin_show,
-                        self.generate_guids,
-                        self.generate_locations,
+                        self.app_settings.generate_guids,
+                        self.app_settings.generate_locations,
                     )
                     # Try to find a matching series in your stored library.
                     for stored_series in library_data.series:
@@ -722,8 +721,8 @@ class JellyfinEmby:
                                     extract_identifiers_from_item(
                                         self.server_type,
                                         jellyfin_episode,
-                                        self.generate_guids,
-                                        self.generate_locations,
+                                        self.app_settings.generate_guids,
+                                        self.app_settings.generate_locations,
                                     )
                                 )
                                 for stored_ep in stored_series.episodes:
@@ -767,9 +766,7 @@ class JellyfinEmby:
                                                 library_name,
                                                 jellyfin_episode.get("SeriesName"),
                                                 jellyfin_episode.get("Name"),
-                                                mark_file=get_env_value(
-                                                    self.env, "MARK_FILE", "mark.log"
-                                                ),
+                                                mark_file=self.app_settings.mark_file,
                                             )
                                         elif self.update_partial:
                                             msg = (
@@ -804,9 +801,7 @@ class JellyfinEmby:
                                                 duration=floor(
                                                     stored_ep.status.time / 60_000
                                                 ),
-                                                mark_file=get_env_value(
-                                                    self.env, "MARK_FILE", "mark.log"
-                                                ),
+                                                mark_file=self.app_settings.mark_file,
                                             )
                                     else:
                                         logger.trace(
@@ -822,36 +817,84 @@ class JellyfinEmby:
                 f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
             )
 
+    def _resolve_local_user(
+        self, source_server: str, source_user: str
+    ) -> tuple[str, str] | None:
+        """
+        Resolve a source-server username to (user_name, user_id) on this
+        server.
+
+        Candidate names on this server come from the settings model
+        (sync_targets_for_user — explicit user_mappings aliases plus the
+        implicit same-username fallback). The first candidate matching one of
+        this server's actual users (case-insensitive) wins. Returns None if no
+        candidate matches.
+        """
+        this_server = self.server_settings.name
+        candidates = self.app_settings.sync_targets_for_user(
+            source_server, source_user, this_server
+        )
+        candidates_lc = {c.lower() for c in candidates}
+
+        for key, user_id in self.users.items():
+            if key.lower() in candidates_lc:
+                return key, user_id
+
+        return None
+
+    def _resolve_local_library(
+        self,
+        source_server: str,
+        source_library: str,
+        available_libraries: list[dict[str, Any]],
+    ) -> tuple[str, str] | None:
+        """
+        Resolve a source-server library name to (library_name, library_id) on
+        this server.
+
+        Candidates come from sync_targets_for_library; the first present in
+        `available_libraries` (matched on Name, case-insensitive) is returned,
+        preserving the server's actual Name casing.
+        """
+        this_server = self.server_settings.name
+        candidates = self.app_settings.sync_targets_for_library(
+            source_server, source_library, this_server
+        )
+        candidates_lc = {c.lower() for c in candidates}
+
+        for library in available_libraries:
+            name = library.get("Name")
+            if name and name.lower() in candidates_lc:
+                return name, library["Id"]
+
+        return None
+
     def update_watched(
         self,
         watched_list: dict[str, UserData],
-        user_mapping: dict[str, str] | None = None,
-        library_mapping: dict[str, str] | None = None,
-        dryrun: bool = False,
+        source_server: Plex | Jellyfin | Emby,
     ) -> None:
+        """
+        Apply watch state from `watched_list` (keyed by names as reported on
+        `source_server`) onto this server.
+
+        User and library correspondence is resolved through the settings model
+        via source_server's configured name, so explicit mappings and the
+        implicit same-name fallback are both honored. Fan-out is resolved
+        upstream; each key here maps to a single user/library on this server.
+        """
+        source_name = source_server.server_settings.name
+        dryrun = self.app_settings.dryrun
+
         for user, user_data in watched_list.items():
-            user_other = None
-            user_name = None
-            if user_mapping:
-                if user in user_mapping.keys():
-                    user_other = user_mapping[user]
-                elif user in user_mapping.values():
-                    user_other = search_mapping(user_mapping, user)
-
-            user_id = None
-            for key in self.users:
-                if user.lower() == key.lower():
-                    user_id = self.users[key]
-                    user_name = key
-                    break
-                elif user_other and user_other.lower() == key.lower():
-                    user_id = self.users[key]
-                    user_name = key
-                    break
-
-            if not user_id or not user_name:
-                logger.info(f"{user} {user_other} not found in Jellyfin")
+            resolved_user = self._resolve_local_user(source_name, user)
+            if resolved_user is None:
+                logger.info(
+                    f"{self.server_type}: {user} (from {source_name}) not found on this server, skipping"
+                )
                 continue
+
+            user_name, user_id = resolved_user
 
             jellyfin_libraries = self.query(
                 f"/Users/{user_id}/Views",
@@ -864,56 +907,32 @@ class JellyfinEmby:
                 )
                 continue
 
-            jellyfin_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+            available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
 
             for library_name in user_data.libraries:
                 library_data = user_data.libraries[library_name]
-                library_other = None
-                if library_mapping:
-                    if library_name in library_mapping.keys():
-                        library_other = library_mapping[library_name]
-                    elif library_name in library_mapping.values():
-                        library_other = search_mapping(library_mapping, library_name)
 
-                if library_name.lower() not in [
-                    x["Name"].lower() for x in jellyfin_libraries
-                ]:
-                    if library_other:
-                        if library_other.lower() in [
-                            x["Name"].lower() for x in jellyfin_libraries
-                        ]:
-                            logger.info(
-                                f"{self.server_type}: Library {library_name} not found, but {library_other} found, using {library_other}",
-                            )
-                            library_name = library_other
-                        else:
-                            logger.info(
-                                f"{self.server_type}: Library {library_name} or {library_other} not found in library list",
-                            )
-                            continue
-                    else:
-                        logger.info(
-                            f"{self.server_type}: Library {library_name} not found in library list",
-                        )
-                        continue
+                resolved_library = self._resolve_local_library(
+                    source_name, library_name, available_libraries
+                )
+                if resolved_library is None:
+                    logger.info(
+                        f"{self.server_type}: Library {library_name} (from {source_name}) not found in library list",
+                    )
+                    continue
 
-                library_id = None
-                for jellyfin_library in jellyfin_libraries:
-                    if jellyfin_library["Name"].lower() == library_name.lower():
-                        library_id = jellyfin_library["Id"]
-                        continue
+                resolved_library_name, library_id = resolved_library
 
-                if library_id:
-                    try:
-                        self.update_user_watched(
-                            user_name,
-                            user_id,
-                            library_data,
-                            library_name,
-                            library_id,
-                            dryrun,
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
-                        )
+                try:
+                    self.update_user_watched(
+                        user_name,
+                        user_id,
+                        library_data,
+                        resolved_library_name,
+                        library_id,
+                        dryrun,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"{self.server_type}: Error updating watched for {user_name} in library {resolved_library_name}, {e}",
+                    )

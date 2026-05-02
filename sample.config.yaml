@@ -1,0 +1,121 @@
+# ===========================================================================
+# jellyplex-watched configuration
+#
+# Direction model: "X pushes to Y."
+#   - Each server lists `sync_to: [names]` — the servers it pushes watch
+#     state TO. Bidirectional sync = list the relationship both ways.
+#   - sync_rules are ADDITIVE per-user
+#     overrides using the same from -> to shape. They can ENABLE a direction
+#     the server-level config doesn't, but cannot SUPPRESS one it does.
+#   - To suppress, use the global blacklist_* / whitelist_* lists (checked
+#     before any rule). Whitelist takes precedence over blacklist.
+#
+# Casing: server names are case-SENSITIVE internal identifiers. Usernames,
+#   library names, and canonicals are matched case-INSENSITIVELY.
+# ===========================================================================
+
+# --- operational knobs -----------------------------------------------------
+dryrun: true # true = log what would happen, change nothing
+debug_level: INFO # INFO | DEBUG | TRACE
+run_only_once: false # true = run a single pass and exit
+sleep_duration: 3600 # seconds between passes (when run_only_once=false)
+log_file: log.log
+mark_file: mark.log
+request_timeout: 300 # per-request timeout in seconds
+max_threads: 1
+generate_guids: true # match items across servers via provider GUIDs
+generate_locations: true # match items across servers via file paths
+
+# --- filtering (global, checked before any rule) ---------------------------
+# Whitelist beats blacklist: if a whitelist is non-empty, only listed
+# entries pass and the matching blacklist is ignored. Can be list or
+# new line entries
+blacklist_users: []
+whitelist_users: []
+blacklist_libraries: []
+whitelist_libraries: []
+blacklist_library_types: ["music", "photos"]
+whitelist_library_types:
+  - "movie"
+  - "shows"
+
+# --- servers ----------------------------------------------------------------
+plex:
+  - name: plex-main # unique identifier, referenced everywhere below
+    baseurl: http://plex.lan:32400
+    sync_to: [jellyfin-main, emby-main] # pushes TO these (bidirectional below)
+    token: "PLEX_TOKEN_HERE" # preferred auth path
+    ssl_bypass: false
+
+  - name: plex-readonly # auth via username/password/servername triple
+    baseurl: https://plex.example.com:32400
+    sync_to: [] # empty = read-only source (receives, never pushes)
+    username: myplexuser
+    password: "myplexpassword"
+    servername: "My Plex Server"
+    ssl_bypass: false
+
+jellyfin:
+  - name: jellyfin-main
+    baseurl: http://jellyfin.lan:8096
+    sync_to: [plex-main] # completes bidirectional sync with plex-main
+    token: "JELLYFIN_API_KEY_HERE"
+
+emby:
+  - name: emby-main
+    baseurl: http://emby.lan:8096
+    sync_to: [plex-main] # completes bidirectional sync with plex-main
+    token: "EMBY_API_KEY_HERE"
+
+# --- user mappings ----------------------------------------------------------
+# Only needed when usernames DIFFER across servers, when one identity fans
+# out to multiple users on a server, or when you need per-user sync_rules.
+# Users with identical usernames everywhere are matched automatically if set to
+# sync in the server configs and need no entry here.
+user_mappings:
+  # Same person, different username on each server.
+  - canonical: alice
+    aliases:
+      - { server: plex-main, username: alice_plex }
+      - { server: plex-readonly, username: alice }
+      - { server: jellyfin-main, username: alice.jf }
+      - { server: emby-main, username: alice_emby }
+
+  # One-to-many fan-out: a shared family Plex account maps to several
+  # individual Jellyfin users (multiple aliases on the same server).
+  - canonical: family
+    aliases:
+      - { server: plex-main, username: family_shared }
+      - { server: plex-readonly, username: family_shared }
+      - { server: jellyfin-main, username: dad }
+      - { server: jellyfin-main, username: mom }
+      - { server: jellyfin-main, username: kid }
+
+# --- library mappings -------------------------------------------------------
+# Same shape as user_mappings; only needed when library names differ or
+# you need per-library sync_rules.
+library_mappings:
+  - canonical: tv
+    aliases:
+      - { server: plex-main, library: "TV Shows" }
+      - { server: plex-readonly, library: "TV Shows" }
+      - { server: jellyfin-main, library: "Shows" }
+      - { server: emby-main, library: "Television" }
+
+  - canonical: movies
+    aliases:
+      - { server: plex-main, library: "Movies" }
+      - { server: plex-readonly, library: "Movies" }
+      - { server: jellyfin-main, library: "Films" }
+      - { server: emby-main, library: "Films" }
+
+# --- per-user sync overrides ------------------------------------------------
+# "from" pushes to "to" for the listed users. Bidirectional = two rules.
+# users may be canonicals (above) or literal usernames present on both
+# servers.
+sync_rules:
+  # Enable a direction the server-level config alone wouldn't:
+  # push alice's state from the read-only Plex to jellyfin-main.
+  - users: [alice]
+    from: plex-readonly
+    to: jellyfin-main
