@@ -3,18 +3,13 @@ from __future__ import annotations
 import copy
 from datetime import datetime
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.functions import to_aware_utc
 from src.settings import AppSettings
-
-if TYPE_CHECKING:
-    from src.emby import Emby
-    from src.jellyfin import Jellyfin
-    from src.plex import Plex
 
 
 class Ord(IntEnum):
@@ -262,8 +257,8 @@ def find_target_library_keys(
 def merge_server_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1_name: str,
+    server_2_name: str,
     settings: AppSettings,
     average_time: float,
 ) -> dict[str, UserData]:
@@ -277,16 +272,13 @@ def merge_server_watched(
     handled. server_1 / server_2 supply the configured server names that the
     settings lookups key off of.
     """
-    s1_name = server_1.server_settings.name
-    s2_name = server_2.server_settings.name
-
     merged_watched = copy.deepcopy(watched_list_1)
 
     for user_2, user_data in watched_list_2.items():
         # A server_2 user may correspond to multiple server_1 users
         # (fan-out). Merge this user's data into every matching server_1 key.
         user_keys = find_target_user_keys(
-            settings, s2_name, user_2, s1_name, merged_watched
+            settings, server_2_name, user_2, server_1_name, merged_watched
         )
         if not user_keys:
             merged_watched[user_2] = copy.deepcopy(user_data)
@@ -296,9 +288,9 @@ def merge_server_watched(
             for lib_key, lib_data in user_data.libraries.items():
                 mapped_lib_keys = find_target_library_keys(
                     settings,
-                    s2_name,
+                    server_2_name,
                     lib_key,
-                    s1_name,
+                    server_1_name,
                     merged_watched[user_key].libraries,
                 )
                 if not mapped_lib_keys:
@@ -359,14 +351,11 @@ def check_remove_entry(
 def cleanup_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1_name: str,
+    server_2_name: str,
     settings: AppSettings,
     average_time: float,
 ) -> dict[str, UserData]:
-    s1_name = server_1.server_settings.name
-    s2_name = server_2.server_settings.name
-
     modified_watched_list_1 = copy.deepcopy(watched_list_1)
 
     # remove entries from watched_list_1 that are in watched_list_2
@@ -375,7 +364,7 @@ def cleanup_watched(
         # (fan-out). An item is eligible for removal if it's already watched
         # on ANY of the matched server_2 users.
         user_2_keys = find_target_user_keys(
-            settings, s1_name, user_1, s2_name, watched_list_2
+            settings, server_1_name, user_1, server_2_name, watched_list_2
         )
         if not user_2_keys:
             continue
@@ -389,9 +378,9 @@ def cleanup_watched(
             for user_2 in user_2_keys:
                 library_2_keys = find_target_library_keys(
                     settings,
-                    s1_name,
+                    server_1_name,
                     library_1_key,
-                    s2_name,
+                    server_2_name,
                     watched_list_2[user_2].libraries,
                 )
                 for library_2_key in library_2_keys:

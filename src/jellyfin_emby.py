@@ -5,7 +5,7 @@ from __future__ import annotations
 import traceback
 from datetime import datetime
 from math import floor
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import requests
 from loguru import logger
@@ -25,11 +25,6 @@ from src.watched import (
     WatchedStatus,
     check_same_identifiers,
 )
-
-if TYPE_CHECKING:
-    from src.emby import Emby
-    from src.jellyfin import Jellyfin
-    from src.plex import Plex
 
 
 def extract_identifiers_from_item(
@@ -872,7 +867,7 @@ class JellyfinEmby:
     def update_watched(
         self,
         watched_list: dict[str, UserData],
-        source_server: Plex | Jellyfin | Emby,
+        source_server_name: str,
     ) -> None:
         """
         Apply watch state from `watched_list` (keyed by names as reported on
@@ -883,14 +878,13 @@ class JellyfinEmby:
         implicit same-name fallback are both honored. Fan-out is resolved
         upstream; each key here maps to a single user/library on this server.
         """
-        source_name = source_server.server_settings.name
         dryrun = self.app_settings.dryrun
 
         for user, user_data in watched_list.items():
-            resolved_user = self._resolve_local_user(source_name, user)
+            resolved_user = self._resolve_local_user(source_server_name, user)
             if resolved_user is None:
                 logger.info(
-                    f"{self.server_type}: {user} (from {source_name}) not found on this server, skipping"
+                    f"{self.server_type}: {user} (from {source_server_name}) not found on this server, skipping"
                 )
                 continue
 
@@ -913,11 +907,11 @@ class JellyfinEmby:
                 library_data = user_data.libraries[library_name]
 
                 resolved_library = self._resolve_local_library(
-                    source_name, library_name, available_libraries
+                    source_server_name, library_name, available_libraries
                 )
                 if resolved_library is None:
                     logger.info(
-                        f"{self.server_type}: Library {library_name} (from {source_name}) not found in library list",
+                        f"{self.server_type}: Library {library_name} (from {source_server_name}) not found in library list",
                     )
                     continue
 

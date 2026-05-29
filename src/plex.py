@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from math import floor
-from typing import TYPE_CHECKING
 
 import requests
 from loguru import logger
@@ -27,10 +26,6 @@ from src.watched import (
     WatchedStatus,
     check_same_identifiers,
 )
-
-if TYPE_CHECKING:
-    from src.emby import Emby
-    from src.jellyfin import Jellyfin
 
 
 # Bypass hostname validation for ssl. Taken from https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
@@ -592,7 +587,7 @@ class Plex:
     def update_watched(
         self,
         watched_list: dict[str, UserData],
-        source_server: Plex | Jellyfin | Emby,
+        source_server_name: str,
     ) -> None:
         """
         Apply watch state from `watched_list` (keyed by names as reported on
@@ -603,15 +598,14 @@ class Plex:
         implicit same-name fallback are both honored. Fan-out is resolved
         upstream; each key here maps to a single user/library on this server.
         """
-        source_name = source_server.server_settings.name
         dryrun = self.app_settings.dryrun
 
         for user, user_data in watched_list.items():
             # Resolve the source-server user to a Plex user object on this server.
-            plex_user = self._resolve_local_user(source_name, user)
+            plex_user = self._resolve_local_user(source_server_name, user)
             if plex_user is None:
                 logger.info(
-                    f"Plex: {user} (from {source_name}) not found on this server, skipping",
+                    f"Plex: {user} (from {source_server_name}) not found on this server, skipping",
                 )
                 continue
 
@@ -649,11 +643,11 @@ class Plex:
 
                 # Resolve the source-server library name to a title on this server.
                 resolved_library = self._resolve_local_library(
-                    source_name, library_name, available_titles
+                    source_server_name, library_name, available_titles
                 )
                 if resolved_library is None:
                     logger.info(
-                        f"Plex: Library {library_name} (from {source_name}) not found in library list",
+                        f"Plex: Library {library_name} (from {source_server_name}) not found in library list",
                     )
                     continue
 

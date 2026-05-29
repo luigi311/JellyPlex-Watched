@@ -57,21 +57,6 @@ class _IsolatedAppSettings(AppSettings):
         return (init_settings,)
 
 
-class _FakeServerSettings:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-
-class _FakeServer:
-    """
-    Minimal stand-in for a connected server. cleanup_watched only reads
-    `server.server_settings.name` to drive the settings-model lookups.
-    """
-
-    def __init__(self, name: str) -> None:
-        self.server_settings = _FakeServerSettings(name)
-
-
 def _settings() -> AppSettings:
     """
     A minimal two-server AppSettings. No user_mappings / library_mappings are
@@ -665,8 +650,8 @@ tv_shows_2_watched_list_1: list[Series] = [
 
 def test_simple_cleanup_watched():
     settings = _settings()
-    server_1 = _FakeServer("server1")
-    server_2 = _FakeServer("server2")
+    server_1 = "server1"
+    server_2 = "server2"
     average_time = 0.0
 
     user_watched_list_1: dict[str, UserData] = {

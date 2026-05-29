@@ -1,6 +1,8 @@
 import os
 import sys
 
+from pydantic_settings import SettingsConfigDict
+
 # getting the name of the directory
 # where the this file is present.
 current = os.path.dirname(os.path.realpath(__file__))
@@ -13,7 +15,6 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.settings import AppSettings
 from src.users import combine_user_lists
@@ -51,23 +52,6 @@ class _IsolatedAppSettings(AppSettings):
         return (init_settings,)
 
 
-class _FakeServerSettings:
-    """Minimal stand-in for a Plex/Jellyfin/Emby *Settings object."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-
-class _FakeServer:
-    """
-    Minimal stand-in for a connected server. combine_user_lists only reads
-    `server.server_settings.name`, so that's all we need to provide.
-    """
-
-    def __init__(self, name: str) -> None:
-        self.server_settings = _FakeServerSettings(name)
-
-
 def _settings(**overrides) -> AppSettings:
     """
     Build an AppSettings without touching .env / config.yaml. Two token
@@ -100,14 +84,12 @@ def _settings(**overrides) -> AppSettings:
 def test_combine_user_lists_implicit_same_name():
     """Users with identical names on both servers sync without any mapping."""
     settings = _settings()
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_users = ["test", "test3", "luigi311"]
     server_2_users = ["luigi311", "test2", "test3"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     # 'luigi311' and 'test3' exist on both servers -> matched to themselves.
@@ -131,14 +113,12 @@ def test_combine_user_lists_with_mapping():
             }
         ],
     )
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_users = ["test", "test3", "luigi311"]
     server_2_users = ["luigi311", "test2", "test3"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     # 'test' (plex) now maps to 'test2' (jellyfin) via the canonical, plus the
@@ -153,14 +133,12 @@ def test_combine_user_lists_with_mapping():
 def test_combine_user_lists_blacklist():
     """A blacklisted user is filtered out by should_sync_user."""
     settings = _settings(blacklist_users=["test3"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_users = ["luigi311", "test3"]
     server_2_users = ["luigi311", "test3"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     assert combined == {"luigi311": ["luigi311"]}
@@ -169,14 +147,12 @@ def test_combine_user_lists_blacklist():
 def test_combine_user_lists_whitelist():
     """With a whitelist set, only whitelisted users sync."""
     settings = _settings(whitelist_users=["luigi311"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_users = ["luigi311", "test3"]
     server_2_users = ["luigi311", "test3"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     assert combined == {"luigi311": ["luigi311"]}
@@ -196,14 +172,12 @@ def test_combine_user_lists_fanout():
             }
         ],
     )
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_users = ["family"]
     server_2_users = ["alice", "bob"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     # 'family' on plex fans out to both 'alice' and 'bob' on jellyfin.
@@ -223,15 +197,13 @@ def test_combine_user_lists_case_insensitive():
             }
         ],
     )
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     # servers report lowercased names
     server_1_users = ["jellyuser"]
     server_2_users = ["jellyplex_watched"]
 
     combined = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        "plex-main", "jellyfin-main", server_1_users, server_2_users, settings
     )
 
     assert combined == {"jellyuser": ["jellyplex_watched"]}

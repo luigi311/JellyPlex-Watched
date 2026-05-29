@@ -23,8 +23,8 @@ def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
 
 
 def combine_user_lists(
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1_name: str,
+    server_2_name: str,
     server_1_users: list[str],
     server_2_users: list[str],
     settings: AppSettings,
@@ -51,9 +51,6 @@ def combine_user_lists(
     relationships declared on either side, and targets discovered from each
     direction are merged rather than overwritten.
     """
-    s1_name = server_1.server_settings.name
-    s2_name = server_2.server_settings.name
-
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
 
@@ -62,18 +59,22 @@ def combine_user_lists(
 
     # server_1 -> server_2
     for s1_user in server_1_users:
-        if not settings.should_sync_user(s1_user, s1_name, s2_name):
+        if not settings.should_sync_user(s1_user, server_1_name, server_2_name):
             continue
-        for target in settings.sync_targets_for_user(s1_name, s1_user, s2_name):
+        for target in settings.sync_targets_for_user(
+            server_1_name, s1_user, server_2_name
+        ):
             target = target.lower()
             if target in server_2_users:
                 add(s1_user, target)
 
     # server_2 -> server_1 (fills in relationships declared the other way)
     for s2_user in server_2_users:
-        if not settings.should_sync_user(s2_user, s2_name, s1_name):
+        if not settings.should_sync_user(s2_user, server_2_name, server_1_name):
             continue
-        for target in settings.sync_targets_for_user(s2_name, s2_user, s1_name):
+        for target in settings.sync_targets_for_user(
+            server_2_name, s2_user, server_1_name
+        ):
             target = target.lower()
             if target in server_1_users:
                 # key is always the server_1-side username
@@ -132,7 +133,11 @@ def setup_users(
     # combine_user_lists via settings.should_sync_user, so there is no longer
     # a separate filtering step.
     users = combine_user_lists(
-        server_1, server_2, server_1_users, server_2_users, settings
+        server_1.server_settings.name,
+        server_2.server_settings.name,
+        server_1_users,
+        server_2_users,
+        settings,
     )
     logger.debug(f"User list to sync between servers {users}")
 

@@ -14,8 +14,8 @@ def generate_library_list(server: Plex | Jellyfin | Emby) -> dict[str, str]:
 
 
 def combine_library_lists(
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1_name: str,
+    server_2_name: str,
     server_1_libraries: dict[str, str],
     server_2_libraries: dict[str, str],
     settings: AppSettings,
@@ -44,9 +44,6 @@ def combine_library_lists(
     relationships declared on either side, and targets discovered from each
     direction are merged rather than overwritten.
     """
-    s1_name = server_1.server_settings.name
-    s2_name = server_2.server_settings.name
-
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
 
@@ -60,9 +57,11 @@ def combine_library_lists(
                 f"Skipping library {s1_library}: type '{s1_type}' is filtered out"
             )
             continue
-        if not settings.should_sync_library(s1_library, s1_name, s2_name):
+        if not settings.should_sync_library(s1_library, server_1_name, server_2_name):
             continue
-        for target in settings.sync_targets_for_library(s1_name, s1_library, s2_name):
+        for target in settings.sync_targets_for_library(
+            server_1_name, s1_library, server_2_name
+        ):
             if target in server_2_libraries:
                 add(s1_library, target)
 
@@ -73,9 +72,11 @@ def combine_library_lists(
                 f"Skipping library {s2_library}: type '{s2_type}' is filtered out"
             )
             continue
-        if not settings.should_sync_library(s2_library, s2_name, s1_name):
+        if not settings.should_sync_library(s2_library, server_2_name, server_1_name):
             continue
-        for target in settings.sync_targets_for_library(s2_name, s2_library, s1_name):
+        for target in settings.sync_targets_for_library(
+            server_2_name, s2_library, server_1_name
+        ):
             if target in server_1_libraries:
                 # key is always the server_1-side library name
                 add(target, s2_library)
@@ -119,7 +120,11 @@ def setup_libraries(
     # resolved inside combine_library_lists via the settings model, so there
     # is no longer a separate filtering step.
     libraries = combine_library_lists(
-        server_1, server_2, server_1_libraries, server_2_libraries, settings
+        server_1.server_settings.name,
+        server_2.server_settings.name,
+        server_1_libraries,
+        server_2_libraries,
+        settings,
     )
     logger.debug(f"Library list to sync between servers {libraries}")
 

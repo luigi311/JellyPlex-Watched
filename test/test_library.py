@@ -1,6 +1,8 @@
 import os
 import sys
 
+from pydantic_settings import SettingsConfigDict
+
 # getting the name of the directory
 # where the this file is present.
 current = os.path.dirname(os.path.realpath(__file__))
@@ -12,8 +14,6 @@ parent = os.path.dirname(current)
 # adding the parent directory to
 # the sys.path.
 sys.path.append(parent)
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.library import combine_library_lists
 from src.settings import AppSettings
@@ -46,21 +46,6 @@ class _IsolatedAppSettings(AppSettings):
         return (init_settings,)
 
 
-class _FakeServerSettings:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-
-class _FakeServer:
-    """
-    Minimal stand-in for a connected server. combine_library_lists only reads
-    `server.server_settings.name`, so that's all we need.
-    """
-
-    def __init__(self, name: str) -> None:
-        self.server_settings = _FakeServerSettings(name)
-
-
 def _settings(**overrides) -> AppSettings:
     base = {
         "plex": [
@@ -87,15 +72,13 @@ def _settings(**overrides) -> AppSettings:
 def test_combine_library_lists_implicit_same_name():
     """Libraries with the same name on both servers sync without a mapping."""
     settings = _settings()
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     # {library_name: type}
     server_1_libs = {"Movies": "movie", "TV Shows": "show"}
     server_2_libs = {"Movies": "movies", "Music": "music"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     # Only 'Movies' exists on both -> matched to itself. 'TV Shows' has no
@@ -116,14 +99,12 @@ def test_combine_library_lists_with_mapping():
             }
         ],
     )
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_libs = {"TV Shows": "show"}
     server_2_libs = {"Shows": "tvshows"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     assert combined == {"TV Shows": ["Shows"]}
@@ -132,14 +113,12 @@ def test_combine_library_lists_with_mapping():
 def test_combine_library_lists_type_blacklist():
     """A library whose type is blacklisted is dropped regardless of name match."""
     settings = _settings(blacklist_library_types=["music"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_libs = {"Movies": "movie", "Music": "music"}
     server_2_libs = {"Movies": "movies", "Music": "music"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     # 'Music' is dropped by the type blacklist; only 'Movies' remains.
@@ -149,14 +128,12 @@ def test_combine_library_lists_type_blacklist():
 def test_combine_library_lists_type_whitelist():
     """With a type whitelist set, only matching types sync."""
     settings = _settings(whitelist_library_types=["movie", "movies"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_libs = {"Movies": "movie", "TV Shows": "show"}
     server_2_libs = {"Movies": "movies", "Shows": "tvshows"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     assert combined == {"Movies": ["Movies"]}
@@ -165,14 +142,12 @@ def test_combine_library_lists_type_whitelist():
 def test_combine_library_lists_name_blacklist():
     """A blacklisted library name is filtered out by should_sync_library."""
     settings = _settings(blacklist_libraries=["TV Shows"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_libs = {"Movies": "movie", "TV Shows": "show"}
     server_2_libs = {"Movies": "movies", "TV Shows": "tvshows"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     assert combined == {"Movies": ["Movies"]}
@@ -181,14 +156,12 @@ def test_combine_library_lists_name_blacklist():
 def test_combine_library_lists_name_whitelist():
     """With a library whitelist set, only whitelisted libraries sync."""
     settings = _settings(whitelist_libraries=["Movies"])
-    server_1 = _FakeServer("plex-main")
-    server_2 = _FakeServer("jellyfin-main")
 
     server_1_libs = {"Movies": "movie", "TV Shows": "show"}
     server_2_libs = {"Movies": "movies", "TV Shows": "tvshows"}
 
     combined = combine_library_lists(
-        server_1, server_2, server_1_libs, server_2_libs, settings
+        "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
     assert combined == {"Movies": ["Movies"]}

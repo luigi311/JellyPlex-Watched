@@ -85,8 +85,8 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
             server_1_watched_filtered = cleanup_watched(
                 server_1_watched,
                 server_2_watched,
-                server_1,
-                server_2,
+                server_1.server_settings.name,
+                server_2.server_settings.name,
                 settings,
                 average_time,
             )
@@ -95,8 +95,8 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
             server_2_watched_filtered = cleanup_watched(
                 server_2_watched,
                 server_1_watched,
-                server_2,
-                server_1,
+                server_2.server_settings.name,
+                server_1.server_settings.name,
                 settings,
                 average_time,
             )
@@ -118,19 +118,23 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                     server_1_watched = merge_server_watched(
                         server_1_watched,
                         server_2_watched_filtered,
-                        server_1,
-                        server_2,
+                        server_1.server_settings.name,
+                        server_2.server_settings.name,
                         settings,
                         average_time,
                     )
 
-                server_1.update_watched(server_2_watched_filtered, server_2)
+                server_1.update_watched(
+                    server_2_watched_filtered, server_2.server_settings.name
+                )
 
             if settings.should_sync_server(
                 server_1.server_settings.name, server_2.server_settings.name
             ):
                 logger.info(f"Syncing {server_1.info()} -> {server_2.info()}")
-                server_2.update_watched(server_1_watched_filtered, server_1)
+                server_2.update_watched(
+                    server_1_watched_filtered, server_1.server_settings.name
+                )
 
 
 @logger.catch
