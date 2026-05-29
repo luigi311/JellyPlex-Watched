@@ -105,46 +105,6 @@ def get_env_value(env, key: str, default: Any = None):
         return default
 
 
-# Reimplementation of distutils.util.strtobool due to it being deprecated
-# Source: https://github.com/PostHog/posthog/blob/01e184c29d2c10c43166f1d40a334abbc3f99d8a/posthog/utils.py#L668
-def str_to_bool(value: str | None) -> bool:
-    if not value:
-        return False
-    return str(value).lower() in ("y", "yes", "t", "true", "on", "1")
-
-
-# Get mapped value
-def search_mapping(dictionary: dict[str, str], key_value: str) -> str | None:
-    if key_value in dictionary.keys():
-        return dictionary[key_value]
-    elif key_value.lower() in dictionary.keys():
-        return dictionary[key_value.lower()]
-    elif key_value in dictionary.values():
-        return list(dictionary.keys())[list(dictionary.values()).index(key_value)]
-    elif key_value.lower() in dictionary.values():
-        return list(dictionary.keys())[
-            list(dictionary.values()).index(key_value.lower())
-        ]
-    else:
-        return None
-
-
-# Return list of objects that exist in both lists including mappings
-def match_list(
-    list1: list[str], list2: list[str], list_mapping: dict[str, str] | None = None
-) -> list[str]:
-    output: list[str] = []
-    for element in list1:
-        if element in list2:
-            output.append(element)
-        elif list_mapping:
-            element_other = search_mapping(list_mapping, element)
-            if element_other in list2:
-                output.append(element)
-
-    return output
-
-
 def future_thread_executor(
     args: list[tuple[Callable[..., Any], ...]],
     threads: int | None = None,
@@ -184,14 +144,6 @@ def future_thread_executor(
                 raise Exception(e)
 
     return results
-
-
-def parse_string_to_list(string: str | None) -> list[str]:
-    output: list[str] = []
-    if string and len(string) > 0:
-        output = string.split(",")
-
-    return output
 
 
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")  # e.g. C: D:

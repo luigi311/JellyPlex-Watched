@@ -9,10 +9,6 @@ from src.settings import AppSettings
 def generate_library_list(server: Plex | Jellyfin | Emby) -> dict[str, str]:
     """
     Return the server's libraries as {library_name: library_type}.
-
-    Libraries whose type is filtered out by the global
-    blacklist_library_types / whitelist_library_types are dropped here, since
-    type filtering isn't directional and applies equally on both servers.
     """
     return server.get_libraries()
 

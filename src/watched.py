@@ -205,27 +205,6 @@ def merge_library_data(
     return merged
 
 
-def merge_user_data(
-    user1: UserData,
-    user2: UserData,
-    settings: AppSettings,
-    average_time: float,
-) -> UserData:
-    """
-    Merge two UserData objects by merging their libraries.
-    If a library exists in both, merge its content; otherwise, add the new library.
-    """
-    merged_libraries = copy.deepcopy(user1.libraries)
-    for lib_key, lib_data in user2.libraries.items():
-        if lib_key in merged_libraries:
-            merged_libraries[lib_key] = merge_library_data(
-                merged_libraries[lib_key], lib_data, settings, average_time
-            )
-        else:
-            merged_libraries[lib_key] = copy.deepcopy(lib_data)
-    return UserData(libraries=merged_libraries)
-
-
 def find_target_user_keys(
     settings: AppSettings,
     source_server: str,

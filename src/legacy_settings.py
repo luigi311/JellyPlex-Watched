@@ -396,7 +396,7 @@ class LegacyEnvSettingsSource(PydanticBaseSettingsSource):
             return {}
         return legacy_env_to_field_dict(resolved)
 
-    def get_field_value(self, field, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(self, field_name: str) -> tuple[Any, str, bool]:
         if field_name in self._field_data:
             return self._field_data[field_name], field_name, False
         return None, field_name, False

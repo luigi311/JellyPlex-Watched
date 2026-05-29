@@ -2,6 +2,8 @@ import os
 import sys
 from datetime import datetime
 
+from pydantic_settings import SettingsConfigDict
+
 # getting the name of the directory
 # where the this file is present.
 current = os.path.dirname(os.path.realpath(__file__))
@@ -14,7 +16,6 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.settings import AppSettings
 from src.watched import (

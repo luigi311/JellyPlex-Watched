@@ -20,4 +20,5 @@ dev = [
     "pytest>=9.0.3",
     "ty>=0.0.34",
     "types-requests>=2.33.0.20260408",
+    "vulture>=2.16",
 ]
