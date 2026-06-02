@@ -801,7 +801,8 @@ class AppSettings(BaseSettings):
             return True
 
         # Server-level fallback.
-        return to_server in self._server_sync_to_index.get(from_server, set())
+        fallback = to_server in self._server_sync_to_index.get(from_server, set())
+        return fallback
 
     def should_sync_library(
         self,

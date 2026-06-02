@@ -121,8 +121,8 @@ def setup_users(
     server_2: Plex | Jellyfin | Emby,
     settings: AppSettings,
 ) -> tuple[
-    list[MyPlexAccount | MyPlexUser] | dict[str, str],
-    list[MyPlexAccount | MyPlexUser] | dict[str, str],
+    list[MyPlexAccount | MyPlexUser] | dict[str, str] | None,
+    list[MyPlexAccount | MyPlexUser] | dict[str, str] | None,
 ]:
     server_1_users = generate_user_list(server_1)
     server_2_users = generate_user_list(server_2)
@@ -145,23 +145,18 @@ def setup_users(
     output_server_2_users = generate_server_users(server_2, users)
 
     # Check if users is none or empty
-    if output_server_1_users is None or len(output_server_1_users) == 0:
+    if not output_server_1_users:
         logger.warning(
             f"No users found for server 1 {server_1.info()}, users: {server_1_users}, sync map {users}, server 1 users {server_1.users}"
         )
 
-    if output_server_2_users is None or len(output_server_2_users) == 0:
+    if not output_server_2_users:
         logger.warning(
             f"No users found for server 2 {server_2.info()}, users: {server_2_users}, sync map {users}, server 2 users {server_2.users}"
         )
 
-    if (
-        output_server_1_users is None
-        or len(output_server_1_users) == 0
-        or output_server_2_users is None
-        or len(output_server_2_users) == 0
-    ):
-        raise Exception("No users found for one or both servers")
+    if not output_server_1_users and not output_server_2_users:
+        logger.warning("No users found for one or both servers")
 
     logger.info(f"Server 1 users: {output_server_1_users}")
     logger.info(f"Server 2 users: {output_server_2_users}")

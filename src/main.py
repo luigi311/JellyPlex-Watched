@@ -66,6 +66,9 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
             logger.info("Creating users list")
             server_1_users, server_2_users = setup_users(server_1, server_2, settings)
 
+            if not server_1_users and not server_2_users:
+                continue
+
             server_1_libraries, server_2_libraries = setup_libraries(
                 server_1, server_2, settings
             )
@@ -114,15 +117,15 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
 
                 # Add server_2_watched_filtered to server_1_watched that way the stored version isn't stale for the next server
-                if not settings.dryrun:
-                    server_1_watched = merge_server_watched(
-                        server_1_watched,
-                        server_2_watched_filtered,
-                        server_1.server_settings.name,
-                        server_2.server_settings.name,
-                        settings,
-                        average_time,
-                    )
+                # if not settings.dryrun:
+                #     server_1_watched = merge_server_watched(
+                #         server_1_watched,
+                #         server_2_watched_filtered,
+                #         server_1.server_settings.name,
+                #         server_2.server_settings.name,
+                #         settings,
+                #         average_time,
+                #     )
 
                 server_1.update_watched(
                     server_2_watched_filtered, server_2.server_settings.name

@@ -613,6 +613,11 @@ class Plex:
         dryrun = self.app_settings.dryrun
 
         for source_user, user_data in watched_list.items():
+            if not self.app_settings.should_sync_user(
+                source_user, source_server_name, self.server_settings.name
+            ):
+                logger.debug(f"Plex: {source_user} (from {source_server_name}) skipped")
+
             # Resolve the source-server user to a Plex user object on this server.
             plex_user = self._resolve_local_user(source_server_name, source_user)
             if plex_user is None:
@@ -649,6 +654,13 @@ class Plex:
             available_titles = [x.title for x in library_list]
 
             for library_name in user_data.libraries:
+                if not self.app_settings.should_sync_library(
+                    library_name, source_server_name, self.server_settings.name
+                ):
+                    logger.debug(
+                        f"Plex: {library_name} (from {source_server_name}) skipped"
+                    )
+
                 library_data = user_data.libraries[library_name]
 
                 # Resolve the source-server library name to a title on this server.

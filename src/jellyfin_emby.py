@@ -472,10 +472,6 @@ class JellyfinEmby:
                             )
                         )
 
-            logger.info(
-                f"{self.server_type}: Finished getting watched for {user_name} in library {library_title}",
-            )
-
             return watched
         except Exception as e:
             logger.error(
@@ -875,6 +871,13 @@ class JellyfinEmby:
         dryrun = self.app_settings.dryrun
 
         for user, user_data in watched_list.items():
+            if not self.app_settings.should_sync_user(
+                user, source_server_name, self.server_settings.name
+            ):
+                logger.debug(
+                    f"{self.server_type}: {user} (from {source_server_name}) skipped"
+                )
+
             resolved_user = self._resolve_local_user(source_server_name, user)
             if resolved_user is None:
                 logger.info(
@@ -898,6 +901,13 @@ class JellyfinEmby:
             available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
 
             for library_name in user_data.libraries:
+                if not self.app_settings.should_sync_library(
+                    library_name, source_server_name, self.server_settings.name
+                ):
+                    logger.debug(
+                        f"{self.server_type}: {library_name} (from {source_server_name}) skipped"
+                    )
+
                 library_data = user_data.libraries[library_name]
 
                 resolved_library = self._resolve_local_library(
