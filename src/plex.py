@@ -127,28 +127,40 @@ class Plex:
         self,
         app_settings: AppSettings,
         server_settings: PlexSettings,
-        base_url: str | None = None,
-        token: str | None = None,
-        user_name: str | None = None,
-        password: str | None = None,
-        server_name: str | None = None,
-        ssl_bypass: bool = False,
         session: requests.Session | None = None,
     ) -> None:
         self.app_settings: AppSettings = app_settings
         self.server_settings = server_settings
 
         self.server_type: str = "Plex"
-        self.ssl_bypass: bool = ssl_bypass
-        if ssl_bypass:
+        if server_settings.ssl_bypass:
             # Session for ssl bypass
             session = requests.Session()
             # By pass ssl hostname check https://github.com/pkkid/python-plexapi/issues/143#issuecomment-775485186
             session.mount("https://", HostNameIgnoringAdapter())
         self.session = session
-        self.plex: PlexServer = self.login(
-            base_url, token, user_name, password, server_name
-        )
+
+        if server_settings.token:
+            self.plex: PlexServer = self.login(
+                server_settings.baseurl,
+                server_settings.token.get_secret_value(),
+                None,
+                None,
+                None,
+            )
+        elif server_settings.password:
+            self.plex: PlexServer = self.login(
+                server_settings.baseurl,
+                None,
+                server_settings.username,
+                server_settings.password.get_secret_value(),
+                server_settings.servername,
+            )
+        else:
+            raise ValueError(
+                f"Plex server '{server_settings.name}' needs either a 'token' or "
+                "the 'username'/'password'/'servername' triple."
+            )
 
         self.base_url: str = self.plex._baseurl
 

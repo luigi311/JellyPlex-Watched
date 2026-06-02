@@ -10,8 +10,6 @@ class Emby(JellyfinEmby):
         self,
         app_settings: AppSettings,
         server_settings: EmbySettings,
-        base_url: str,
-        token: str,
     ) -> None:
         authorization = (
             "Emby , "
@@ -22,7 +20,7 @@ class Emby(JellyfinEmby):
         )
         headers = {
             "Accept": "application/json",
-            "X-Emby-Token": token,
+            "X-Emby-Token": server_settings.token.get_secret_value(),
             "X-Emby-Authorization": authorization,
         }
 
@@ -30,8 +28,6 @@ class Emby(JellyfinEmby):
             app_settings=app_settings,
             server_settings=server_settings,
             server_type="Emby",
-            base_url=base_url,
-            token=token,
             headers=headers,
         )
 

@@ -106,8 +106,6 @@ class JellyfinEmby:
         app_settings: AppSettings,
         server_settings: JellyfinSettings | EmbySettings,
         server_type: Literal["Jellyfin", "Emby"],
-        base_url: str,
-        token: str,
         headers: dict[str, str],
     ) -> None:
         self.app_settings: AppSettings = app_settings
@@ -116,15 +114,10 @@ class JellyfinEmby:
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
         self.server_type: str = server_type
-        self.base_url: str = base_url
-        self.token: str = token
         self.headers: dict[str, str] = headers
 
-        if not self.base_url:
+        if not server_settings.baseurl:
             raise Exception(f"{self.server_type} base_url not set")
-
-        if not self.token:
-            raise Exception(f"{self.server_type} token not set")
 
         self.session = requests.Session()
         self.users: dict[str, str] = self.get_users()
@@ -146,7 +139,7 @@ class JellyfinEmby:
 
             if query_type == "get":
                 response = self.session.get(
-                    self.base_url + query,
+                    self.server_settings.baseurl + query,
                     headers=self.headers,
                     timeout=self.app_settings.request_timeout,
                 )
@@ -161,7 +154,7 @@ class JellyfinEmby:
 
             elif query_type == "post":
                 response = self.session.post(
-                    self.base_url + query,
+                    self.server_settings.baseurl + query,
                     headers=self.headers,
                     json=json,
                     timeout=self.app_settings.request_timeout,

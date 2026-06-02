@@ -10,8 +10,6 @@ class Jellyfin(JellyfinEmby):
         self,
         app_settings: AppSettings,
         server_settings: JellyfinSettings,
-        base_url: str,
-        token: str,
     ) -> None:
         authorization = (
             "MediaBrowser , "
@@ -19,7 +17,7 @@ class Jellyfin(JellyfinEmby):
             'Device="script", '
             'DeviceId="script", '
             'Version="6.0.2", '
-            f'Token="{token}"'
+            f'Token="{server_settings.token.get_secret_value()}"'
         )
         headers = {
             "Accept": "application/json",
@@ -30,8 +28,6 @@ class Jellyfin(JellyfinEmby):
             app_settings=app_settings,
             server_settings=server_settings,
             server_type="Jellyfin",
-            base_url=base_url,
-            token=token,
             headers=headers,
         )
 
