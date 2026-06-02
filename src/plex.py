@@ -600,7 +600,7 @@ class Plex:
         self,
         watched_list: dict[str, UserData],
         source_server_name: str,
-    ) -> None:
+    ) -> dict[str, UserData]:
         """
         Apply watch state from `watched_list` (keyed by names as reported on
         `source_server`) onto this Plex server.
@@ -611,6 +611,7 @@ class Plex:
         upstream; each key here maps to a single user/library on this server.
         """
         dryrun = self.app_settings.dryrun
+        updated_watched: dict[str, UserData] = {}
 
         for source_user, user_data in watched_list.items():
             if not self.app_settings.should_sync_user(
@@ -653,6 +654,12 @@ class Plex:
             library_list = plex_server.library.sections()
             available_titles = [x.title for x in library_list]
 
+            user_name: str = (
+                plex_user.username.lower()
+                if plex_user.username
+                else plex_user.title.lower()
+            )
+
             for library_name in user_data.libraries:
                 if not self.app_settings.should_sync_library(
                     library_name, source_server_name, self.server_settings.name
@@ -681,8 +688,17 @@ class Plex:
                         resolved_library,
                         dryrun,
                     )
+
+                    if user_name not in updated_watched:
+                        updated_watched[user_name] = UserData()
+                    updated_watched[user_name].libraries[resolved_library] = (
+                        library_data
+                    )
+
                 except Exception as e:
                     logger.error(
                         f"Plex: Failed to update watched for {plex_user.title} in {resolved_library}, Error: {e}",
                     )
                     continue
+
+        return updated_watched

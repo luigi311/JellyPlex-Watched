@@ -116,20 +116,20 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
             ):
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
 
-                # Add server_2_watched_filtered to server_1_watched that way the stored version isn't stale for the next server
-                # if not settings.dryrun:
-                #     server_1_watched = merge_server_watched(
-                #         server_1_watched,
-                #         server_2_watched_filtered,
-                #         server_1.server_settings.name,
-                #         server_2.server_settings.name,
-                #         settings,
-                #         average_time,
-                #     )
-
-                server_1.update_watched(
+                updated_watched = server_1.update_watched(
                     server_2_watched_filtered, server_2.server_settings.name
                 )
+
+                # Add server_2_watched_filtered to server_1_watched that way the stored version isn't stale for the next server
+                if not settings.dryrun and updated_watched:
+                    server_1_watched = merge_server_watched(
+                        server_1_watched,
+                        updated_watched,
+                        server_1.server_settings.name,
+                        server_2.server_settings.name,
+                        settings,
+                        average_time,
+                    )
 
             if settings.should_sync_server(
                 server_1.server_settings.name, server_2.server_settings.name

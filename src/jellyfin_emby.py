@@ -858,7 +858,7 @@ class JellyfinEmby:
         self,
         watched_list: dict[str, UserData],
         source_server_name: str,
-    ) -> None:
+    ) -> dict[str, UserData]:
         """
         Apply watch state from `watched_list` (keyed by names as reported on
         `source_server`) onto this server.
@@ -869,6 +869,7 @@ class JellyfinEmby:
         upstream; each key here maps to a single user/library on this server.
         """
         dryrun = self.app_settings.dryrun
+        updated_watched: dict[str, UserData] = {}
 
         for user, user_data in watched_list.items():
             if not self.app_settings.should_sync_user(
@@ -930,7 +931,15 @@ class JellyfinEmby:
                         library_id,
                         dryrun,
                     )
+
+                    if user_name not in updated_watched:
+                        updated_watched[user_name] = UserData()
+                    updated_watched[user_name].libraries[resolved_library_name] = (
+                        library_data
+                    )
                 except Exception as e:
                     logger.error(
                         f"{self.server_type}: Error updating watched for {user_name} in library {resolved_library_name}, {e}",
                     )
+
+        return updated_watched
