@@ -361,8 +361,8 @@ class Plex:
 
     def update_user_watched(
         self,
-        user: MyPlexAccount,
-        user_plex: PlexServer,
+        user: MyPlexAccount | MyPlexUser,
+        plex_server: PlexServer,
         library_data: LibraryData,
         library_name: str,
         dryrun: bool,
@@ -374,7 +374,7 @@ class Plex:
         logger.info(
             f"Plex: Updating watched for {user.title} in library {library_name}"
         )
-        library_section = user_plex.library.section(library_name)
+        library_section = plex_server.library.section(library_name)
         if not library_section:
             logger.error(
                 f"Plex: Library {library_name} not found for {user.title}, skipping",
@@ -411,7 +411,7 @@ class Plex:
                             logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                             log_marked(
                                 "Plex",
-                                user_plex.friendlyName,
+                                plex_server.friendlyName,
                                 user.title,
                                 library_name,
                                 plex_movie.title,
@@ -434,7 +434,7 @@ class Plex:
                             logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
                             log_marked(
                                 "Plex",
-                                user_plex.friendlyName,
+                                plex_server.friendlyName,
                                 user.title,
                                 library_name,
                                 plex_movie.title,
@@ -490,7 +490,7 @@ class Plex:
                                         )
                                         log_marked(
                                             "Plex",
-                                            user_plex.friendlyName,
+                                            plex_server.friendlyName,
                                             user.title,
                                             library_name,
                                             plex_show.title,
@@ -515,7 +515,7 @@ class Plex:
                                         )
                                         log_marked(
                                             "Plex",
-                                            user_plex.friendlyName,
+                                            plex_server.friendlyName,
                                             user.title,
                                             library_name,
                                             plex_show.title,
@@ -600,42 +600,40 @@ class Plex:
         """
         dryrun = self.app_settings.dryrun
 
-        for user, user_data in watched_list.items():
+        for source_user, user_data in watched_list.items():
             # Resolve the source-server user to a Plex user object on this server.
-            plex_user = self._resolve_local_user(source_server_name, user)
+            plex_user = self._resolve_local_user(source_server_name, source_user)
             if plex_user is None:
                 logger.info(
-                    f"Plex: {user} (from {source_server_name}) not found on this server, skipping",
+                    f"Plex: {source_user} (from {source_server_name}) not found on this server, skipping",
                 )
                 continue
 
-            user = plex_user
-
-            if self.admin_user == user:
-                user_plex = self.plex
+            if self.admin_user == plex_user:
+                plex_server = self.plex
             else:
-                if not isinstance(user, MyPlexUser):
-                    logger.error(f"Plex: {user} failed to get PlexUser")
+                if not isinstance(plex_user, MyPlexUser):
+                    logger.error(f"Plex: {plex_user} failed to get PlexUser")
                     continue
 
-                token = user.get_token(self.plex.machineIdentifier)
+                token = plex_user.get_token(self.plex.machineIdentifier)
                 if token:
-                    user_plex = PlexServer(
+                    plex_server = PlexServer(
                         self.base_url,
                         token,
                         session=self.session,
                     )
                 else:
                     logger.error(
-                        f"Plex: Failed to get token for {user.title}, skipping",
+                        f"Plex: Failed to get token for {plex_user.title}, skipping",
                     )
                     continue
 
-            if not user_plex:
-                logger.error(f"Plex: {user} Failed to get PlexServer")
+            if not plex_server:
+                logger.error(f"Plex: {plex_user} Failed to get PlexServer")
                 continue
 
-            library_list = user_plex.library.sections()
+            library_list = plex_server.library.sections()
             available_titles = [x.title for x in library_list]
 
             for library_name in user_data.libraries:
@@ -653,14 +651,14 @@ class Plex:
 
                 try:
                     self.update_user_watched(
-                        user,
-                        user_plex,
+                        plex_user,
+                        plex_server,
                         library_data,
                         resolved_library,
                         dryrun,
                     )
                 except Exception as e:
                     logger.error(
-                        f"Plex: Failed to update watched for {user.title} in {resolved_library}, Error: {e}",
+                        f"Plex: Failed to update watched for {plex_user.title} in {resolved_library}, Error: {e}",
                     )
                     continue
