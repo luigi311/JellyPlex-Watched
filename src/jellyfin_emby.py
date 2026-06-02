@@ -859,8 +859,9 @@ class JellyfinEmby:
 
         for library in available_libraries:
             name = library.get("Name")
-            if name and name.lower() in candidates_lc:
-                return name, library["Id"]
+            lib_id = library.get("Id")
+            if name and lib_id and name.lower() in candidates_lc:
+                return name, lib_id
 
         return None
 
