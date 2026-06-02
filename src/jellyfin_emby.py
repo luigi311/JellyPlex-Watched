@@ -878,6 +878,7 @@ class JellyfinEmby:
                 logger.debug(
                     f"{self.server_type}: {user} (from {source_server_name}) skipped"
                 )
+                continue
 
             resolved_user = self._resolve_local_user(source_server_name, user)
             if resolved_user is None:
@@ -908,6 +909,7 @@ class JellyfinEmby:
                     logger.debug(
                         f"{self.server_type}: {library_name} (from {source_server_name}) skipped"
                     )
+                    continue
 
                 library_data = user_data.libraries[library_name]
 

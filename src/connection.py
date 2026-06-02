@@ -24,14 +24,18 @@ def generate_server_connections(settings: AppSettings) -> list[Plex | Jellyfin |
                 app_settings=settings,
                 server_settings=server,
             )
-            logger.debug(f"Jellyfin Server info: {jellyfin_server.info()}")
+            logger.debug(
+                f"Jellyfin Server info: {jellyfin_server.server_name}: {jellyfin_server.server_version}"
+            )
             servers.append(jellyfin_server)
         elif isinstance(server, EmbySettings):
             emby_server = Emby(
                 app_settings=settings,
                 server_settings=server,
             )
-            logger.debug(f"Emby Server info: {emby_server.info()}")
+            logger.debug(
+                f"Emby Server info: {emby_server.server_name}: {emby_server.server_version}"
+            )
             servers.append(emby_server)
         else:
             msg = f"Invalid server type: {type(server)}"

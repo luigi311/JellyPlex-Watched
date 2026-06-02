@@ -87,7 +87,7 @@ def combine_user_lists(
 def generate_server_users(
     server: Plex | Jellyfin | Emby,
     users: dict[str, list[str]],
-) -> list[MyPlexAccount] | dict[str, str] | None:
+) -> list[MyPlexAccount | MyPlexUser] | dict[str, str] | None:
     # Flatten the fan-out map into the full set of usernames relevant to
     # either side: every server_1-side key and every server_2-side target.
     source_names = set(users.keys())
@@ -95,7 +95,7 @@ def generate_server_users(
     all_names = source_names | target_names
 
     if isinstance(server, Plex):
-        plex_server_users: list[MyPlexAccount] = []
+        plex_server_users: list[MyPlexAccount | MyPlexUser] = []
         for plex_user in server.users:
             username_title = (
                 plex_user.username if plex_user.username else plex_user.title
