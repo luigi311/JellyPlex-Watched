@@ -446,18 +446,18 @@ class AppSettings(BaseSettings):
                 "Each server entry needs a unique 'name'."
             )
 
-        canonicals = [u.canonical for u in self.user_mappings]
+        canonicals = [u.canonical.casefold() for u in self.user_mappings]
         dupes = {c for c, n in Counter(canonicals).items() if n > 1}
         if dupes:
             raise ValueError(
-                f"Duplicate user_mappings.canonical values: {sorted(dupes)}"
+                f"Duplicate user_mappings.canonical values (case-insensitive): {sorted(dupes)}"
             )
 
-        lib_canonicals = [lib.canonical for lib in self.library_mappings]
+        lib_canonicals = [lib.canonical.casefold() for lib in self.library_mappings]
         dupes = {c for c, n in Counter(lib_canonicals).items() if n > 1}
         if dupes:
             raise ValueError(
-                f"Duplicate library_mappings.canonical values: {sorted(dupes)}"
+                f"Duplicate library_mappings.canonical values (case-insensitive): {sorted(dupes)}"
             )
 
         return self
@@ -500,7 +500,7 @@ class AppSettings(BaseSettings):
                         f"user_mappings[{user.canonical}].aliases references "
                         f"unknown server '{alias.server}'."
                     )
-                key = (alias.server, alias.username)
+                key = (alias.server, alias.username.lower())
                 if key in seen_local:
                     raise ValueError(
                         f"user_mappings[{user.canonical}] has duplicate alias "
@@ -529,7 +529,7 @@ class AppSettings(BaseSettings):
                         f"library_mappings[{lib.canonical}].aliases references "
                         f"unknown server '{alias.server}'."
                     )
-                key = (alias.server, alias.library)
+                key = (alias.server, alias.library.lower())
                 if key in seen_local:
                     raise ValueError(
                         f"library_mappings[{lib.canonical}] has duplicate alias "
