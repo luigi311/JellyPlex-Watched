@@ -1,7 +1,7 @@
 import os
 import sys
 
-from pydantic_settings import SettingsConfigDict
+from conftest import settings_override
 
 # getting the name of the directory
 # where the this file is present.
@@ -15,75 +15,12 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-
-from src.settings import AppSettings
 from src.users import combine_user_lists
-
-
-class _IsolatedAppSettings(AppSettings):
-    """
-    AppSettings that ignores all external configuration sources (env vars,
-    .env, legacy .env, config.yaml) so tests depend only on the kwargs passed
-    in. Without this, constructing AppSettings would read the developer's real
-    .env / config.yaml and contaminate the test (e.g. a real whitelist_users
-    would filter out the test users, yielding empty results).
-    """
-
-    # model_config is merged across inheritance in pydantic-settings, so the
-    # base yaml_file keys must be explicitly cleared to avoid an unused-key
-    # warning once the YAML source is dropped below.
-    model_config = SettingsConfigDict(
-        yaml_file=None,
-        yaml_file_encoding=None,
-        nested_model_default_partial_update=True,
-        extra="forbid",
-    )
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls,
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
-    ):
-        # Only honor explicit kwargs; suppress every ambient source.
-        return (init_settings,)
-
-
-def _settings(**overrides) -> AppSettings:
-    """
-    Build an AppSettings without touching .env / config.yaml. Two token
-    servers (plex-main, jellyfin-main) are always declared so the names used
-    in the tests resolve; overrides let individual tests tweak sync_to,
-    mappings, and filters.
-    """
-    base = {
-        "plex": [
-            {
-                "name": "plex-main",
-                "baseurl": "http://plex",
-                "token": "x",
-                "sync_to": ["jellyfin-main"],
-            }
-        ],
-        "jellyfin": [
-            {
-                "name": "jellyfin-main",
-                "baseurl": "http://jellyfin",
-                "token": "x",
-                "sync_to": ["plex-main"],
-            }
-        ],
-    }
-    base.update(overrides)
-    return _IsolatedAppSettings(**base)
 
 
 def test_combine_user_lists_implicit_same_name():
     """Users with identical names on both servers sync without any mapping."""
-    settings = _settings()
+    settings = settings_override()
 
     server_1_users = ["test", "test3", "luigi311"]
     server_2_users = ["luigi311", "test2", "test3"]
@@ -102,7 +39,7 @@ def test_combine_user_lists_implicit_same_name():
 
 def test_combine_user_lists_with_mapping():
     """A user_mappings entry links differently-named users across servers."""
-    settings = _settings(
+    settings = settings_override(
         user_mappings=[
             {
                 "canonical": "shared",
@@ -132,7 +69,7 @@ def test_combine_user_lists_with_mapping():
 
 def test_combine_user_lists_blacklist():
     """A blacklisted user is filtered out by should_sync_user."""
-    settings = _settings(blacklist_users=["test3"])
+    settings = settings_override(blacklist_users=["test3"])
 
     server_1_users = ["luigi311", "test3"]
     server_2_users = ["luigi311", "test3"]
@@ -146,7 +83,7 @@ def test_combine_user_lists_blacklist():
 
 def test_combine_user_lists_whitelist():
     """With a whitelist set, only whitelisted users sync."""
-    settings = _settings(whitelist_users=["luigi311"])
+    settings = settings_override(whitelist_users=["luigi311"])
 
     server_1_users = ["luigi311", "test3"]
     server_2_users = ["luigi311", "test3"]
@@ -160,7 +97,7 @@ def test_combine_user_lists_whitelist():
 
 def test_combine_user_lists_fanout():
     """One source identity fanning out to multiple users on the other server."""
-    settings = _settings(
+    settings = settings_override(
         user_mappings=[
             {
                 "canonical": "family",
@@ -186,7 +123,7 @@ def test_combine_user_lists_fanout():
 
 def test_combine_user_lists_case_insensitive():
     """Server-reported casing differences don't break mapping resolution."""
-    settings = _settings(
+    settings = settings_override(
         user_mappings=[
             {
                 "canonical": "JellyUser",
