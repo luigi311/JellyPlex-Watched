@@ -21,9 +21,9 @@ from src.watched import (
 def main_loop(settings: AppSettings, average_time: float) -> None:
     logger.info(f"Dryrun: {settings.dryrun}")
 
-    logger.bind(data=settings).trace("Settings")
-    if settings.debug_level != "TRACE":
-        # Avoid printing both full settings and these individual when in trace mode
+    logger.bind(data=settings).debug("Settings")
+    if settings.debug_level != "DEBUG":
+        # Avoid printing both full settings and these individual when in DEBUG mode
         logger.bind(data=settings.user_mappings).info("User Mapping: ")
         logger.bind(data=settings.whitelist_users).info("Whitelist Users: ")
         logger.bind(data=settings.blacklist_users).info("Blacklist Users: ")
