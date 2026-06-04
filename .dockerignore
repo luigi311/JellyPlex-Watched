@@ -7,6 +7,7 @@
 .gitignore
 .idea
 .vscode
+config.yaml
 
 Dockerfile*
 README.md
