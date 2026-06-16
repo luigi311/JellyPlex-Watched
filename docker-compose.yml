@@ -4,8 +4,9 @@ services:
   jellyplex-watched:
     image: luigi311/jellyplex-watched:latest
     container_name: jellyplex-watched
-    restart: unless-stopped
+    restart: no
     environment:
       - PUID=1000
       - PGID=1000
-    env_file: "./.env"
+    env_file:
+      - .env
