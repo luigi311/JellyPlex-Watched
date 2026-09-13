@@ -66,6 +66,42 @@ def test_combine_library_lists_with_mapping():
     assert combined == {"TV Shows": ["Shows", "Shows Archive"]}
 
 
+def test_legacy_library_mapping_skips_ambiguous_discovery():
+    """Legacy-expanded pairs sync only when each side identifies one alias."""
+    settings = settings_override(
+        library_mappings=[
+            {
+                "canonical": "movies",
+                "legacy": True,
+                "aliases": [
+                    {"server": "plex-main", "library": "Movies"},
+                    {"server": "plex-main", "library": "Films"},
+                    {"server": "jellyfin-main", "library": "Movies"},
+                    {"server": "jellyfin-main", "library": "Films"},
+                ],
+            }
+        ]
+    )
+
+    assert (
+        combine_library_lists(
+            "plex-main",
+            "jellyfin-main",
+            {"Movies": "movie", "Films": "movie"},
+            {"Movies": "movie", "Films": "movie"},
+            settings,
+        )
+        == {}
+    )
+    assert combine_library_lists(
+        "plex-main",
+        "jellyfin-main",
+        {"Movies": "movie"},
+        {"Films": "movie"},
+        settings,
+    ) == {"Movies": ["Films"]}
+
+
 def test_combine_library_lists_type_blacklist():
     """A library whose type is blacklisted is dropped regardless of name match."""
     settings = settings_override(blacklist_library_types=["music"])
@@ -93,6 +129,35 @@ def test_combine_library_lists_type_whitelist():
     )
 
     assert combined == {"Movies": ["Movies"]}
+
+
+def test_combine_library_lists_filters_types_on_both_servers():
+    """A filtered type cannot enter the map through the other direction."""
+    settings = settings_override(blacklist_library_types=["music"])
+
+    server_1_libraries = {
+        "Movies": "movie",
+        "Shows": "show",
+    }
+    server_2_libraries = {
+        "Movies": "music",
+        "Shows": "show",
+    }
+
+    assert combine_library_lists(
+        "plex-main",
+        "jellyfin-main",
+        server_1_libraries,
+        server_2_libraries,
+        settings,
+    ) == {"Shows": ["Shows"]}
+    assert combine_library_lists(
+        "plex-main",
+        "jellyfin-main",
+        server_2_libraries,
+        server_1_libraries,
+        settings,
+    ) == {"Shows": ["Shows"]}
 
 
 def test_combine_library_lists_name_blacklist():

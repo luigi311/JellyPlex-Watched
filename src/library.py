@@ -47,24 +47,52 @@ def combine_library_lists(
     relationships declared on either side, and targets discovered from each
     direction are merged rather than overwritten.
     """
+    def filter_library_types(
+        libraries: dict[str, str],
+    ) -> dict[str, str]:
+        filtered: dict[str, str] = {}
+        for library, library_type in libraries.items():
+            if settings.is_library_type_allowed(library_type):
+                filtered[library] = library_type
+            else:
+                logger.info(
+                    f"Skipping library {library}: type '{library_type}' is filtered out"
+                )
+        return filtered
+
+    # Type filters apply to each server's inventory before matching. A
+    # disallowed target must not become reachable through the opposite
+    # direction merely because the source reports a permitted type.
+    filtered_server_1_libraries = filter_library_types(server_1_libraries)
+    filtered_server_2_libraries = filter_library_types(server_2_libraries)
+
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
     server_1_by_name = {
-        normalize_name(name): name for name in server_1_libraries
+        normalize_name(name): name for name in filtered_server_1_libraries
     }
     server_2_by_name = {
-        normalize_name(name): name for name in server_2_libraries
+        normalize_name(name): name for name in filtered_server_2_libraries
     }
+    legacy_conflicts = settings.legacy_library_conflicts(
+        server_1_name, server_1_libraries
+    ) | settings.legacy_library_conflicts(server_2_name, server_2_libraries)
+
+    for canonical in sorted(legacy_conflicts):
+        logger.warning(
+            f"Skipping legacy library mapping '{canonical}' between "
+            f"{server_1_name} and {server_2_name}: both aliases are present "
+            "on at least one server. Replace it with server-scoped YAML "
+            "aliases before syncing these libraries."
+        )
 
     def add(s1_library: str, s2_library: str) -> None:
         accumulator.setdefault(s1_library, set()).add(s2_library)
 
     # server_1 -> server_2
-    for s1_library, s1_type in server_1_libraries.items():
-        if not settings.is_library_type_allowed(s1_type):
-            logger.info(
-                f"Skipping library {s1_library}: type '{s1_type}' is filtered out"
-            )
+    for s1_library in filtered_server_1_libraries:
+        canonical = settings.lookup_library(server_1_name, s1_library)
+        if canonical is not None and canonical in legacy_conflicts:
             continue
         if not settings.should_sync_library(s1_library, server_1_name, server_2_name):
             continue
@@ -76,11 +104,9 @@ def combine_library_lists(
                 add(s1_library, target_name)
 
     # server_2 -> server_1 (fills in relationships declared the other way)
-    for s2_library, s2_type in server_2_libraries.items():
-        if not settings.is_library_type_allowed(s2_type):
-            logger.info(
-                f"Skipping library {s2_library}: type '{s2_type}' is filtered out"
-            )
+    for s2_library in filtered_server_2_libraries:
+        canonical = settings.lookup_library(server_2_name, s2_library)
+        if canonical is not None and canonical in legacy_conflicts:
             continue
         if not settings.should_sync_library(s2_library, server_2_name, server_1_name):
             continue

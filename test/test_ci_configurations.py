@@ -115,10 +115,12 @@ def _assert_explicit_mappings(settings: AppSettings) -> None:
     assert settings.user_mappings[0].model_dump() == {
         "canonical": "JellyUser",
         "aliases": _USER_ALIASES,
+        "legacy": False,
     }
     assert settings.library_mappings[0].model_dump() == {
         "canonical": "Shows",
         "aliases": _LIBRARY_ALIASES,
+        "legacy": False,
     }
 
     user_targets = (

@@ -712,6 +712,45 @@ def test_legacy_overlapping_transitive_mapping_is_rejected_as_ambiguous(
     assert "claimed by both" in str(error.value)
 
 
+def test_legacy_mapping_markers_survive_yaml_migration(
+    tmp_path: Path,
+    controlled_environment: None,
+) -> None:
+    env_path = _write_env(
+        tmp_path,
+        {
+            "PLEX_BASEURL": "http://plex",
+            "PLEX_TOKEN": "plex-token",
+            "JELLYFIN_BASEURL": "http://jellyfin",
+            "JELLYFIN_TOKEN": "jellyfin-token",
+            "USER_MAPPING": '{"plex-user":"jellyfin-user"}',
+            "LIBRARY_MAPPING": '{"plex-library":"jellyfin-library"}',
+        },
+    )
+    generated_yaml = tmp_path / "generated.yaml"
+
+    effective = load_settings(
+        env_file=env_path,
+        yaml_file=generated_yaml,
+        auto_migrate=True,
+    )
+    generated = yaml.safe_load(generated_yaml.read_text(encoding="utf-8"))
+
+    assert effective.user_mappings[0].legacy is True
+    assert effective.library_mappings[0].legacy is True
+    assert generated["user_mappings"][0]["legacy"] is True
+    assert generated["library_mappings"][0]["legacy"] is True
+
+    yaml_only = load_settings(
+        env_file=tmp_path / "missing.env",
+        yaml_file=generated_yaml,
+        auto_migrate=False,
+    )
+
+    assert yaml_only.user_mappings[0].legacy is True
+    assert yaml_only.library_mappings[0].legacy is True
+
+
 def test_legacy_and_yaml_fixtures_have_equivalent_effective_behavior(
     tmp_path: Path,
     controlled_environment: None,
@@ -1740,6 +1779,58 @@ def test_c05_wildcards_skip_partial_and_unrelated_mappings(
     assert settings.sync_targets_for_library(
         "plex-main", "Implicit", "jellyfin-main"
     ) == ["Implicit"]
+
+
+def test_r06_explicit_target_ownership_blocks_implicit_fallback(
+    controlled_environment: None,
+) -> None:
+    settings = settings_override(
+        user_mappings=[
+            {
+                "canonical": "owner",
+                "aliases": [
+                    {"server": "plex-main", "username": "owner"},
+                    {"server": "jellyfin-main", "username": "shared"},
+                ],
+            }
+        ],
+        library_mappings=[
+            {
+                "canonical": "owned-library",
+                "aliases": [
+                    {"server": "plex-main", "library": "Owned"},
+                    {"server": "jellyfin-main", "library": "Shared"},
+                ],
+            }
+        ],
+    )
+
+    assert (
+        settings.sync_targets_for_user(
+            "plex-main", "shared", "jellyfin-main"
+        )
+        == []
+    )
+    assert (
+        settings.sync_targets_for_library(
+            "plex-main", "Shared", "jellyfin-main"
+        )
+        == []
+    )
+    assert settings.sync_targets_for_user(
+        "jellyfin-main", "shared", "plex-main"
+    ) == ["owner"]
+    assert settings.sync_targets_for_library(
+        "jellyfin-main", "Shared", "plex-main"
+    ) == ["Owned"]
+
+    # An unowned name still uses the ordinary same-name fallback.
+    assert settings.sync_targets_for_user(
+        "plex-main", "unmapped", "jellyfin-main"
+    ) == ["unmapped"]
+    assert settings.sync_targets_for_library(
+        "plex-main", "Unmapped", "jellyfin-main"
+    ) == ["Unmapped"]
 
 
 @pytest.mark.parametrize(

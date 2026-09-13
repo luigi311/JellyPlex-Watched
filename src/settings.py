@@ -35,17 +35,19 @@ Identity model:
     Users do NOT have to be declared in user_mappings to be synced. If a
     user isn't found in user_mappings, the sync engine falls back to
     matching by identical username across servers (so 'test123' on Plex
-    syncs to 'test123' on Jellyfin without any explicit config). Declare
-    user_mappings only when usernames differ across servers, when one
-    identity fans out to multiple users on a server, or when you need
-    user_sync_rules.
+    syncs to 'test123' on Jellyfin without any explicit config), provided
+    that the target name is not explicitly owned by another mapping. Declare
+    user_mappings when usernames differ across servers, when one identity fans
+    out to multiple users on a server, or when you need user_sync_rules.
 
 Backward compatibility:
     Legacy .env values are parsed on every load and override the YAML.
     On first run, a config.yaml is auto-generated from the .env. Legacy
     USER_MAPPING / LIBRARY_MAPPING dicts don't record which server uses
     which name, so the migration adds *both* names as aliases on *every*
-    server — over-broad but correct. Users can prune the YAML afterward.
+    server and marks those mappings as legacy-expanded. Runtime discovery
+    skips a marked mapping when both aliases are present on one server; users
+    can replace or prune the mapping in YAML after reviewing it.
 
 For source-backed loading through ``load_settings()`` and its internal
 settings loader, priority is highest to lowest:
@@ -76,7 +78,7 @@ import json
 import os
 import tempfile
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -330,6 +332,14 @@ class UserMapping(BaseModel):
             "the same server are allowed for one-to-many sync."
         ),
     )
+    legacy: bool = Field(
+        default=False,
+        repr=False,
+        description=(
+            "Whether this mapping was expanded from an ambiguous legacy "
+            "USER_MAPPING entry."
+        ),
+    )
 
 
 class LibraryAlias(BaseModel):
@@ -344,6 +354,14 @@ class LibraryMapping(BaseModel):
 
     canonical: str
     aliases: list[LibraryAlias] = Field(..., min_length=1)
+    legacy: bool = Field(
+        default=False,
+        repr=False,
+        description=(
+            "Whether this mapping was expanded from an ambiguous legacy "
+            "LIBRARY_MAPPING entry."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +480,28 @@ def _alias_servers_by_canonical(
         }
         for mapping in mappings
     }
+
+
+def _legacy_mapping_conflicts(
+    mappings: list[UserMapping] | list[LibraryMapping],
+    server: str,
+    names: Iterable[str],
+    alias_field: Literal["username", "library"],
+) -> set[str]:
+    """Return legacy mappings with multiple aliases discovered on a server."""
+    discovered_names = {normalize_name(name) for name in names}
+    conflicts: set[str] = set()
+    for mapping in mappings:
+        if not mapping.legacy:
+            continue
+        aliases_on_server = {
+            normalize_name(getattr(alias, alias_field))
+            for alias in mapping.aliases
+            if alias.server == server
+        }
+        if len(aliases_on_server & discovered_names) > 1:
+            conflicts.add(normalize_name(mapping.canonical))
+    return conflicts
 
 
 def _validate_rule_direction(
@@ -1087,6 +1127,32 @@ class AppSettings(BaseModel):
         """Find the canonical library for a (server, library) pair, or None."""
         return self._library_index.get((server, normalize_name(library)))
 
+    def legacy_user_conflicts(
+        self,
+        server: str,
+        usernames: Iterable[str],
+    ) -> set[str]:
+        """Find legacy user mappings with multiple discovered aliases."""
+        return _legacy_mapping_conflicts(
+            self.user_mappings,
+            server,
+            usernames,
+            "username",
+        )
+
+    def legacy_library_conflicts(
+        self,
+        server: str,
+        libraries: Iterable[str],
+    ) -> set[str]:
+        """Find legacy library mappings with multiple discovered aliases."""
+        return _legacy_mapping_conflicts(
+            self.library_mappings,
+            server,
+            libraries,
+            "library",
+        )
+
     def is_user_allowed(self, username: str, server: str) -> bool:
         """
         Check the global user blacklist/whitelist for a server-local user.
@@ -1268,17 +1334,26 @@ class AppSettings(BaseModel):
         individual Jellyfin users).
 
         If the user is NOT in user_mappings, returns [source_username] as
-        the implicit same-username fallback. The sync engine should still
-        verify the target user actually exists before pushing.
+        the implicit same-username fallback when that name is not explicitly
+        owned by a different mapping on the target server. Otherwise returns
+        [] so an unmapped source cannot cross into another identity.
 
-        Returns [] only when the user is mapped but has no alias on the
-        target server.
+        Returns [] when the user is mapped but has no alias on the target
+        server, or when an implicit match would use a target alias owned by a
+        different mapping.
         """
         canonical = self._user_index.get(
             (source_server, normalize_name(source_username))
         )
         if canonical is None:
-            # Implicit same-username fallback.
+            source_name = normalize_name(source_username)
+            if (target_server, source_name) in self._user_index:
+                logger.debug(
+                    f"Skipping implicit user match {source_server}/{source_username} "
+                    f"-> {target_server}/{source_username}: target name is explicitly owned"
+                )
+                return []
+            # Implicit same-username fallback for an unowned target name.
             return [source_username]
         return [
             a.username
@@ -1297,12 +1372,20 @@ class AppSettings(BaseModel):
         item being from `source_library` on `source_server`.
 
         Mirrors sync_targets_for_user: undeclared libraries fall back to
-        the same name on the target server.
+        the same name on the target server when that name is not explicitly
+        owned by a different mapping there.
         """
         canonical = self._library_index.get(
             (source_server, normalize_name(source_library))
         )
         if canonical is None:
+            source_name = normalize_name(source_library)
+            if (target_server, source_name) in self._library_index:
+                logger.debug(
+                    f"Skipping implicit library match {source_server}/{source_library} "
+                    f"-> {target_server}/{source_library}: target name is explicitly owned"
+                )
+                return []
             return [source_library]
         return [
             a.library
@@ -1423,10 +1506,12 @@ _MIGRATION_HEADER = """\
 #
 # NOTE on user_mappings / library_mappings:
 #   The legacy USER_MAPPING / LIBRARY_MAPPING format didn't record which
-#   server uses which name. To stay safe, every alternate name has been
-#   added on every server. You can prune entries that don't actually apply
-#   to a given server — e.g. if "Shows" is only the Plex name and "TV
-#   Shows" is only the Jellyfin name, remove the irrelevant aliases.
+#   server uses which name, so every alternate name has been added on every
+#   server and the mapping is marked `legacy: true`. Runtime sync skips that
+#   mapping when both aliases are discovered on one server. Review the
+#   mapping before removing the dotenv file, then prune irrelevant aliases or
+#   replace the entry with server-scoped aliases — e.g. if "Shows" is only
+#   the Plex name and "TV Shows" is only the Jellyfin name.
 #
 #   You can also delete user_mappings entries entirely for users whose
 #   username is identical on every server — the sync engine will match

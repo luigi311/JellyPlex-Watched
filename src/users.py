@@ -54,6 +54,17 @@ def combine_user_lists(
     """
     server_1_user_names = {normalize_name(user) for user in server_1_users}
     server_2_user_names = {normalize_name(user) for user in server_2_users}
+    legacy_conflicts = settings.legacy_user_conflicts(
+        server_1_name, server_1_users
+    ) | settings.legacy_user_conflicts(server_2_name, server_2_users)
+
+    for canonical in sorted(legacy_conflicts):
+        logger.warning(
+            f"Skipping legacy user mapping '{canonical}' between "
+            f"{server_1_name} and {server_2_name}: both aliases are present "
+            "on at least one server. Replace it with server-scoped YAML "
+            "aliases before syncing these accounts."
+        )
 
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
@@ -64,6 +75,9 @@ def combine_user_lists(
     # server_1 -> server_2
     for s1_user in server_1_users:
         source_user = normalize_name(s1_user)
+        canonical = settings.lookup_user(server_1_name, source_user)
+        if canonical is not None and canonical in legacy_conflicts:
+            continue
         if not settings.should_sync_user(source_user, server_1_name, server_2_name):
             continue
         for target in settings.sync_targets_for_user(
@@ -76,6 +90,9 @@ def combine_user_lists(
     # server_2 -> server_1 (fills in relationships declared the other way)
     for s2_user in server_2_users:
         source_user = normalize_name(s2_user)
+        canonical = settings.lookup_user(server_2_name, source_user)
+        if canonical is not None and canonical in legacy_conflicts:
+            continue
         if not settings.should_sync_user(source_user, server_2_name, server_1_name):
             continue
         for target in settings.sync_targets_for_user(

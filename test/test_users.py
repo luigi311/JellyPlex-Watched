@@ -133,6 +133,38 @@ def test_combine_user_lists_fanout():
     assert combined == {"family": ["alice", "bob"]}
 
 
+def test_legacy_user_mapping_skips_ambiguous_discovery():
+    """Legacy-expanded pairs sync only when each side identifies one alias."""
+    settings = settings_override(
+        user_mappings=[
+            {
+                "canonical": "a",
+                "legacy": True,
+                "aliases": [
+                    {"server": "plex-main", "username": "a"},
+                    {"server": "plex-main", "username": "b"},
+                    {"server": "jellyfin-main", "username": "a"},
+                    {"server": "jellyfin-main", "username": "b"},
+                ],
+            }
+        ]
+    )
+
+    assert (
+        combine_user_lists(
+            "plex-main",
+            "jellyfin-main",
+            ["a", "b"],
+            ["a", "b"],
+            settings,
+        )
+        == {}
+    )
+    assert combine_user_lists(
+        "plex-main", "jellyfin-main", ["a"], ["b"], settings
+    ) == {"a": ["b"]}
+
+
 def test_adapter_resolvers_return_all_user_and_library_fanout_targets():
     """Adapters preserve every mapped target when resolving a write."""
     settings = settings_override(

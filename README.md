@@ -141,6 +141,13 @@ file. Legacy loading remains supported. Prefixing new variables and changing
 legacy process/file precedence do not deprecate or remove the legacy runtime
 path.
 
+Legacy `USER_MAPPING` and `LIBRARY_MAPPING` entries are expanded onto every
+configured server because the old format does not identify the owning server.
+Generated migration entries carry `legacy: true`; if both names from one pair
+are discovered on a server, that mapping is skipped and a warning identifies
+the configuration to review. Replace the entry with server-scoped YAML aliases
+before syncing those accounts or libraries.
+
 ### Credentials and named overrides
 
 `JPW_SERVER_TOKENS` is a JSON object whose keys are exact configured server
@@ -176,9 +183,10 @@ User, library-name, and library-type filters are evaluated before rules. When
 a whitelist is non-empty, only whitelist matches pass and the matching
 blacklist is ignored. Otherwise, blacklist matches are rejected. User filters
 resolve the source server's canonical identity and aliases, so equal usernames
-on unrelated servers stay separate; an unmapped user keeps literal-name
-matching. A sync write requires both the user and library policy checks to
-allow it.
+on unrelated servers stay separate. An unmapped user or library keeps
+literal-name matching only when the target name is not explicitly owned by a
+different mapping. A sync write requires both the user and library policy
+checks to allow it.
 
 ### Applying configuration changes
 

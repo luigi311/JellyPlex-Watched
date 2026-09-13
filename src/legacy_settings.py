@@ -352,10 +352,10 @@ def _build_legacy_mappings(
     Build user/library mapping entries from a legacy `{a: b}` dict.
 
     The legacy format records two names per pair but doesn't say which
-    name belongs to which server. The safe correct behavior is to add
-    *both* names as aliases on *every* server — over-broad, but the sync
-    engine will match correctly regardless of which server actually uses
-    which name. The user can prune in the YAML afterward.
+    name belongs to which server. Add *both* names as aliases on *every*
+    server and mark the mapping so runtime discovery can skip it when both
+    names are present on one server. A user can replace or prune the mapping
+    in YAML after reviewing it.
     """
     if not pairs or not server_names:
         return []
@@ -364,8 +364,9 @@ def _build_legacy_mappings(
     logger.warning(
         f"Legacy {legacy_var} cannot identify which server owns each alias. "
         f"Translated {len(pairs)} mapping pair(s) by assigning both names to "
-        "every configured server. Review the generated YAML before disabling "
-        "dryrun."
+        "every configured server. The generated mappings are marked as legacy "
+        "and are skipped at runtime when both aliases are discovered on one "
+        "server. Review the generated YAML before disabling dryrun."
     )
 
     out: list[dict[str, Any]] = []
@@ -374,7 +375,7 @@ def _build_legacy_mappings(
         for server in server_names:
             for alias_value in (left, right):
                 aliases.append({"server": server, name_field: alias_value})
-        out.append({"canonical": left, "aliases": aliases})
+        out.append({"canonical": left, "aliases": aliases, "legacy": True})
     return out
 
 
