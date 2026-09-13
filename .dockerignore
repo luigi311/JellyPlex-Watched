@@ -12,3 +12,7 @@ config.yaml
 Dockerfile*
 README.md
 test
+
+# The server-backed CI checkout is mounted at runtime and must not enter the
+# application image or its published build context.
+JellyPlex-Watched-CI

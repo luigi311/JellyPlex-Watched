@@ -75,7 +75,12 @@ echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
 # If root run as the created user
 if [ "$(id -u)" = '0' ]; then
     chown -R "$PUID:$PGID" /app/.venv
-    chown -R "$PUID:$PGID" "$CONF_DIR"
+    # A documented read-only file bind mount rejects recursive chown. Keep
+    # the config directory writable for migration, while allowing ownership
+    # of mounted files to remain unchanged when the mount forbids it.
+    if ! chown -R "$PUID:$PGID" "$CONF_DIR" 2>/dev/null; then
+        chown "$PUID:$PGID" "$CONF_DIR"
+    fi
 
     # Run the application as the created user
     exec gosu "$PUID:$PGID" "$@"

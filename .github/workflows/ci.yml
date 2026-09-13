@@ -4,11 +4,9 @@ on:
   push:
     paths-ignore:
       - .gitignore
-      - "*.md"
   pull_request:
     paths-ignore:
       - .gitignore
-      - "*.md"
 
 env:
   PYTHON_VERSION: "3.13"
@@ -33,8 +31,25 @@ jobs:
       - name: "Run tests"
         run: uv run pytest -vvv
 
+      - name: "Validate configuration documentation"
+        run: uv run pytest -q test/test_documentation.py
+
+      - name: "Validate authored CI YAML configurations"
+        run: uv run pytest -q test/test_ci_configurations.py
+
+      - name: "Run Ruff"
+        run: uv run ruff check .
+
+      - name: "Type-check configuration modules"
+        run: uv run ty check src/settings.py src/legacy_settings.py src/runtime_paths.py
+
+      - name: "Full type check (known baseline; non-blocking)"
+        continue-on-error: true
+        run: uv run ty check
+
   test:
     runs-on: ubuntu-latest
+    needs: pytest
     steps:
       - uses: actions/checkout@v4
 
@@ -47,9 +62,13 @@ jobs:
           python-version-file: ".python-version"
 
       - name: "Install dependencies"
-        run: |
-          uv sync --frozen
-          sudo apt update && sudo apt install -y docker-compose
+        run: uv sync --frozen
+
+      - name: "Install Docker Compose"
+        run: sudo apt update
+
+      - name: "Install Docker Compose package"
+        run: sudo apt install -y docker-compose
 
       - name: "Checkout JellyPlex-Watched-CI"
         uses: actions/checkout@v4
@@ -58,70 +77,79 @@ jobs:
           path: JellyPlex-Watched-CI
 
       - name: "Start containers"
-        run: |
-          JellyPlex-Watched-CI/start_containers.sh
+        run: JellyPlex-Watched-CI/start_containers.sh
 
-          # Wait for containers to start
-          sleep 15
+      - name: "Wait for containers"
+        run: sleep 15
 
-          for FOLDER in $(find "JellyPlex-Watched-CI" -type f -name "docker-compose.yml" -exec dirname {} \;); do
-            docker compose -f "${FOLDER}/docker-compose.yml" logs
-          done
+      - name: "Show container logs"
+        run: uv run test/show_ci_container_logs.py JellyPlex-Watched-CI
 
-      - name: "Test Plex"
-        run: |
-          ENV_FILE="test/ci_plex.env" uv run main.py
-          uv run test/validate_ci_marklog.py --plex
+      - name: "Test Plex ENV"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_plex.env --check plex
 
-          rm mark.log config.yaml
+      - name: "Test Plex YAML"
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_plex.yaml --check plex
 
-      - name: "Test Jellyfin"
-        run: |
-          ENV_FILE="test/ci_jellyfin.env" uv run main.py
-          uv run test/validate_ci_marklog.py --jellyfin
+      - name: "Test Jellyfin ENV"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_jellyfin.env --check jellyfin
 
-          rm mark.log config.yaml
+      - name: "Test Jellyfin YAML"
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_jellyfin.yaml --check jellyfin
 
-      - name: "Test Emby"
-        run: |
-          ENV_FILE="test/ci_emby.env" uv run main.py
-          uv run test/validate_ci_marklog.py --emby
+      - name: "Test Emby ENV"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_emby.env --check emby
 
-          rm mark.log config.yaml
+      - name: "Test Emby YAML"
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_emby.yaml --check emby
 
-      - name: "Test Guids"
-        run: |
-          ENV_FILE="test/ci_guids.env" uv run main.py
-          uv run test/validate_ci_marklog.py --guids
+      - name: "Test Guids ENV"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_guids.env --check guids
 
-          rm mark.log config.yaml
+      - name: "Test Guids YAML"
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_guids.yaml --check guids
 
-      - name: "Test Locations"
-        run: |
-          ENV_FILE="test/ci_locations.env" uv run main.py
-          uv run test/validate_ci_marklog.py --locations
+      - name: "Test Locations ENV"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_locations.env --check locations
 
-          rm mark.log config.yaml
+      - name: "Test Locations YAML"
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_locations.yaml --check locations
 
-      - name: "Test writing to the servers"
-        run: |
-          # Test writing to the servers
-          ENV_FILE="test/ci_write.env" uv run main.py
+      - name: "Test Plex migrated YAML"
+        run: uv run test/run_ci_configuration.py --migration --env-file test/ci_plex.env --check plex
 
-          # Test again to test if it can handle existing data
-          ENV_FILE="test/ci_write.env" uv run main.py
+      - name: "Test Plex prefixed YAML"
+        run: uv run test/run_ci_configuration.py --env-file test/ci_prefixed.env --yaml-file test/ci_plex.yaml --check plex
 
-          uv run test/validate_ci_marklog.py --write
+      - name: "Test writing to servers ENV"
+        env:
+          CI_STATE_DIR: ${{ runner.temp }}/jpw-write-env-host
+        run: uv run test/run_ci_configuration.py --env-file test/ci_write.env --check write --repeat 2 --state-dir "$CI_STATE_DIR"
 
-          rm mark.log config.yaml
+      - name: "Stop containers before YAML write test"
+        run: JellyPlex-Watched-CI/stop_containers.sh
+
+      - name: "Reset CI server state before YAML write test"
+        working-directory: JellyPlex-Watched-CI
+        run: ./reset.sh
+
+      - name: "Start containers for YAML write test"
+        run: JellyPlex-Watched-CI/start_containers.sh
+
+      - name: "Wait for YAML write test containers"
+        run: sleep 15
+
+      - name: "Test writing to servers YAML"
+        env:
+          CI_STATE_DIR: ${{ runner.temp }}/jpw-write-yaml-host
+        run: uv run test/run_ci_configuration.py --yaml-file test/ci_write.yaml --check write --repeat 2 --state-dir "$CI_STATE_DIR"
 
   docker:
     runs-on: ubuntu-latest
-    needs:
-      - pytest
-      - test
+    needs: pytest
     env:
       DEFAULT_VARIANT: alpine
+      IMAGE: jellyplex-watched:smoke-${{ matrix.variant }}
     strategy:
       fail-fast: false
       matrix:
@@ -133,6 +161,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: "Install dependencies"
+        run: uv sync --frozen
+
+      - name: "Install Docker Compose"
+        run: sudo apt update
+
+      - name: "Install Docker Compose package"
+        run: sudo apt install -y docker-compose
+
+      - name: "Checkout JellyPlex-Watched-CI"
+        uses: actions/checkout@v4
+        with:
+          repository: luigi311/JellyPlex-Watched-CI
+          path: JellyPlex-Watched-CI
 
       - name: Docker meta
         id: docker_meta
@@ -168,18 +219,100 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
+      - name: Build loadable Docker image for integration tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}
+
+      - name: "Start containers"
+        run: JellyPlex-Watched-CI/start_containers.sh
+
+      - name: "Wait for containers"
+        run: sleep 15
+
+      - name: "Show container logs"
+        run: uv run test/show_ci_container_logs.py JellyPlex-Watched-CI
+
+      - name: "Test Plex ENV"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_plex.env --check plex
+
+      - name: "Test Plex YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_plex.yaml --check plex
+
+      - name: "Test Jellyfin ENV"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_jellyfin.env --check jellyfin
+
+      - name: "Test Jellyfin YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_jellyfin.yaml --check jellyfin
+
+      - name: "Test Emby ENV"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_emby.env --check emby
+
+      - name: "Test Emby YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_emby.yaml --check emby
+
+      - name: "Test Guids ENV"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_guids.env --check guids
+
+      - name: "Test Guids YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_guids.yaml --check guids
+
+      - name: "Test Locations ENV"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_locations.env --check locations
+
+      - name: "Test Locations YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_locations.yaml --check locations
+
+      - name: "Test Plex migrated YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --migration --env-file test/ci_plex.env --check plex
+
+      - name: "Test Plex prefixed YAML"
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_prefixed.env --yaml-file test/ci_plex.yaml --check plex
+
+      - name: "Test writing to servers ENV"
         env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          CI_STATE_DIR: ${{ runner.temp }}/jpw-write-env-${{ matrix.variant }}
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --env-file test/ci_write.env --check write --repeat 2 --state-dir "$CI_STATE_DIR"
+
+      - name: "Stop containers before YAML write test"
+        run: JellyPlex-Watched-CI/stop_containers.sh
+
+      - name: "Reset CI server state before YAML write test"
+        working-directory: JellyPlex-Watched-CI
+        run: ./reset.sh
+
+      - name: "Start containers for YAML write test"
+        run: JellyPlex-Watched-CI/start_containers.sh
+
+      - name: "Wait for YAML write test containers"
+        run: sleep 15
+
+      - name: "Test writing to servers YAML"
+        env:
+          CI_STATE_DIR: ${{ runner.temp }}/jpw-write-yaml-${{ matrix.variant }}
+        run: uv run test/run_ci_configuration.py --image "$IMAGE" --yaml-file test/ci_write.yaml --check write --repeat 2 --state-dir "$CI_STATE_DIR"
+
+      - name: "Validate Docker startup paths"
+        run: uv run test/docker_smoke.py --image "$IMAGE"
+
+      - name: Login to DockerHub
         if: "${{ env.DOCKER_USERNAME != '' }}"
         id: docker_login
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Login to GitHub Container Registry
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        if: "${{ github.event_name != 'pull_request' && github.repository_owner == 'luigi311' }}"
+        id: ghcr_login
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -193,11 +326,10 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ steps.docker_login.outcome == 'success' }}
+          push: ${{ steps.docker_login.outcome == 'success' || steps.ghcr_login.outcome == 'success' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
 
-      # Echo digest so users can validate their image
       - name: Image digest
-        if: "${{ steps.docker_meta.outcome == 'success' }}"
+        if: "${{ steps.build_push.outcome == 'success' }}"
         run: echo "${{ steps.build_push.outputs.digest }}"

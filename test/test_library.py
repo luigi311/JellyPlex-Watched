@@ -15,7 +15,7 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.library import combine_library_lists
+from src.library import combine_library_lists  # noqa: E402
 
 
 def test_combine_library_lists_implicit_same_name():
