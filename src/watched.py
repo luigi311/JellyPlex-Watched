@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import copy
 from datetime import datetime
 from enum import IntEnum
-from pydantic import BaseModel, Field
-from loguru import logger
 from typing import Any
 
-from src.functions import search_mapping, to_aware_utc, get_env_value
+from loguru import logger
+from pydantic import BaseModel, Field
+
+from src.functions import to_aware_utc
+from src.settings import AppSettings
 
 
 class Ord(IntEnum):
@@ -53,7 +57,10 @@ class UserData(BaseModel):
 
 
 def compare_media_items(
-    media1: MediaItem, media2: MediaItem, env: dict[str, str | float | None]
+    media1: MediaItem,
+    media2: MediaItem,
+    settings: AppSettings,
+    average_time: float,
 ) -> Ord:
     logger.trace(
         "Comparing the following media items:"
@@ -83,9 +90,7 @@ def compare_media_items(
     # If both have viewed dates, compare them. If they are close enough, consider it a tie.
     if media1_viewed_date and media2_viewed_date:
         # Define threshold time as 25% above the average time plus sleep duration to account for minor discrepancies in viewing times.
-        threshold_time = (
-            float(get_env_value(env, "AVERAGE_TIME", "100.0")) * 1.25
-        ) + float(get_env_value(env, "SLEEP_DURATION", "5.0"))
+        threshold_time = (average_time * 1.25) + float(settings.sleep_duration)
         # If not within threshold_time of each other, choose the more recent one as better.
         if (
             abs((media1_viewed_date - media2_viewed_date).total_seconds())
@@ -123,7 +128,10 @@ def compare_media_items(
 
 
 def merge_mediaitem_data(
-    media1: MediaItem, media2: MediaItem, env: dict[str, str | float | None]
+    media1: MediaItem,
+    media2: MediaItem,
+    settings: AppSettings,
+    average_time: float,
 ) -> MediaItem:
     """
     Merge two MediaItem episodes by comparing their watched status.
@@ -131,12 +139,12 @@ def merge_mediaitem_data(
     If both are completed or both are not, choose the one with the higher time.
     """
 
-    ord_ = compare_media_items(media1, media2, env)
+    ord_ = compare_media_items(media1, media2, settings, average_time)
     return media1 if ord_ in (Ord.A_BETTER, Ord.TIE) else media2
 
 
 def merge_series_data(
-    series1: Series, series2: Series, env: dict[str, str | float | None]
+    series1: Series, series2: Series, settings: AppSettings, average_time: float
 ) -> Series:
     """
     Merge two Series objects by combining their episodes.
@@ -146,7 +154,9 @@ def merge_series_data(
     for ep in series2.episodes:
         for idx, merged_ep in enumerate(merged_series.episodes):
             if check_same_identifiers(ep.identifiers, merged_ep.identifiers):
-                merged_series.episodes[idx] = merge_mediaitem_data(merged_ep, ep, env)
+                merged_series.episodes[idx] = merge_mediaitem_data(
+                    merged_ep, ep, settings, average_time
+                )
                 break
         else:
             merged_series.episodes.append(copy.deepcopy(ep))
@@ -154,7 +164,10 @@ def merge_series_data(
 
 
 def merge_library_data(
-    lib1: LibraryData, lib2: LibraryData, env: dict[str, str | float | None]
+    lib1: LibraryData,
+    lib2: LibraryData,
+    settings: AppSettings,
+    average_time: float,
 ) -> LibraryData:
     """
     Merge two LibraryData objects by extending movies and merging series.
@@ -166,7 +179,9 @@ def merge_library_data(
     for movie in lib2.movies:
         for idx, merged_movie in enumerate(merged.movies):
             if check_same_identifiers(movie.identifiers, merged_movie.identifiers):
-                merged.movies[idx] = merge_mediaitem_data(merged_movie, movie, env)
+                merged.movies[idx] = merge_mediaitem_data(
+                    merged_movie, movie, settings, average_time
+                )
                 break
         else:
             merged.movies.append(copy.deepcopy(movie))
@@ -175,7 +190,9 @@ def merge_library_data(
     for series2 in lib2.series:
         for idx, series1 in enumerate(merged.series):
             if check_same_identifiers(series1.identifiers, series2.identifiers):
-                merged.series[idx] = merge_series_data(series1, series2, env)
+                merged.series[idx] = merge_series_data(
+                    series1, series2, settings, average_time
+                )
                 break
         else:
             merged.series.append(copy.deepcopy(series2))
@@ -183,56 +200,113 @@ def merge_library_data(
     return merged
 
 
-def merge_user_data(
-    user1: UserData, user2: UserData, env: dict[str, str | float | None]
-) -> UserData:
+def find_target_user_keys(
+    settings: AppSettings,
+    source_server: str,
+    source_user: str,
+    target_server: str,
+    target_watched: dict[str, Any],
+) -> list[str]:
     """
-    Merge two UserData objects by merging their libraries.
-    If a library exists in both, merge its content; otherwise, add the new library.
+    Find every key in `target_watched` that corresponds to `source_user` (as
+    known on `source_server`) on `target_server`.
+
+    Resolves candidate target usernames via settings.sync_targets_for_user
+    (which handles explicit user_mappings aliases plus the implicit
+    same-username fallback) and returns *every* candidate that is actually
+    present as a key in `target_watched`. A single source user may fan out
+    to multiple target users (e.g. a shared family Plex account mapping to
+    several individual Jellyfin users), so this returns a list. Keys in the
+    watched dicts are the literal names each server reports (lowercased), so
+    matching is done on lowercased names.
     """
-    merged_libraries = copy.deepcopy(user1.libraries)
-    for lib_key, lib_data in user2.libraries.items():
-        if lib_key in merged_libraries:
-            merged_libraries[lib_key] = merge_library_data(
-                merged_libraries[lib_key], lib_data, env
-            )
-        else:
-            merged_libraries[lib_key] = copy.deepcopy(lib_data)
-    return UserData(libraries=merged_libraries)
+    matched: list[str] = []
+    for target in settings.sync_targets_for_user(
+        source_server, source_user, target_server
+    ):
+        if target in target_watched:
+            matched.append(target)
+        elif target.lower() in target_watched:
+            matched.append(target.lower())
+    return matched
+
+
+def find_target_library_keys(
+    settings: AppSettings,
+    source_server: str,
+    source_library: str,
+    target_server: str,
+    target_libraries: dict[str, Any],
+) -> list[str]:
+    """
+    Library counterpart of find_target_user_keys. Resolves candidate target
+    library names via settings.sync_targets_for_library and returns every one
+    present in `target_libraries` (libraries can fan out too).
+    """
+    matched: list[str] = []
+    for target in settings.sync_targets_for_library(
+        source_server, source_library, target_server
+    ):
+        if target in target_libraries:
+            matched.append(target)
+        elif target.lower() in target_libraries:
+            matched.append(target.lower())
+    return matched
 
 
 def merge_server_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
-    env: dict[str, str | float | None],
-    user_mapping: dict[str, str] | None = None,
-    library_mapping: dict[str, str] | None = None,
+    server_1_name: str,
+    server_2_name: str,
+    settings: AppSettings,
+    average_time: float,
 ) -> dict[str, UserData]:
     """
     Merge two dictionaries of UserData while taking into account possible
-    differences in user and library keys via the provided mappings.
+    differences in user and library keys.
+
+    User/library correspondence between the two servers is resolved through
+    the settings model (sync_targets_for_user / sync_targets_for_library),
+    so explicit mappings and the implicit same-name fallback are both
+    handled. server_1 / server_2 supply the configured server names that the
+    settings lookups key off of.
     """
     merged_watched = copy.deepcopy(watched_list_1)
 
     for user_2, user_data in watched_list_2.items():
-        # Determine matching user key.
-        user_key = user_mapping.get(user_2, user_2) if user_mapping else user_2
-        if user_key not in merged_watched:
+        # A server_2 user may correspond to multiple server_1 users
+        # (fan-out). Merge this user's data into every matching server_1 key.
+        user_keys = find_target_user_keys(
+            settings, server_2_name, user_2, server_1_name, merged_watched
+        )
+        if not user_keys:
             merged_watched[user_2] = copy.deepcopy(user_data)
             continue
 
-        for lib_key, lib_data in user_data.libraries.items():
-            mapped_lib_key = (
-                library_mapping.get(lib_key, lib_key) if library_mapping else lib_key
-            )
-            if mapped_lib_key not in merged_watched[user_key].libraries:
-                merged_watched[user_key].libraries[lib_key] = copy.deepcopy(lib_data)
-            else:
-                merged_watched[user_key].libraries[mapped_lib_key] = merge_library_data(
-                    merged_watched[user_key].libraries[mapped_lib_key],
-                    lib_data,
-                    env,
+        for user_key in user_keys:
+            for lib_key, lib_data in user_data.libraries.items():
+                mapped_lib_keys = find_target_library_keys(
+                    settings,
+                    server_2_name,
+                    lib_key,
+                    server_1_name,
+                    merged_watched[user_key].libraries,
                 )
+                if not mapped_lib_keys:
+                    merged_watched[user_key].libraries[lib_key] = copy.deepcopy(
+                        lib_data
+                    )
+                else:
+                    for mapped_lib_key in mapped_lib_keys:
+                        merged_watched[user_key].libraries[mapped_lib_key] = (
+                            merge_library_data(
+                                merged_watched[user_key].libraries[mapped_lib_key],
+                                lib_data,
+                                settings,
+                                average_time,
+                            )
+                        )
 
     return merged_watched
 
@@ -255,7 +329,10 @@ def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> 
 
 
 def check_remove_entry(
-    item1: MediaItem, item2: MediaItem, env: dict[str, str | float | None]
+    item1: MediaItem,
+    item2: MediaItem,
+    settings: AppSettings,
+    average_time: float,
 ) -> bool:
     """
     Returns True if item1 (from watched_list_1) should be removed
@@ -265,45 +342,62 @@ def check_remove_entry(
         return False
 
     # Removal policy for cleanup: drop item1 if item2 is as-good-or-better.
-    return compare_media_items(item1, item2, env) in (Ord.B_BETTER, Ord.TIE)
+    return compare_media_items(item1, item2, settings, average_time) in (
+        Ord.B_BETTER,
+        Ord.TIE,
+    )
 
 
 def cleanup_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
-    env: dict[str, str | float | None],
-    user_mapping: dict[str, str] | None = None,
-    library_mapping: dict[str, str] | None = None,
+    server_1_name: str,
+    server_2_name: str,
+    settings: AppSettings,
+    average_time: float,
 ) -> dict[str, UserData]:
     modified_watched_list_1 = copy.deepcopy(watched_list_1)
 
     # remove entries from watched_list_1 that are in watched_list_2
     for user_1 in watched_list_1:
-        user_other = None
-        if user_mapping:
-            user_other = search_mapping(user_mapping, user_1)
-        user_2 = get_other(watched_list_2, user_1, user_other)
-        if user_2 is None:
+        # A server_1 user may correspond to multiple server_2 users
+        # (fan-out). An item is eligible for removal if it's already watched
+        # on ANY of the matched server_2 users.
+        user_2_keys = find_target_user_keys(
+            settings, server_1_name, user_1, server_2_name, watched_list_2
+        )
+        if not user_2_keys:
             continue
 
         for library_1_key in watched_list_1[user_1].libraries:
-            library_other = None
-            if library_mapping:
-                library_other = search_mapping(library_mapping, library_1_key)
-            library_2_key = get_other(
-                watched_list_2[user_2].libraries, library_1_key, library_other
-            )
-            if library_2_key is None:
+            # Gather every matching server_2 library across all matched
+            # server_2 users, and pool their movies/series so a "watched on
+            # the other side" check considers all fan-out targets together.
+            pooled_movies: list[MediaItem] = []
+            pooled_series: list[Series] = []
+            for user_2 in user_2_keys:
+                library_2_keys = find_target_library_keys(
+                    settings,
+                    server_1_name,
+                    library_1_key,
+                    server_2_name,
+                    watched_list_2[user_2].libraries,
+                )
+                for library_2_key in library_2_keys:
+                    library_2 = watched_list_2[user_2].libraries[library_2_key]
+                    pooled_movies.extend(library_2.movies)
+                    pooled_series.extend(library_2.series)
+
+            if not pooled_movies and not pooled_series:
                 continue
 
             library_1 = watched_list_1[user_1].libraries[library_1_key]
-            library_2 = watched_list_2[user_2].libraries[library_2_key]
 
             filtered_movies = []
             for movie in library_1.movies:
                 remove_flag = False
-                for movie2 in library_2.movies:
-                    if check_remove_entry(movie, movie2, env):
+                for movie2 in pooled_movies:
+                    if check_remove_entry(movie, movie2, settings, average_time):
                         logger.trace(f"Removing movie: {movie.identifiers.title}")
                         remove_flag = True
                         break
@@ -318,22 +412,23 @@ def cleanup_watched(
             # TV Shows
             filtered_series_list = []
             for series1 in library_1.series:
-                matching_series = None
-                for series2 in library_2.series:
+                # Collect every matching show across the pooled targets, then
+                # treat their episodes as one pool for removal decisions.
+                matching_episodes: list[MediaItem] = []
+                for series2 in pooled_series:
                     if check_same_identifiers(series1.identifiers, series2.identifiers):
-                        matching_series = series2
-                        break
+                        matching_episodes.extend(series2.episodes)
 
-                if matching_series is None:
-                    # No matching show in watched_list_2; keep the series as is.
+                if not matching_episodes:
+                    # No matching show on any target; keep the series as is.
                     filtered_series_list.append(series1)
                 else:
                     # We have a matching show; now clean up the episodes.
                     filtered_episodes = []
                     for ep1 in series1.episodes:
                         remove_flag = False
-                        for ep2 in matching_series.episodes:
-                            if check_remove_entry(ep1, ep2, env):
+                        for ep2 in matching_episodes:
+                            if check_remove_entry(ep1, ep2, settings, average_time):
                                 logger.trace(
                                     f"Removing episode '{ep1.identifiers.title}' from show '{series1.identifiers.title}'",
                                 )
@@ -366,19 +461,3 @@ def cleanup_watched(
         user_data.libraries = new_libraries
 
     return modified_watched_list_1
-
-
-def get_other(
-    watched_list: dict[str, Any], object_1: str, object_2: str | None
-) -> str | None:
-    if object_1 in watched_list:
-        return object_1
-
-    if object_2 and object_2 in watched_list:
-        return object_2
-
-    logger.info(
-        f"{object_1}{' and ' + object_2 if object_2 else ''} not found in watched list 2"
-    )
-
-    return None

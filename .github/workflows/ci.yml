@@ -11,7 +11,7 @@ on:
       - "*.md"
 
 env:
-  PYTHON_VERSION: '3.13'
+  PYTHON_VERSION: "3.13"
 
 jobs:
   pytest:
@@ -32,7 +32,7 @@ jobs:
 
       - name: "Run tests"
         run: uv run pytest -vvv
-  
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -72,36 +72,36 @@ jobs:
         run: |
           ENV_FILE="test/ci_plex.env" uv run main.py
           uv run test/validate_ci_marklog.py --plex
-          
-          rm mark.log
-          
+
+          rm mark.log config.yaml
+
       - name: "Test Jellyfin"
         run: |
           ENV_FILE="test/ci_jellyfin.env" uv run main.py
           uv run test/validate_ci_marklog.py --jellyfin
-          
-          rm mark.log
+
+          rm mark.log config.yaml
 
       - name: "Test Emby"
         run: |
           ENV_FILE="test/ci_emby.env" uv run main.py
           uv run test/validate_ci_marklog.py --emby
-          
-          rm mark.log
+
+          rm mark.log config.yaml
 
       - name: "Test Guids"
         run: |
           ENV_FILE="test/ci_guids.env" uv run main.py
           uv run test/validate_ci_marklog.py --guids
-          
-          rm mark.log
+
+          rm mark.log config.yaml
 
       - name: "Test Locations"
         run: |
           ENV_FILE="test/ci_locations.env" uv run main.py
           uv run test/validate_ci_marklog.py --locations
-          
-          rm mark.log
+
+          rm mark.log config.yaml
 
       - name: "Test writing to the servers"
         run: |
@@ -112,8 +112,8 @@ jobs:
           ENV_FILE="test/ci_write.env" uv run main.py
 
           uv run test/validate_ci_marklog.py --write
-          
-          rm mark.log
+
+          rm mark.log config.yaml
 
   docker:
     runs-on: ubuntu-latest

@@ -23,12 +23,12 @@ if [ "$(id -u)" = '0' ]; then
             # Get the group name based on the PGID since adduser does not have a flag to specify the group id
             # and if the group id already exists the group name will be sommething unexpected
             GROUPNAME=$(getent group "$PGID" | cut -d: -f1)
-            
+
             # Use alpine busybox adduser syntax
             adduser -D -H -u "$PUID" -G "$GROUPNAME" jellyplex_watched
         fi
     fi
-else 
+else
     # If user is not root, set the PUID and PGID to the current user
     PUID=$(id -u)
     PGID=$(id -g)
@@ -43,14 +43,22 @@ fi
 
 MARK_DIR=$(dirname "$MARK_FILE")
 if [ -n "$MARK_DIR" ]; then
-    mkdir -p "$MARK_DIR"  
+    mkdir -p "$MARK_DIR"
 fi
 
 echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
 
+# Copy sample config yaml to the config dir for the user to have a template
+CONF_DIR="/app/config"
+if [ -n "$CONF_DIR" ]; then
+    mkdir -p "$CONF_DIR"
+fi
+cp /app/sample.config.yaml "${CONF_DIR}/sample.config.yaml"
+
 # If root run as the created user
 if [ "$(id -u)" = '0' ]; then
     chown -R "$PUID:$PGID" /app/.venv
+    chown -R "$PUID:$PGID" "$CONF_DIR"
     chown -R "$PUID:$PGID" "$LOG_DIR"
     chown -R "$PUID:$PGID" "$MARK_DIR"
 

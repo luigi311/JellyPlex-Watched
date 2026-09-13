@@ -1,17 +1,23 @@
-from src.jellyfin_emby import JellyfinEmby
-from packaging.version import parse, Version
 from loguru import logger
+from packaging.version import Version, parse
+
+from src.jellyfin_emby import JellyfinEmby
+from src.settings import AppSettings, JellyfinSettings
 
 
 class Jellyfin(JellyfinEmby):
-    def __init__(self, env, base_url: str, token: str) -> None:
+    def __init__(
+        self,
+        app_settings: AppSettings,
+        server_settings: JellyfinSettings,
+    ) -> None:
         authorization = (
             "MediaBrowser , "
             'Client="JellyPlex-Watched", '
             'Device="script", '
             'DeviceId="script", '
             'Version="6.0.2", '
-            f'Token="{token}"'
+            f'Token="{server_settings.token.get_secret_value()}"'
         )
         headers = {
             "Accept": "application/json",
@@ -19,7 +25,10 @@ class Jellyfin(JellyfinEmby):
         }
 
         super().__init__(
-            env, server_type="Jellyfin", base_url=base_url, token=token, headers=headers
+            app_settings=app_settings,
+            server_settings=server_settings,
+            server_type="Jellyfin",
+            headers=headers,
         )
 
     def is_partial_update_supported(self, server_version: Version) -> bool:
