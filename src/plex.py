@@ -241,6 +241,25 @@ class Plex:
             logger.error(f"Plex: Failed to get libraries, Error: {e}")
             raise Exception(e)
 
+    def get_user_libraries(
+        self, user: MyPlexUser | MyPlexAccount,
+    ) -> dict[str, str]:
+        """Return supported sections using this user's server access."""
+        if user == self.admin_user:
+            user_plex = self.plex
+        elif isinstance(user, MyPlexUser):
+            token = user.get_token(self.plex.machineIdentifier)
+            if not token:
+                return {}
+            user_plex = self.login(self.base_url, token, None, None, None)
+        else:
+            return {}
+        return {
+            library.title: library.type
+            for library in user_plex.library.sections()
+            if library.type in {"movie", "show"}
+        }
+
     def get_user_library_watched(
         self, user_name: str, user_plex: PlexServer, library: MovieSection | ShowSection
     ) -> LibraryData:

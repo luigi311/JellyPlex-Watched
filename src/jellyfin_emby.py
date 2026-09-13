@@ -229,74 +229,73 @@ class JellyfinEmby:
             raise Exception(e)
 
     def get_libraries(self) -> dict[str, str]:
-        try:
-            libraries: dict[str, str] = {}
+        libraries: dict[str, str] = {}
+        for user in self.users.items():
+            libraries.update(self.get_user_libraries(user))
+        return libraries
 
-            # Theres no way to get all libraries so individually get list of libraries from all users
-            users = self.get_users()
+    def get_user_libraries(self, user: tuple[str, str]) -> dict[str, str]:
+        """Return supported libraries visible to this specific user."""
+        user_name, user_id = user
+        libraries: dict[str, str] = {}
+        user_libraries = self.query(f"/Users/{user_id}/Views", "get")
 
-            for user_name, user_id in users.items():
-                user_libraries = self.query(f"/Users/{user_id}/Views", "get")
+        if not user_libraries or not isinstance(user_libraries, dict):
+            logger.error(
+                f"{self.server_type}: Failed to get libraries for {user_name}"
+            )
+            return libraries
 
-                if not user_libraries or not isinstance(user_libraries, dict):
-                    logger.error(
-                        f"{self.server_type}: Failed to get libraries for {user_name}"
-                    )
-                    return libraries
+        logger.debug(
+            f"{self.server_type}: All Libraries for {user_name} {[library.get('Name') for library in user_libraries.get('Items', [])]}"
+        )
 
-                logger.debug(
-                    f"{self.server_type}: All Libraries for {user_name} {[library.get('Name') for library in user_libraries.get('Items', [])]}"
+        for library in user_libraries.get("Items", []):
+            library_title = library.get("Name")
+            library_type = library.get("CollectionType")
+
+            # If collection type is not set, fallback based on media files
+            if not library_type:
+                library_id = library.get("Id")
+                # Get first 100 items in library
+                library_items = self.query(
+                    f"/Users/{user_id}/Items"
+                    + f"?ParentId={library_id}&Recursive=True&excludeItemTypes=Folder&limit=100",
+                    "get",
                 )
 
-                for library in user_libraries.get("Items", []):
-                    library_title = library.get("Name")
-                    library_type = library.get("CollectionType")
+                if not library_items or not isinstance(library_items, dict):
+                    logger.debug(
+                        f"{self.server_type}: Failed to get library items for {user_name} {library_title}"
+                    )
+                    continue
 
-                    # If collection type is not set, fallback based on media files
-                    if not library_type:
-                        library_id = library.get("Id")
-                        # Get first 100 items in library
-                        library_items = self.query(
-                            f"/Users/{user_id}/Items"
-                            + f"?ParentId={library_id}&Recursive=True&excludeItemTypes=Folder&limit=100",
-                            "get",
-                        )
+                all_types = set(
+                    [x.get("Type") for x in library_items.get("Items", [])]
+                )
+                types = set([x for x in all_types if x in ["Movie", "Episode"]])
 
-                        if not library_items or not isinstance(library_items, dict):
-                            logger.debug(
-                                f"{self.server_type}: Failed to get library items for {user_name} {library_title}"
-                            )
-                            continue
+                if not len(types) == 1:
+                    logger.debug(
+                        f"{self.server_type}: Skipping Library {library_title} didn't find just a single type, found {all_types}",
+                    )
+                    continue
 
-                        all_types = set(
-                            [x.get("Type") for x in library_items.get("Items", [])]
-                        )
-                        types = set([x for x in all_types if x in ["Movie", "Episode"]])
+                library_type = types.pop()
 
-                        if not len(types) == 1:
-                            logger.debug(
-                                f"{self.server_type}: Skipping Library {library_title} didn't find just a single type, found {all_types}",
-                            )
-                            continue
+                library_type = (
+                    "movies" if library_type == "Movie" else "tvshows"
+                )
 
-                        library_type = types.pop()
+            if library_type not in ["movies", "tvshows"]:
+                logger.debug(
+                    f"{self.server_type}: Skipping Library {library_title} found type {library_type}",
+                )
+                continue
 
-                        library_type = (
-                            "movies" if library_type == "Movie" else "tvshows"
-                        )
+            libraries[library_title] = library_type
 
-                    if library_type not in ["movies", "tvshows"]:
-                        logger.debug(
-                            f"{self.server_type}: Skipping Library {library_title} found type {library_type}",
-                        )
-                        continue
-
-                    libraries[library_title] = library_type
-
-            return libraries
-        except Exception as e:
-            logger.error(f"{self.server_type}: Get libraries failed {e}")
-            raise Exception(e)
+        return libraries
 
     def get_user_library_watched(
         self,
@@ -498,11 +497,16 @@ class JellyfinEmby:
         users: dict[str, str],
         sync_libraries: list[str],
         users_watched: dict[str, UserData] | None = None,
+        *,
+        library_types: dict[str, str] | None = None,
     ) -> dict[str, UserData]:
         try:
             if not users_watched:
                 users_watched: dict[str, UserData] = {}
             sync_library_names = {normalize_name(name) for name in sync_libraries}
+            discovered_types = {
+                normalize_name(name): kind for name, kind in (library_types or {}).items()
+            }
 
             for user_name, user_id in users.items():
                 user_key = normalize_name(user_name)
@@ -519,7 +523,9 @@ class JellyfinEmby:
                 for library in all_libraries.get("Items", []):
                     library_id = library.get("Id")
                     library_title = library.get("Name")
-                    library_type = library.get("CollectionType")
+                    library_type = library.get("CollectionType") or discovered_types.get(
+                        normalize_name(library_title) if library_title else ""
+                    )
 
                     if not library_id or not library_title or not library_type:
                         logger.debug(
@@ -536,11 +542,14 @@ class JellyfinEmby:
                         )
                         continue
 
+                    if library_type != "movies" and library_type != "tvshows":
+                        continue
+
                     # Get watched for user
                     library_data = self.get_user_library_watched(
                         user_name,
                         user_id,
-                        library_type,
+                        "movies" if library_type == "movies" else "tvshows",
                         library_id,
                         library_title,
                     )
