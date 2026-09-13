@@ -701,3 +701,81 @@ def test_simple_cleanup_watched():
 
     assert as_watched_dict(return_watched_list_1) == expected_watched_list_1
     assert as_watched_dict(return_watched_list_2) == expected_watched_list_2
+
+
+def test_cleanup_coalesces_fan_in_updates_independent_of_source_order():
+    settings = settings_override(
+        user_mappings=[
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": "plex-main", "username": "alice"},
+                    {"server": "plex-main", "username": "charlie"},
+                    {"server": "jellyfin-main", "username": "bob"},
+                ],
+            }
+        ]
+    )
+    movie_identifiers = MediaIdentifiers(
+        title="Shared Movie",
+        locations=("shared-movie.mkv",),
+    )
+
+    def source_movie(progress: int) -> MediaItem:
+        return MediaItem(
+            identifiers=movie_identifiers,
+            status=WatchedStatus(
+                completed=False,
+                time=progress,
+                viewed_date=viewed_date,
+            ),
+        )
+
+    target = {
+        "bob": UserData(
+            libraries={"Movies": LibraryData(title="Movies")},
+        )
+    }
+    source_users = {
+        "alice": UserData(
+            libraries={
+                "Movies": LibraryData(
+                    title="Movies",
+                    movies=[source_movie(20 * 60 * 1_000)],
+                )
+            }
+        ),
+        "charlie": UserData(
+            libraries={
+                "Movies": LibraryData(
+                    title="Movies",
+                    movies=[source_movie(5 * 60 * 1_000)],
+                )
+            }
+        ),
+    }
+
+    pending = cleanup_watched(
+        source_users,
+        target,
+        "plex-main",
+        "jellyfin-main",
+        settings,
+        average_time=0.0,
+    )
+    reversed_pending = cleanup_watched(
+        dict(reversed(list(source_users.items()))),
+        target,
+        "plex-main",
+        "jellyfin-main",
+        settings,
+        average_time=0.0,
+    )
+
+    assert len(pending) == 1
+    assert len(reversed_pending) == 1
+    assert pending[0].target_user == "bob"
+    assert pending[0].target_library == "Movies"
+    assert pending[0].source_user == "alice"
+    assert pending[0].library_data.movies[0].status.time == 20 * 60 * 1_000
+    assert reversed_pending[0] == pending[0]

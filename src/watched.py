@@ -267,6 +267,59 @@ def merge_library_data(
     return merged
 
 
+def _coalesce_watched_updates(
+    pending_updates: list[WatchedUpdate],
+    settings: AppSettings,
+    average_time: float,
+) -> list[WatchedUpdate]:
+    """Combine competing updates that target the same user and library.
+
+    Fan-in mappings can produce several source updates for one concrete
+    destination. Sort each group by its source identity before merging so
+    equal states are resolved consistently, regardless of source traversal
+    order. Duplicate media items are then reduced with the normal watched
+    state comparison while distinct items remain in the combined update.
+    """
+    grouped: dict[tuple[str, str], list[WatchedUpdate]] = {}
+    for update in pending_updates:
+        destination = (
+            normalize_name(update.target_user),
+            normalize_name(update.target_library),
+        )
+        grouped.setdefault(destination, []).append(update)
+
+    coalesced: list[WatchedUpdate] = []
+    for destination in sorted(grouped):
+        updates = sorted(
+            grouped[destination],
+            key=lambda update: (
+                normalize_name(update.source_user),
+                normalize_name(update.source_library),
+            ),
+        )
+        first = updates[0]
+        library_data = first.library_data
+        for update in updates[1:]:
+            library_data = merge_library_data(
+                library_data,
+                update.library_data,
+                settings,
+                average_time,
+            )
+
+        coalesced.append(
+            WatchedUpdate(
+                source_user=first.source_user,
+                target_user=first.target_user,
+                source_library=first.source_library,
+                target_library=first.target_library,
+                library_data=library_data,
+            )
+        )
+
+    return coalesced
+
+
 def find_target_user_keys(
     settings: AppSettings,
     source_server: str,
@@ -521,4 +574,4 @@ def cleanup_watched(
                 )
             )
 
-    return pending_updates
+    return _coalesce_watched_updates(pending_updates, settings, average_time)
