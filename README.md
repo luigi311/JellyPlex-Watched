@@ -49,6 +49,29 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 
 Full list of configuration options can be found in the [.env.sample](.env.sample)
 
+Credentials may be stored in YAML or supplied through supported environment
+variables; environment values override matching YAML values. YAML credentials
+are plaintext, so keep `config.yaml` restricted to the application user and
+never commit it. Docker secret files are not loaded automatically; inject
+secret values through the supported environment variables or create a protected
+YAML file.
+
+New-style environment overrides use the `JPW_` prefix and Pydantic's normal
+JSON syntax for list values, such as `JPW_WHITELIST_USERS='["alice", "bob"]'`.
+Existing unprefixed legacy variables, including comma-separated lists, remain
+supported during the migration.
+
+Configuration sources are applied in this order, from highest to lowest:
+explicit constructor values, `JPW_` process variables, `JPW_` values in the
+selected dotenv file, legacy process variables, legacy values in the selected
+dotenv file, the selected YAML file, and field defaults. `ENV_FILE` and
+`YAML_FILE` continue to select the dotenv and YAML paths.
+
+For new-style values, an absent, empty, or valueless entry inherits from the
+next source. Use JSON `[]` when an empty list should replace a YAML list;
+malformed JSON is rejected. Legacy empty and valueless entries remain unset
+after process/file precedence is resolved and do not fall back to the file.
+
 ## Installation
 
 ### Baremetal
@@ -88,6 +111,13 @@ Full list of configuration options can be found in the [.env.sample](.env.sample
   ```bash
   docker run --rm -it -e PLEX_TOKEN='SuperSecretToken' luigi311/jellyplex-watched:latest
   ```
+
+To replace credentials for servers already defined in YAML, use a named JSON
+map such as `JPW_SERVER_TOKENS='{"plex-main":"replacement-token"}'`. The
+server name must match exactly; the replacement keeps its URL, sync directions,
+and mappings. A Plex replacement selects token authentication and clears the
+username/password/server name fields. A legacy `PLEX_TOKEN` without
+`PLEX_BASEURL` is supported when exactly one YAML Plex server exists.
 
 #### With .env
 

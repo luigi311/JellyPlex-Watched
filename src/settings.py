@@ -49,33 +49,49 @@ Backward compatibility:
 
 Settings priority (highest to lowest):
     1. Explicit kwargs to AppSettings(...)
-    2. Standard env vars / .env entries matching new field names
-    3. Legacy .env entries (translated to new fields each load)
-    4. config.yaml
-    5. Field defaults
+    2. `JPW_`-prefixed process environment variables
+    3. `JPW_`-prefixed values in the selected dotenv file
+    4. Legacy process environment variables
+    5. Legacy values in the selected dotenv file
+    6. config.yaml
+    7. Field defaults
+
+    An absent, empty, or valueless new-style input is omitted so the next
+    lower-priority source remains effective. Use JSON ``[]`` to explicitly
+    replace a list with an empty list. Malformed new-style JSON is rejected.
+    Legacy empty and valueless inputs are also treated as unset after their
+    process-versus-file precedence decision, without falling back to the
+    lower-priority value.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from dotenv import dotenv_values
 from loguru import logger
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     PrivateAttr,
     SecretStr,
+    ValidationError,
     field_validator,
     model_validator,
 )
 from pydantic_settings import (
     BaseSettings,
+    DotEnvSettingsSource,
+    EnvSettingsSource,
     PydanticBaseSettingsSource,
+    SettingsError,
     SettingsConfigDict,
     YamlConfigSettingsSource,
 )
@@ -84,8 +100,130 @@ from src.functions import get_env_value
 from src.legacy_settings import (
     LEGACY_ENV_VARS,
     LegacyEnvSettingsSource,
-    legacy_env_to_field_dict,
 )
+
+_SERVER_TOKENS_ENV_NAME = "SERVER_TOKENS"
+_SERVER_TOKEN_OVERRIDES_KEY = "_server_token_overrides"
+_LEGACY_PLEX_TOKEN_OVERRIDE_KEY = "_legacy_plex_token_override"
+
+
+def _find_prefixed_env_value(
+    env_vars: Mapping[str, str | None],
+    env_name: str,
+) -> str | None:
+    """Find an environment value using the source's case-insensitive names."""
+    for key, value in env_vars.items():
+        if key.casefold() == env_name.casefold():
+            return value
+    return None
+
+
+def _parse_server_token_overrides(value: Any, source_name: str) -> dict[str, str]:
+    """Parse the JSON credential map without including credentials in errors."""
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except (TypeError, ValueError):
+        raise SettingsError(
+            f'error parsing value for field "server_tokens" from source "{source_name}"'
+        ) from None
+
+    if not isinstance(parsed, dict):
+        raise SettingsError(
+            f'error parsing value for field "server_tokens" from source "{source_name}"'
+        )
+
+    overrides: dict[str, str] = {}
+    for server_name, token in parsed.items():
+        if (
+            not isinstance(server_name, str)
+            or not server_name
+            or not isinstance(token, str)
+            or not token.strip()
+        ):
+            raise SettingsError(
+                f'error parsing value for field "server_tokens" from source "{source_name}"'
+            )
+        overrides[server_name] = token
+    return overrides
+
+
+def _server_entry_dict(entry: Any) -> dict[str, Any]:
+    """Return a mutable mapping for a pre-validation server entry."""
+    if isinstance(entry, BaseModel):
+        return entry.model_dump()
+    if isinstance(entry, dict):
+        return dict(entry)
+    raise ValueError("server credential overrides require server objects")
+
+
+def _server_entries_for_override(data: dict[str, Any], field_name: str) -> list[dict[str, Any]]:
+    """Copy one server list so a credential patch preserves its other fields."""
+    entries = data.get(field_name)
+    if entries is None:
+        return []
+    if not isinstance(entries, (list, tuple)):
+        raise ValueError(f"{field_name} must be a list of server objects")
+    return [_server_entry_dict(entry) for entry in entries]
+
+
+def _patch_server_credentials(
+    data: dict[str, Any],
+    overrides: dict[str, str],
+) -> None:
+    """Patch named server credentials in the resolved pre-validation data."""
+    if not overrides:
+        raise ValueError("server credential override did not name a server")
+
+    server_lists = {
+        field_name: _server_entries_for_override(data, field_name)
+        for field_name in ("plex", "jellyfin", "emby")
+    }
+    matches: dict[str, tuple[str, dict[str, Any]]] = {}
+    for field_name, entries in server_lists.items():
+        for entry in entries:
+            name = entry.get("name")
+            if isinstance(name, str):
+                matches.setdefault(name, (field_name, entry))
+
+    unknown_names = sorted(set(overrides) - set(matches))
+    if unknown_names:
+        raise ValueError(
+            "server credential override references unknown server name(s): "
+            f"{unknown_names}"
+        )
+
+    for name, token in overrides.items():
+        field_name, entry = matches[name]
+        entry["token"] = token
+        if field_name == "plex":
+            for auth_field in ("username", "password", "servername"):
+                entry.pop(auth_field, None)
+
+    for field_name, entries in server_lists.items():
+        if field_name in data:
+            data[field_name] = entries
+
+
+def _patch_legacy_plex_token(data: dict[str, Any], tokens: list[str]) -> None:
+    """Apply a token-only legacy Plex value to exactly one configured server."""
+    if len(tokens) != 1:
+        raise ValueError(
+            "legacy PLEX_TOKEN without PLEX_BASEURL requires exactly one token"
+        )
+
+    plex_servers = _server_entries_for_override(data, "plex")
+    if len(plex_servers) != 1:
+        raise ValueError(
+            "legacy PLEX_TOKEN without PLEX_BASEURL requires exactly one "
+            f"configured Plex server; found {len(plex_servers)}"
+        )
+
+    entry = plex_servers[0]
+    entry["token"] = tokens[0]
+    for auth_field in ("username", "password", "servername"):
+        entry.pop(auth_field, None)
+    data["plex"] = plex_servers
+
 
 # ---------------------------------------------------------------------------
 # Server configurations
@@ -93,6 +231,8 @@ from src.legacy_settings import (
 
 
 class _ServerBase(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     name: str = Field(
         ...,
         description="User-defined identifier, unique across all servers.",
@@ -163,11 +303,15 @@ class EmbySettings(_ServerBase):
 
 
 class UserAlias(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     server: str = Field(..., description="Name of a configured server.")
     username: str = Field(..., description="Username of this person on that server.")
 
 
 class UserMapping(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     canonical: str = Field(
         ...,
         description="Internal identifier for this user (used in logs and sync_rules).",
@@ -183,11 +327,15 @@ class UserMapping(BaseModel):
 
 
 class LibraryAlias(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     server: str
     library: str
 
 
 class LibraryMapping(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     canonical: str
     aliases: list[LibraryAlias] = Field(..., min_length=1)
 
@@ -225,7 +373,10 @@ class SyncRule(BaseModel):
     from_: str = Field(..., alias="from", description="Source server name.")
     to: str = Field(..., description="Destination server name.")
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(
+        populate_by_name=True,
+        hide_input_in_errors=True,
+    )
 
 
 class LibrarySyncRule(BaseModel):
@@ -233,7 +384,116 @@ class LibrarySyncRule(BaseModel):
     from_: str = Field(..., alias="from")
     to: str = Field(...)
 
-    model_config = {"populate_by_name": True}
+    model_config = ConfigDict(
+        populate_by_name=True,
+        hide_input_in_errors=True,
+    )
+
+
+class _PrefixedEnvSettingsSource(EnvSettingsSource):
+    """Read process settings and reject unknown names in the new namespace."""
+
+    def __call__(self) -> dict[str, Any]:
+        prefix = (self.env_prefix or "").casefold()
+        server_tokens_name = f"{prefix}{_SERVER_TOKENS_ENV_NAME.casefold()}"
+        recognized_names = {
+            env_name.casefold()
+            for field_name, field in self.settings_cls.model_fields.items()
+            for _, env_name, _ in self._extract_field_info(field, field_name)
+        }
+        recognized_names.add(server_tokens_name)
+        unknown_names = sorted(
+            env_name
+            for env_name in self.env_vars
+            if env_name.casefold().startswith(prefix)
+            and env_name.casefold() not in recognized_names
+        )
+        if unknown_names:
+            raise SettingsError(
+                "unsupported prefixed environment setting(s): "
+                + ", ".join(unknown_names)
+            )
+        data = super().__call__()
+        raw_server_tokens = _find_prefixed_env_value(
+            self.env_vars,
+            f"{self.env_prefix or ''}{_SERVER_TOKENS_ENV_NAME}",
+        )
+        if raw_server_tokens not in (None, ""):
+            parsed = _parse_server_token_overrides(raw_server_tokens, "environment")
+            # A dict value would be recursively merged by pydantic-settings
+            # with a lower-priority source. Keep the parsed map opaque until
+            # the before-validator so source precedence replaces it wholesale.
+            data[_SERVER_TOKEN_OVERRIDES_KEY] = tuple(parsed.items())
+        return data
+
+
+class _SelectedDotEnvSettingsSource(DotEnvSettingsSource):
+    """Read only prefixed fields from the selected dotenv file.
+
+    ``match_prefix`` keeps recognized legacy names available to the legacy
+    source while retaining strict validation for unknown ``JPW_`` names.
+    """
+
+    def __call__(self) -> dict[str, Any]:
+        self._warn_about_unprefixed_new_fields()
+        data = super().__call__()
+        raw_server_tokens = _find_prefixed_env_value(
+            self.env_vars,
+            f"{self.env_prefix or ''}{_SERVER_TOKENS_ENV_NAME}",
+        )
+        for key in list(data):
+            if key.casefold() == _SERVER_TOKENS_ENV_NAME.casefold():
+                data.pop(key)
+        if raw_server_tokens not in (None, ""):
+            parsed = _parse_server_token_overrides(raw_server_tokens, "dotenv")
+            # See _PrefixedEnvSettingsSource: maps must not be deep-merged
+            # across the process and dotenv sources.
+            data[_SERVER_TOKEN_OVERRIDES_KEY] = tuple(parsed.items())
+        field_names = {
+            field_name.casefold() for field_name in self.settings_cls.model_fields
+        }
+        # ``dotenv_values`` represents a valueless entry as ``None``. Treat
+        # that as an omitted new-style setting while retaining unknown names
+        # so ``extra="forbid"`` can report them to the caller.
+        return {
+            key: value
+            for key, value in data.items()
+            if key.casefold() not in field_names or value is not None
+        }
+
+    def _warn_about_unprefixed_new_fields(self) -> None:
+        field_names = {
+            field_name.casefold() for field_name in self.settings_cls.model_fields
+        }
+        legacy_names = {name.casefold() for name in LEGACY_ENV_VARS}
+        prefix = (self.env_prefix or "").casefold()
+
+        for env_name in self.env_vars:
+            normalized_name = env_name.casefold()
+            if normalized_name.startswith(prefix):
+                continue
+            if normalized_name in field_names and normalized_name not in legacy_names:
+                logger.warning(
+                    "Ignoring unprefixed new-style setting '{}' from the selected "
+                    "dotenv file; use '{}{}' instead.",
+                    env_name,
+                    self.env_prefix,
+                    env_name.upper(),
+                )
+
+
+def _env_source_options(source: EnvSettingsSource) -> dict[str, Any]:
+    """Copy the effective options from a Pydantic environment source."""
+    return {
+        "case_sensitive": source.case_sensitive,
+        "env_prefix": source.env_prefix,
+        "env_prefix_target": source.env_prefix_target,
+        "env_nested_delimiter": source.env_nested_delimiter,
+        "env_nested_max_split": source.env_nested_max_split,
+        "env_ignore_empty": source.env_ignore_empty,
+        "env_parse_none_str": source.env_parse_none_str,
+        "env_parse_enums": source.env_parse_enums,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +505,12 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         yaml_file="config.yaml",
         yaml_file_encoding="utf-8",
+        env_file=".env",
+        env_prefix="JPW_",
+        env_ignore_empty=True,
         nested_model_default_partial_update=True,
         extra="forbid",
+        hide_input_in_errors=True,
     )
 
     # --- operational knobs --------------------------------------------------
@@ -281,6 +545,30 @@ class AppSettings(BaseSettings):
     plex: list[PlexSettings] = []
     jellyfin: list[JellyfinSettings] = []
     emby: list[EmbySettings] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_credential_overrides(cls, data: Any) -> Any:
+        """Apply special credential sources after all ordinary sources merge."""
+        if not isinstance(data, dict):
+            return data
+
+        data = dict(data)
+        legacy_tokens = data.pop(_LEGACY_PLEX_TOKEN_OVERRIDE_KEY, None)
+        if legacy_tokens is not None:
+            _patch_legacy_plex_token(data, legacy_tokens)
+
+        server_tokens = data.pop(_SERVER_TOKEN_OVERRIDES_KEY, None)
+        if server_tokens is not None:
+            if isinstance(server_tokens, dict):
+                overrides = server_tokens
+            else:
+                try:
+                    overrides = dict(server_tokens)
+                except (TypeError, ValueError):
+                    raise ValueError("server credential override is invalid") from None
+            _patch_server_credentials(data, overrides)
+        return data
 
     # ------------------------------------------------------------------ #
     # Pre-built indexes (populated by model_post_init)                    #
@@ -655,6 +943,23 @@ class AppSettings(BaseSettings):
 
         return self
 
+    @model_validator(mode="after")
+    def _validate_minimum_topology(self) -> "AppSettings":
+        servers = self._collect_servers()
+        if len(servers) < 2:
+            raise ValueError(
+                "At least two servers must be configured for synchronization."
+            )
+
+        has_server_direction = any(server.sync_to for server in servers)
+        has_rule_direction = bool(self.sync_rules or self.library_sync_rules)
+        if not has_server_direction and not has_rule_direction:
+            raise ValueError(
+                "At least one sync direction or sync rule must be configured."
+            )
+
+        return self
+
     # ------------------------------------------------------------------ #
     # Public accessors                                                    #
     # ------------------------------------------------------------------ #
@@ -894,8 +1199,6 @@ class AppSettings(BaseSettings):
     # Settings source order                                               #
     # ------------------------------------------------------------------ #
 
-    _legacy_env_path: ClassVar[Path] = Path(".env")
-
     @classmethod
     def settings_customise_sources(
         cls,
@@ -905,11 +1208,30 @@ class AppSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        if not isinstance(env_settings, EnvSettingsSource):
+            raise TypeError("expected Pydantic environment source")
+        if not isinstance(dotenv_settings, DotEnvSettingsSource):
+            raise TypeError("expected Pydantic dotenv source")
+
+        selected_dotenv_settings = _SelectedDotEnvSettingsSource(
+            settings_cls,
+            env_file=dotenv_settings.env_file,
+            env_file_encoding=dotenv_settings.env_file_encoding,
+            dotenv_filtering="match_prefix",
+            **_env_source_options(dotenv_settings),
+        )
         return (
             init_settings,
-            env_settings,
-            dotenv_settings,
-            LegacyEnvSettingsSource(settings_cls, cls._legacy_env_path),
+            _PrefixedEnvSettingsSource(
+                settings_cls,
+                **_env_source_options(env_settings),
+            ),
+            selected_dotenv_settings,
+            LegacyEnvSettingsSource(
+                settings_cls,
+                dotenv_settings.env_file,
+                dotenv_settings.env_file_encoding,
+            ),
             YamlConfigSettingsSource(settings_cls),
             file_secret_settings,
         )
@@ -936,7 +1258,9 @@ def _dump_for_yaml(model: Any) -> Any:
         out: dict[str, Any] = {}
         for name in type(model).model_fields:
             if name in set_fields:
-                out[name] = _dump_for_yaml(getattr(model, name))
+                field_info = type(model).model_fields[name]
+                output_name = field_info.alias or name
+                out[output_name] = _dump_for_yaml(getattr(model, name))
         return out
     if isinstance(model, SecretStr):
         return model.get_secret_value()
@@ -967,9 +1291,74 @@ _MIGRATION_HEADER = """\
 #   username is identical on every server — the sync engine will match
 #   them automatically.
 #
-# Tokens are stored in plaintext here. Set restrictive permissions:
+# Tokens are stored in plaintext here for migration compatibility. Keep this
+# file at mode 0600 and never commit it. Supported environment variables (for
+# example PLEX_TOKEN, JELLYFIN_TOKEN, and EMBY_TOKEN) can override YAML values.
+# Docker secret files are not loaded automatically; inject their values through
+# supported environment variables or create a protected YAML file.
+#
+# Set restrictive permissions:
 #     chmod 600 config.yaml
 """
+
+
+def _format_migration_error(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        details = []
+        for detail in error.errors(include_context=False, include_input=False):
+            location = ".".join(str(part) for part in detail["loc"]) or "configuration"
+            details.append(f"{location}: {detail['msg']}")
+        return "configuration validation failed: " + "; ".join(details)
+
+    if isinstance(error, SettingsError):
+        return "configuration source error"
+
+    if isinstance(error, yaml.YAMLError):
+        return "invalid YAML configuration"
+
+    if isinstance(error, OSError):
+        return "could not write the protected migration file"
+
+    return "configuration migration failed"
+
+
+def _write_migration_yaml(yaml_path: Path, data: Any) -> None:
+    """Write migration output atomically with restrictive permissions."""
+    if os.path.lexists(yaml_path):
+        raise FileExistsError("migration destination already exists")
+
+    file_descriptor: int | None = None
+    temporary_path: Path | None = None
+    try:
+        file_descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{yaml_path.name}.",
+            dir=yaml_path.parent,
+            text=True,
+        )
+        temporary_path = Path(temporary_name)
+
+        temporary_file = os.fdopen(file_descriptor, "w", encoding="utf-8")
+        file_descriptor = None
+        with temporary_file as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(_MIGRATION_HEADER)
+            stream.write("\n")
+            yaml.safe_dump(data, stream, sort_keys=False, default_flow_style=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        if os.path.lexists(yaml_path):
+            raise FileExistsError("migration destination appeared during migration")
+        os.replace(temporary_path, yaml_path)
+        temporary_path = None
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _migrate_env_to_yaml(env_path: Path, yaml_path: Path) -> bool:
@@ -980,75 +1369,30 @@ def _migrate_env_to_yaml(env_path: Path, yaml_path: Path) -> bool:
     based config so the user's setup keeps working.
     """
     try:
-        # Load the .env into a dict and resolve every legacy var through
-        # get_env_value so process env overrides the file, exactly like
-        # the LegacyEnvSettingsSource does at runtime.
-        env = dict(dotenv_values(env_path))
-        resolved: dict[str, str | None] = {}
-        for key in LEGACY_ENV_VARS:
-            value = get_env_value(env, key)
-            if value is not None:
-                resolved[key] = value
-
-        if not resolved:
-            return False
-        if not (set(resolved.keys()) & LEGACY_ENV_VARS):
-            return False
-
-        field_dict = legacy_env_to_field_dict(resolved)
-
-        # Validate purely from field_dict. We must NOT go through the normal
-        # AppSettings(...) construction here, because that re-runs the full
-        # settings source chain — including the base class's
-        # LegacyEnvSettingsSource, which is hardcoded to read ".env". That
-        # would merge the real .env into the migration output even though we
-        # were asked to migrate a different env_file. Suppress every external
-        # source so only field_dict (derived from THIS env_file) is used.
+        # Use the production source chain with YAML disabled. Passing the
+        # selected file explicitly keeps migration aligned with normal loading
+        # while preventing the repository's default .env/config.yaml from
+        # contaminating the generated file.
         class _MigrationModel(AppSettings):
-            # model_config is MERGED across inheritance in pydantic-settings,
-            # so the base AppSettings's yaml_file/yaml_file_encoding survive
-            # unless explicitly cleared. We have no YAML source here (see
-            # settings_customise_sources below), so set them to None to avoid
-            # the "config key ignored" UserWarning.
             model_config = SettingsConfigDict(
                 yaml_file=None,
                 yaml_file_encoding=None,
+                env_file=None,
                 nested_model_default_partial_update=True,
                 extra="forbid",
+                hide_input_in_errors=True,
             )
 
-            @classmethod
-            def settings_customise_sources(
-                cls,
-                settings_cls,
-                init_settings,
-                env_settings,
-                dotenv_settings,
-                file_secret_settings,
-            ):
-                # init_settings carries the kwargs we pass below; everything
-                # else (env vars, .env, legacy .env, YAML) is intentionally
-                # excluded so the migration reflects only this env_file.
-                return (init_settings,)
-
-        settings = _MigrationModel(**field_dict)
+        constructor_options: dict[str, Any] = {"_env_file": env_path}
+        settings = _MigrationModel(**constructor_options)
         data = _dump_for_yaml(settings)
-
-        with yaml_path.open("w", encoding="utf-8") as f:
-            f.write(_MIGRATION_HEADER)
-            f.write("\n")
-            yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
-
-        try:
-            os.chmod(yaml_path, 0o600)
-        except OSError as e:
-            logger.warning(f"Could not set permissions on {yaml_path}: {e}")
+        _write_migration_yaml(yaml_path, data)
 
         return True
-    except Exception as e:
+    except Exception as error:
         logger.warning(
-            f"Auto-migration from {env_path} to {yaml_path} failed: {e}. "
-            "Your existing .env config still works; you can migrate manually later.",
+            "Auto-migration failed safely; your existing legacy environment "
+            f"config still works. {_format_migration_error(error)}.",
         )
         return False
 
@@ -1071,10 +1415,11 @@ def load_settings(
     it falls back to ENV_FILE / ".env" for backward compatibility. `yaml_file`
     works the same way against YAML_FILE / "config.yaml".
 
-    On every load, the legacy .env (if present) is parsed and its values
-    override matching YAML entries — so users on a hybrid setup can keep
-    tweaking their .env and see changes immediately. Environment variables
-    still take precedence over both.
+    On every load, the selected dotenv file (if present) is read by both
+    interfaces: `JPW_`-prefixed values use JSON/Pydantic parsing, while
+    unprefixed legacy values use the compatibility translator. The sources
+    follow the priority documented in the module description, with process
+    values taking precedence over file values within each interface.
 
     On first run after upgrade — if the YAML is missing but a legacy .env
     exists — a config.yaml is also generated as a starter for the new
@@ -1100,9 +1445,11 @@ def load_settings(
         model_config = SettingsConfigDict(
             yaml_file=str(yaml_p),
             yaml_file_encoding="utf-8",
+            env_prefix="JPW_",
             nested_model_default_partial_update=True,
             extra="forbid",
+            hide_input_in_errors=True,
         )
-        _legacy_env_path: ClassVar[Path] = env_p
 
-    return _Configured()
+    constructor_options: dict[str, Any] = {"_env_file": env_p}
+    return _Configured(**constructor_options)

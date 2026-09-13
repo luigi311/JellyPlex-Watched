@@ -140,7 +140,6 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 )
 
 
-@logger.catch
 def main() -> None:
     # Resolve config file paths, honoring ENV_FILE / YAML_FILE overrides and
     # falling back to the conventional defaults. Resolving here keeps the path

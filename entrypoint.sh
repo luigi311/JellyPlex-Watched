@@ -34,20 +34,6 @@ else
     PGID=$(id -g)
 fi
 
-# Get directory of log and mark file to create base folder if it doesnt exist
-LOG_DIR=$(dirname "$LOG_FILE")
-# If LOG_DIR is set, create the directory
-if [ -n "$LOG_DIR" ]; then
-    mkdir -p "$LOG_DIR"
-fi
-
-MARK_DIR=$(dirname "$MARK_FILE")
-if [ -n "$MARK_DIR" ]; then
-    mkdir -p "$MARK_DIR"
-fi
-
-echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
-
 # Copy sample config yaml to the config dir for the user to have a template
 CONF_DIR="/app/config"
 if [ -n "$CONF_DIR" ]; then
@@ -55,12 +41,41 @@ if [ -n "$CONF_DIR" ]; then
 fi
 cp /app/sample.config.yaml "${CONF_DIR}/sample.config.yaml"
 
+# Resolve YAML and environment settings before dropping privileges. The helper
+# prints only the effective log and mark file paths, so the shell never needs
+# to parse application configuration or handle secrets.
+RUNTIME_FILES=$(python -m src.runtime_paths)
+while IFS= read -r RUNTIME_FILE; do
+    if [ -z "$RUNTIME_FILE" ]; then
+        continue
+    fi
+
+    RUNTIME_DIR=$(dirname "$RUNTIME_FILE")
+    if [ ! -d "$RUNTIME_DIR" ]; then
+        mkdir -p "$RUNTIME_DIR"
+        if [ "$(id -u)" = '0' ]; then
+            chown "$PUID:$PGID" "$RUNTIME_DIR"
+        fi
+    fi
+
+    if [ ! -e "$RUNTIME_FILE" ]; then
+        : > "$RUNTIME_FILE"
+        if [ "$(id -u)" = '0' ]; then
+            chown "$PUID:$PGID" "$RUNTIME_FILE"
+        fi
+    elif [ -f "$RUNTIME_FILE" ] && [ "$(id -u)" = '0' ]; then
+        chown "$PUID:$PGID" "$RUNTIME_FILE"
+    fi
+done <<EOF
+$RUNTIME_FILES
+EOF
+
+echo "Starting JellyPlex-Watched with UID: $PUID and GID: $PGID"
+
 # If root run as the created user
 if [ "$(id -u)" = '0' ]; then
     chown -R "$PUID:$PGID" /app/.venv
     chown -R "$PUID:$PGID" "$CONF_DIR"
-    chown -R "$PUID:$PGID" "$LOG_DIR"
-    chown -R "$PUID:$PGID" "$MARK_DIR"
 
     # Run the application as the created user
     exec gosu "$PUID:$PGID" "$@"

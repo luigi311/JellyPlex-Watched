@@ -40,6 +40,8 @@ whitelist_library_types:
   - "shows"
 
 # --- servers ----------------------------------------------------------------
+# A credential-only environment override can target these names without
+# replacing the server definitions: JPW_SERVER_TOKENS='{"plex-main":"TOKEN"}'
 plex:
   - name: plex-main # unique identifier, referenced everywhere below
     baseurl: http://plex.lan:32400
