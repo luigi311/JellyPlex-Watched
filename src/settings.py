@@ -9,8 +9,8 @@ loudly instead of producing confusing runtime errors.
 Sync direction model:
     Direction is expressed the same way at every level: "X pushes to Y."
     Each server has a `sync_to: list[str]` of other server names it pushes
-    watch state to. Per-user `sync_rules` (and per-library
-    `library_sync_rules`) follow the same shape — `from` server pushes to
+    watch state to. The `user_sync_rules` and `library_sync_rules` fields
+    follow the same shape — `from` server pushes to
     `to` server for the listed users/libraries. Bidirectional sync is
     expressed by listing the relationship in both directions, whether at
     the server level (each server in the other's sync_to) or the rule
@@ -38,7 +38,7 @@ Identity model:
     syncs to 'test123' on Jellyfin without any explicit config). Declare
     user_mappings only when usernames differ across servers, when one
     identity fans out to multiple users on a server, or when you need
-    per-user sync_rules.
+    user_sync_rules.
 
 Backward compatibility:
     Legacy .env values are parsed on every load and override the YAML.
@@ -320,7 +320,7 @@ class UserMapping(BaseModel):
 
     canonical: str = Field(
         ...,
-        description="Internal identifier for this user (used in logs and sync_rules).",
+        description="Internal identifier for this user (used in logs and user_sync_rules).",
     )
     aliases: list[UserAlias] = Field(
         ...,
@@ -356,7 +356,7 @@ class LibraryMapping(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class SyncRule(BaseModel):
+class UserSyncRule(BaseModel):
     """
     Override the default sync behavior for a specific subset of users
     on a specific (from -> to) server pair. For bidirectional sync write
@@ -675,7 +675,7 @@ class AppSettings(BaseModel):
     library_mappings: list[LibraryMapping] = []
 
     # --- per-user / per-library sync overrides ------------------------------
-    sync_rules: list[SyncRule] = []
+    user_sync_rules: list[UserSyncRule] = []
     library_sync_rules: list[LibrarySyncRule] = []
 
     # --- servers ------------------------------------------------------------
@@ -778,7 +778,7 @@ class AppSettings(BaseModel):
         # same-name users that have no declared canonical identity. Literal
         # names are case-folded; from_/to are server names and stay as-is.
         user_rules: set[tuple[str, str, str]] = set()
-        for rule in self.sync_rules:
+        for rule in self.user_sync_rules:
             users = {"*"} if rule.users == ["*"] else _normalized_names(rule.users)
             for user in users:
                 user_rules.add((user, rule.from_, rule.to))
@@ -915,16 +915,16 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_sync_rules(self) -> "AppSettings":
+    def _validate_user_sync_rules(self) -> "AppSettings":
         names = self._collect_server_names()
         canonicals = {normalize_name(u.canonical) for u in self.user_mappings}
         alias_servers = _alias_servers_by_canonical(self.user_mappings)
 
         seen_triples: set[tuple[str, str, str]] = set()
 
-        for i, rule in enumerate(self.sync_rules):
+        for i, rule in enumerate(self.user_sync_rules):
             _validate_rule_direction(
-                "sync_rules",
+                "user_sync_rules",
                 i,
                 rule.from_,
                 rule.to,
@@ -941,7 +941,7 @@ class AppSettings(BaseModel):
                     "*",
                     rule.from_,
                     rule.to,
-                    "sync_rules",
+                    "user_sync_rules",
                     "user",
                 )
                 continue
@@ -960,7 +960,7 @@ class AppSettings(BaseModel):
                     alias_servers,
                     rule.from_,
                     rule.to,
-                    "sync_rules",
+                    "user_sync_rules",
                     i,
                     "user",
                 )
@@ -969,7 +969,7 @@ class AppSettings(BaseModel):
                     user,
                     rule.from_,
                     rule.to,
-                    "sync_rules",
+                    "user_sync_rules",
                     "user",
                 )
 
@@ -1011,7 +1011,7 @@ class AppSettings(BaseModel):
             target_libs = [normalize_name(lib) for lib in rule.libraries]
 
             for lib in target_libs:
-                # Same logic as sync_rules: unknown names are accepted as
+                # Same logic as user_sync_rules: unknown names are accepted as
                 # literal library names (implicit same-name case).
                 _validate_mapped_rule_target(
                     lib,
@@ -1043,7 +1043,7 @@ class AppSettings(BaseModel):
             )
 
         has_server_direction = any(server.sync_to for server in servers)
-        has_rule_direction = bool(self.sync_rules or self.library_sync_rules)
+        has_rule_direction = bool(self.user_sync_rules or self.library_sync_rules)
         if not has_server_direction and not has_rule_direction:
             raise ValueError(
                 "At least one sync direction or sync rule must be configured."
@@ -1149,7 +1149,7 @@ class AppSettings(BaseModel):
           - `from_server.sync_to` includes `to_server` (server-level
             config enables the direction for all users/libraries by
             default), or
-          - at least one sync_rules or library_sync_rules entry enables
+          - at least one user_sync_rules or library_sync_rules entry enables
             this direction for some user or library (the direction is
             rule-only — server-level wouldn't enable it, but specific
             users or libraries opt in).
@@ -1184,7 +1184,7 @@ class AppSettings(BaseModel):
 
         Logic:
           1. If the user is filtered out by the blacklist/whitelist, return False.
-          2. If a sync_rules entry covers this (user, from, to) — checking
+          2. If a user_sync_rules entry covers this (user, from, to) — checking
              both the canonical name (if mapped) and the literal username —
              return True. Rules are additive: they can enable a direction
              the server-level config doesn't have, but cannot suppress one
@@ -1418,7 +1418,7 @@ _MIGRATION_HEADER = """\
 # Your .env continues to work — its values are parsed on every run and
 # override matching entries in this file. Once you've reviewed and are
 # happy with this config, delete the .env to fully migrate to the new
-# format. New features (per-user sync_rules, named server references,
+# format. New features (user_sync_rules, named server references,
 # more granular controls) are only available via this YAML file.
 #
 # NOTE on user_mappings / library_mappings:

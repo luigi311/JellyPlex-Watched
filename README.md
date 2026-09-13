@@ -161,8 +161,9 @@ behavior.
 ### Rules and filters
 
 Each server's `sync_to` list describes the direction “this server pushes to
-those servers.” Bidirectional sync requires both directions. `sync_rules` and
-`library_sync_rules` are additive: they can enable a specific direction even
+those servers.” Bidirectional sync requires both directions. The
+`user_sync_rules` and `library_sync_rules` fields are additive: they can enable
+a specific direction even
 when `sync_to` does not include it, but they cannot suppress a direction that
 `sync_to` already enables. A wildcard rule uses `users: ["*"]` or
 `libraries: ["*"]` and must contain no other entries; it also applies to

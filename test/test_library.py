@@ -1,5 +1,7 @@
 import os
 import sys
+from types import SimpleNamespace
+from typing import cast
 
 from conftest import settings_override
 
@@ -15,7 +17,8 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.library import combine_library_lists  # noqa: E402
+from src.library import combine_library_lists, generate_server_libraries  # noqa: E402
+from src.plex import Plex  # noqa: E402
 
 
 def test_combine_library_lists_implicit_same_name():
@@ -121,3 +124,20 @@ def test_combine_library_lists_name_whitelist():
     )
 
     assert combined == {"Movies": ["Movies"]}
+
+
+def test_generate_server_libraries_uses_side_specific_names():
+    """Source keys and target values are matched only on their own side."""
+    server = cast(
+        Plex,
+        SimpleNamespace(
+            get_libraries=lambda: {
+                "TV Shows": "show",
+                "Shows": "show",
+            }
+        ),
+    )
+    library_map = {"tv shows": ["SHOWS"]}
+
+    assert generate_server_libraries(server, library_map.keys()) == ["TV Shows"]
+    assert generate_server_libraries(server, ["SHOWS"]) == ["Shows"]

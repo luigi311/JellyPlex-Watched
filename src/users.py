@@ -42,8 +42,8 @@ def combine_user_lists(
     usernames.
 
     The decision of *whether* a user syncs in a given direction is delegated
-    entirely to settings.should_sync_user (blacklist/whitelist, per-user
-    sync_rules, and the server-level sync_to fallback). The set of *target*
+    entirely to settings.should_sync_user (blacklist/whitelist, user-specific
+    rules, and the server-level sync_to fallback). The set of *target*
     usernames on the other server is resolved via
     settings.sync_targets_for_user (explicit user_mappings aliases plus the
     implicit same-username fallback).

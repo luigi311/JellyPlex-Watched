@@ -380,6 +380,52 @@ def test_adapter_requires_library_authorization_for_each_write():
     assert updated == {}
 
 
+def test_jellyfin_watched_includes_played_series_with_zero_aggregate_count():
+    """A played custom series is read even when Jellyfin reports a 0/0 aggregate."""
+    adapter = object.__new__(JellyfinEmby)
+    adapter.app_settings = settings_override()
+    adapter.server_type = "Jellyfin"
+
+    show = {
+        "Id": "series-id",
+        "Name": "Greatest Show Ever (3000)",
+        "Path": "/data/custom_tvshows/Greatest Show Ever (3000)",
+        "UserData": {
+            "Played": True,
+            "UnplayedItemCount": 0,
+        },
+        "RecursiveItemCount": 0,
+    }
+    responses = iter(
+        [
+            {"Items": [show]},
+            {"Items": []},
+            {
+                "Items": [
+                    {
+                        "Name": "S01E02",
+                        "Path": "/data/custom_tvshows/Greatest Show Ever (3000)/Season 1/S01E02.mkv",
+                        "UserData": {"Played": True},
+                    }
+                ]
+            },
+        ]
+    )
+    adapter.query = lambda _path, _method: next(responses)
+
+    watched = adapter.get_user_library_watched(
+        "JellyUser",
+        "user-id",
+        "tvshows",
+        "library-id",
+        "Custom TV Shows",
+    )
+
+    assert [episode.identifiers.title for episode in watched.series[0].episodes] == [
+        "S01E02"
+    ]
+
+
 def test_combine_user_lists_keeps_same_name_identities_separate():
     """User filters resolve same names against the source server identity."""
     settings = settings_override(

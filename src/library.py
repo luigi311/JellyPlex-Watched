@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from loguru import logger
 
 from src.emby import Emby
@@ -35,7 +37,7 @@ def combine_library_lists(
       - settings.is_library_type_allowed handles the library-type
         blacklist/whitelist (movie/show), which is non-directional.
       - settings.should_sync_library handles the library-name
-        blacklist/whitelist, per-library sync_rules, and the server-level
+        blacklist/whitelist, library_sync_rules, and the server-level
         sync_to fallback for a given direction.
       - settings.sync_targets_for_library resolves the target library name(s)
         on the other server (explicit library_mappings aliases plus the
@@ -96,23 +98,18 @@ def combine_library_lists(
 
 def generate_server_libraries(
     server: Plex | Jellyfin | Emby,
-    libraries: dict[str, list[str]],
+    library_names: Iterable[str],
 ) -> list[str]:
     """
     Return the names of `server`'s libraries that participate in the sync
-    map, matched against both the server_1-side keys and the server_2-side
-    targets. Mirrors users.generate_server_users.
+    map, matched against the names belonging to this side of the map.
     """
-    source_names = {normalize_name(name) for name in libraries}
-    target_names = {
-        normalize_name(target) for targets in libraries.values() for target in targets
-    }
-    all_names = source_names | target_names
+    normalized_names = {normalize_name(name) for name in library_names}
 
     return [
         library
         for library in server.get_libraries()
-        if normalize_name(library) in all_names
+        if normalize_name(library) in normalized_names
     ]
 
 
@@ -143,7 +140,12 @@ def setup_libraries(
     )
     logger.debug(f"Library list to sync between servers {libraries}")
 
-    output_server_1_libraries = generate_server_libraries(server_1, libraries)
-    output_server_2_libraries = generate_server_libraries(server_2, libraries)
+    output_server_1_libraries = generate_server_libraries(server_1, libraries.keys())
+    target_library_names = [
+        target for targets in libraries.values() for target in targets
+    ]
+    output_server_2_libraries = generate_server_libraries(
+        server_2, target_library_names
+    )
 
     return output_server_1_libraries, output_server_2_libraries

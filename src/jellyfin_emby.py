@@ -393,13 +393,19 @@ class JellyfinEmby:
                         watched_shows_filtered.append(show)
                         continue
 
+                    # Jellyfin can report a played series with an unavailable
+                    # aggregate episode count for custom libraries.
+                    if show["UserData"].get("Played"):
+                        watched_shows_filtered.append(show)
+                        continue
+
                     played_percentage = show["UserData"].get("PlayedPercentage")
                     if played_percentage is None:
                         # Emby no longer shows PlayedPercentage
                         total_episodes = show.get("RecursiveItemCount")
                         unplayed_episodes = show["UserData"].get("UnplayedItemCount")
 
-                        if total_episodes is None:
+                        if total_episodes is None or total_episodes <= 0:
                             # Failed to get total count of episodes
                             continue
 

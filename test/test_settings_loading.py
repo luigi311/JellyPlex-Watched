@@ -147,7 +147,7 @@ def _full_yaml() -> dict[str, Any]:
                 ],
             }
         ],
-        "sync_rules": [
+        "user_sync_rules": [
             {"users": ["alice"], "from": "plex-account", "to": "jellyfin-main"}
         ],
         "library_sync_rules": [
@@ -425,9 +425,9 @@ def _effective_settings(settings: AppSettings) -> dict[str, Any]:
             }
             for mapping in settings.library_mappings
         ],
-        "sync_rules": [
+        "user_sync_rules": [
             {"users": list(rule.users), "from": rule.from_, "to": rule.to}
-            for rule in settings.sync_rules
+            for rule in settings.user_sync_rules
         ],
         "library_sync_rules": [
             {
@@ -535,7 +535,7 @@ def test_yaml_fixture_covers_supported_configuration_shape(
     assert not settings.should_sync_library("TV Shows", "plex-main", "jellyfin-main")
     assert settings.is_library_type_allowed("movie")
     assert not settings.is_library_type_allowed("music")
-    assert settings.sync_rules[0].from_ == "plex-account"
+    assert settings.user_sync_rules[0].from_ == "plex-account"
     assert settings.library_sync_rules[0].libraries == ["tv"]
 
 
@@ -859,7 +859,7 @@ def test_migration_preserves_mixed_prefixed_settings(
 
 def test_migration_serializes_external_rule_aliases() -> None:
     settings = settings_override(
-        sync_rules=[
+        user_sync_rules=[
             {"users": ["alice"], "from": "plex-main", "to": "jellyfin-main"}
         ],
         library_sync_rules=[
@@ -873,7 +873,7 @@ def test_migration_serializes_external_rule_aliases() -> None:
 
     dumped = _dump_for_yaml(settings)
 
-    assert dumped["sync_rules"] == [
+    assert dumped["user_sync_rules"] == [
         {"users": ["alice"], "from": "plex-main", "to": "jellyfin-main"}
     ]
     assert dumped["library_sync_rules"] == [
@@ -1439,7 +1439,7 @@ def test_c04_named_server_token_override_preserves_server_metadata(
     assert jellyfin.token.get_secret_value() == "replacement-jellyfin-token"
     assert settings.user_mappings == baseline.user_mappings
     assert settings.library_mappings == baseline.library_mappings
-    assert settings.sync_rules == baseline.sync_rules
+    assert settings.user_sync_rules == baseline.user_sync_rules
     assert settings.library_sync_rules == baseline.library_sync_rules
 
 
@@ -1572,7 +1572,7 @@ def test_c05_wildcard_rule_applies_to_unmapped_users(
                 "sync_to": [],
             }
         ],
-        sync_rules=[
+        user_sync_rules=[
             {"users": ["*"], "from": "plex-main", "to": "jellyfin-main"}
         ],
         library_sync_rules=[
@@ -1649,7 +1649,7 @@ def test_c05_wildcards_skip_partial_and_unrelated_mappings(
                 ],
             },
         ],
-        sync_rules=[
+        user_sync_rules=[
             {"users": ["*"], "from": "plex-main", "to": "jellyfin-main"}
         ],
         library_sync_rules=[
@@ -1688,7 +1688,7 @@ def test_c05_wildcards_skip_partial_and_unrelated_mappings(
 @pytest.mark.parametrize(
     ("field", "rule"),
     [
-        ("sync_rules", {"users": ["*", "alice"]}),
+        ("user_sync_rules", {"users": ["*", "alice"]}),
         ("library_sync_rules", {"libraries": ["*", "Movies"]}),
     ],
 )
@@ -1749,7 +1749,7 @@ def test_phase3_casefolds_identity_validation_indexes_and_lookups(
                 ],
             }
         ],
-        sync_rules=[
+        user_sync_rules=[
             {"users": ["PERSON"], "from": "plex-main", "to": "jellyfin-main"}
         ],
         library_sync_rules=[
