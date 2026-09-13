@@ -1,6 +1,8 @@
-from datetime import datetime
-import sys
 import os
+import sys
+from datetime import datetime
+
+from conftest import settings_override
 
 # getting the name of the directory
 # where the this file is present.
@@ -14,7 +16,7 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.watched import (
+from src.watched import (  # noqa: E402
     LibraryData,
     MediaIdentifiers,
     MediaItem,
@@ -589,6 +591,11 @@ tv_shows_2_watched_list_1: list[Series] = [
 
 
 def test_simple_cleanup_watched():
+    settings = settings_override()
+    server_1 = "server1"
+    server_2 = "server2"
+    average_time = 0.0
+
     user_watched_list_1: dict[str, UserData] = {
         "user1": UserData(
             libraries={
@@ -668,61 +675,107 @@ def test_simple_cleanup_watched():
     }
 
     return_watched_list_1 = cleanup_watched(
-        user_watched_list_1, user_watched_list_2, env={}
+        user_watched_list_1,
+        user_watched_list_2,
+        server_1,
+        server_2,
+        settings,
+        average_time,
     )
     return_watched_list_2 = cleanup_watched(
-        user_watched_list_2, user_watched_list_1, env={}
+        user_watched_list_2,
+        user_watched_list_1,
+        server_2,
+        server_1,
+        settings,
+        average_time,
     )
 
-    assert return_watched_list_1 == expected_watched_list_1
-    assert return_watched_list_2 == expected_watched_list_2
+    def as_watched_dict(pending_updates):
+        watched: dict[str, UserData] = {}
+        for update in pending_updates:
+            watched.setdefault(update.target_user, UserData()).libraries[
+                update.target_library
+            ] = update.library_data
+        return watched
+
+    assert as_watched_dict(return_watched_list_1) == expected_watched_list_1
+    assert as_watched_dict(return_watched_list_2) == expected_watched_list_2
 
 
-# def test_mapping_cleanup_watched():
-#    user_watched_list_1 = {
-#        "user1": {
-#            "TV Shows": tv_shows_watched_list_1,
-#            "Movies": movies_watched_list_1,
-#            "Other Shows": tv_shows_2_watched_list_1,
-#        },
-#    }
-#    user_watched_list_2 = {
-#        "user2": {
-#            "Shows": tv_shows_watched_list_2,
-#            "Movies": movies_watched_list_2,
-#            "Other Shows": tv_shows_2_watched_list_1,
-#        }
-#    }
-#
-#    expected_watched_list_1 = {
-#        "user1": {
-#            "TV Shows": expected_tv_show_watched_list_1,
-#            "Movies": expected_movie_watched_list_1,
-#        }
-#    }
-#
-#    expected_watched_list_2 = {
-#        "user2": {
-#            "Shows": expected_tv_show_watched_list_2,
-#            "Movies": expected_movie_watched_list_2,
-#        }
-#    }
-#
-#    user_mapping = {"user1": "user2"}
-#    library_mapping = {"TV Shows": "Shows"}
-#
-#    return_watched_list_1 = cleanup_watched(
-#        user_watched_list_1,
-#        user_watched_list_2,
-#        user_mapping=user_mapping,
-#        library_mapping=library_mapping,
-#    )
-#    return_watched_list_2 = cleanup_watched(
-#        user_watched_list_2,
-#        user_watched_list_1,
-#        user_mapping=user_mapping,
-#        library_mapping=library_mapping,
-#    )
-#
-#    assert return_watched_list_1 == expected_watched_list_1
-#    assert return_watched_list_2 == expected_watched_list_2
+def test_cleanup_coalesces_fan_in_updates_independent_of_source_order():
+    settings = settings_override(
+        user_mappings=[
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": "plex-main", "username": "alice"},
+                    {"server": "plex-main", "username": "charlie"},
+                    {"server": "jellyfin-main", "username": "bob"},
+                ],
+            }
+        ]
+    )
+    movie_identifiers = MediaIdentifiers(
+        title="Shared Movie",
+        locations=("shared-movie.mkv",),
+    )
+
+    def source_movie(progress: int) -> MediaItem:
+        return MediaItem(
+            identifiers=movie_identifiers,
+            status=WatchedStatus(
+                completed=False,
+                time=progress,
+                viewed_date=viewed_date,
+            ),
+        )
+
+    target = {
+        "bob": UserData(
+            libraries={"Movies": LibraryData(title="Movies")},
+        )
+    }
+    source_users = {
+        "alice": UserData(
+            libraries={
+                "Movies": LibraryData(
+                    title="Movies",
+                    movies=[source_movie(20 * 60 * 1_000)],
+                )
+            }
+        ),
+        "charlie": UserData(
+            libraries={
+                "Movies": LibraryData(
+                    title="Movies",
+                    movies=[source_movie(5 * 60 * 1_000)],
+                )
+            }
+        ),
+    }
+
+    pending = cleanup_watched(
+        source_users,
+        target,
+        "plex-main",
+        "jellyfin-main",
+        settings,
+        average_time=0.0,
+    )
+    reversed_pending = cleanup_watched(
+        dict(reversed(list(source_users.items()))),
+        target,
+        "plex-main",
+        "jellyfin-main",
+        settings,
+        average_time=0.0,
+    )
+
+    assert len(pending) == 1
+    assert len(reversed_pending) == 1
+    assert pending[0].target_user == "bob"
+    assert pending[0].target_library == "Movies"
+    assert pending[0].source_user == "alice"
+    assert pending[0].library_data.movies[0].status.time == 20 * 60 * 1_000
+    assert reversed_pending[0] == pending[0]

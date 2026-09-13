@@ -1,207 +1,177 @@
+from collections.abc import Iterable
+
 from loguru import logger
 
-from src.functions import (
-    match_list,
-    search_mapping,
-)
-
 from src.emby import Emby
+from src.functions import normalize_name
 from src.jellyfin import Jellyfin
 from src.plex import Plex
+from src.settings import AppSettings
 
 
-def check_skip_logic(
-    library_title: str,
-    library_type: str,
-    blacklist_library: list[str],
-    whitelist_library: list[str],
-    blacklist_library_type: list[str],
-    whitelist_library_type: list[str],
-    library_mapping: dict[str, str] | None = None,
-) -> str | None:
-    skip_reason = None
-    library_other = None
-    if library_mapping:
-        library_other = search_mapping(library_mapping, library_title)
-
-    skip_reason_black = check_blacklist_logic(
-        library_title,
-        library_type,
-        blacklist_library,
-        blacklist_library_type,
-        library_other,
-    )
-    skip_reason_white = check_whitelist_logic(
-        library_title,
-        library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_other,
-    )
-
-    # Combine skip reasons
-    if skip_reason_black:
-        skip_reason = skip_reason_black
-
-    if skip_reason_white:
-        if skip_reason:
-            skip_reason = skip_reason + " and " + skip_reason_white
-        else:
-            skip_reason = skip_reason_white
-
-    return skip_reason
+def generate_library_list(server: Plex | Jellyfin | Emby) -> dict[str, str]:
+    """
+    Return the server's libraries as {library_name: library_type}.
+    """
+    return server.get_libraries()
 
 
-def check_blacklist_logic(
-    library_title: str,
-    library_type: str,
-    blacklist_library: list[str],
-    blacklist_library_type: list[str],
-    library_other: str | None = None,
-) -> str | None:
-    skip_reason = None
-    if isinstance(library_type, (list, tuple, set)):
-        for library_type_item in library_type:
-            if library_type_item.lower() in blacklist_library_type:
-                skip_reason = f"{library_type_item} is in blacklist_library_type"
-    else:
-        if library_type.lower() in blacklist_library_type:
-            skip_reason = f"{library_type} is in blacklist_library_type"
+def combine_library_lists(
+    server_1_name: str,
+    server_2_name: str,
+    server_1_libraries: dict[str, str],
+    server_2_libraries: dict[str, str],
+    settings: AppSettings,
+) -> dict[str, list[str]]:
+    """
+    Build the map of libraries that should sync between two servers, using
+    the new settings model. Mirrors users.combine_user_lists.
 
-    if library_title.lower() in [x.lower() for x in blacklist_library]:
-        if skip_reason:
-            skip_reason = (
-                skip_reason + " and " + f"{library_title} is in blacklist_library"
-            )
-        else:
-            skip_reason = f"{library_title} is in blacklist_library"
+    Returns {source_library_on_server_1: [target_libraries_on_server_2, ...]}.
 
-    if library_other:
-        if library_other.lower() in [x.lower() for x in blacklist_library]:
-            if skip_reason:
-                skip_reason = (
-                    skip_reason + " and " + f"{library_other} is in blacklist_library"
-                )
+    A single source library may map to multiple libraries on the other server
+    (the fan-out case), so every server_1 key maps to a *list* of server_2
+    library names.
+
+    Filtering is fully delegated to the settings model:
+      - settings.is_library_type_allowed handles the library-type
+        blacklist/whitelist (movie/show), which is non-directional.
+      - settings.should_sync_library handles the library-name
+        blacklist/whitelist, library_sync_rules, and the server-level
+        sync_to fallback for a given direction.
+      - settings.sync_targets_for_library resolves the target library name(s)
+        on the other server (explicit library_mappings aliases plus the
+        implicit same-name fallback).
+
+    Both directions (1 -> 2 and 2 -> 1) are considered so the map covers
+    relationships declared on either side, and targets discovered from each
+    direction are merged rather than overwritten.
+    """
+    def filter_library_types(
+        libraries: dict[str, str],
+    ) -> dict[str, str]:
+        filtered: dict[str, str] = {}
+        for library, library_type in libraries.items():
+            if settings.is_library_type_allowed(library_type):
+                filtered[library] = library_type
             else:
-                skip_reason = f"{library_other} is in blacklist_library"
+                logger.info(
+                    f"Skipping library {library}: type '{library_type}' is filtered out"
+                )
+        return filtered
 
-    return skip_reason
+    # Type filters apply to each server's inventory before matching. A
+    # disallowed target must not become reachable through the opposite
+    # direction merely because the source reports a permitted type.
+    filtered_server_1_libraries = filter_library_types(server_1_libraries)
+    filtered_server_2_libraries = filter_library_types(server_2_libraries)
 
+    # Accumulate into sets to dedupe targets discovered from both directions.
+    accumulator: dict[str, set[str]] = {}
+    server_1_by_name = {
+        normalize_name(name): name for name in filtered_server_1_libraries
+    }
+    server_2_by_name = {
+        normalize_name(name): name for name in filtered_server_2_libraries
+    }
+    legacy_conflicts = settings.legacy_library_conflicts(
+        server_1_name, server_1_libraries
+    ) | settings.legacy_library_conflicts(server_2_name, server_2_libraries)
 
-def check_whitelist_logic(
-    library_title: str,
-    library_type: str,
-    whitelist_library: list[str],
-    whitelist_library_type: list[str],
-    library_other: str | None = None,
-) -> str | None:
-    skip_reason = None
-    if len(whitelist_library_type) > 0:
-        if isinstance(library_type, (list, tuple, set)):
-            for library_type_item in library_type:
-                if library_type_item.lower() not in whitelist_library_type:
-                    skip_reason = (
-                        f"{library_type_item} is not in whitelist_library_type"
-                    )
-        else:
-            if library_type.lower() not in whitelist_library_type:
-                skip_reason = f"{library_type} is not in whitelist_library_type"
-
-    # if whitelist is not empty and library is not in whitelist
-    if len(whitelist_library) > 0:
-        if library_other:
-            if library_title.lower() not in [
-                x.lower() for x in whitelist_library
-            ] and library_other.lower() not in [x.lower() for x in whitelist_library]:
-                if skip_reason:
-                    skip_reason = (
-                        skip_reason
-                        + " and "
-                        + f"{library_title} is not in whitelist_library"
-                    )
-                else:
-                    skip_reason = f"{library_title} is not in whitelist_library"
-        else:
-            if library_title.lower() not in [x.lower() for x in whitelist_library]:
-                if skip_reason:
-                    skip_reason = (
-                        skip_reason
-                        + " and "
-                        + f"{library_title} is not in whitelist_library"
-                    )
-                else:
-                    skip_reason = f"{library_title} is not in whitelist_library"
-
-    return skip_reason
-
-
-def filter_libaries(
-    server_libraries: dict[str, str],
-    blacklist_library: list[str],
-    blacklist_library_type: list[str],
-    whitelist_library: list[str],
-    whitelist_library_type: list[str],
-    library_mapping: dict[str, str] | None = None,
-) -> list[str]:
-    filtered_libaries: list[str] = []
-    for library in server_libraries:
-        skip_reason = check_skip_logic(
-            library,
-            server_libraries[library],
-            blacklist_library,
-            whitelist_library,
-            blacklist_library_type,
-            whitelist_library_type,
-            library_mapping,
+    for canonical in sorted(legacy_conflicts):
+        logger.warning(
+            f"Skipping legacy library mapping '{canonical}' between "
+            f"{server_1_name} and {server_2_name}: both aliases are present "
+            "on at least one server. Replace it with server-scoped YAML "
+            "aliases before syncing these libraries."
         )
 
-        if skip_reason:
-            logger.info(f"Skipping library {library}: {skip_reason}")
+    def add(s1_library: str, s2_library: str) -> None:
+        accumulator.setdefault(s1_library, set()).add(s2_library)
+
+    # server_1 -> server_2
+    for s1_library in filtered_server_1_libraries:
+        canonical = settings.lookup_library(server_1_name, s1_library)
+        if canonical is not None and canonical in legacy_conflicts:
             continue
+        if not settings.should_sync_library(s1_library, server_1_name, server_2_name):
+            continue
+        for target in settings.sync_targets_for_library(
+            server_1_name, s1_library, server_2_name
+        ):
+            target_name = server_2_by_name.get(normalize_name(target))
+            if target_name is not None:
+                add(s1_library, target_name)
 
-        filtered_libaries.append(library)
+    # server_2 -> server_1 (fills in relationships declared the other way)
+    for s2_library in filtered_server_2_libraries:
+        canonical = settings.lookup_library(server_2_name, s2_library)
+        if canonical is not None and canonical in legacy_conflicts:
+            continue
+        if not settings.should_sync_library(s2_library, server_2_name, server_1_name):
+            continue
+        for target in settings.sync_targets_for_library(
+            server_2_name, s2_library, server_1_name
+        ):
+            target_name = server_1_by_name.get(normalize_name(target))
+            if target_name is not None:
+                # key is always the server_1-side library name
+                add(target_name, s2_library)
 
-    return filtered_libaries
+    # Freeze to sorted lists for a stable, deterministic result.
+    return {s1_library: sorted(targets) for s1_library, targets in accumulator.items()}
+
+
+def generate_server_libraries(
+    server: Plex | Jellyfin | Emby,
+    library_names: Iterable[str],
+) -> list[str]:
+    """
+    Return the names of `server`'s libraries that participate in the sync
+    map, matched against the names belonging to this side of the map.
+    """
+    normalized_names = {normalize_name(name) for name in library_names}
+
+    return [
+        library
+        for library in server.get_libraries()
+        if normalize_name(library) in normalized_names
+    ]
 
 
 def setup_libraries(
     server_1: Plex | Jellyfin | Emby,
     server_2: Plex | Jellyfin | Emby,
-    blacklist_library: list[str],
-    blacklist_library_type: list[str],
-    whitelist_library: list[str],
-    whitelist_library_type: list[str],
-    library_mapping: dict[str, str] | None = None,
+    settings: AppSettings,
 ) -> tuple[list[str], list[str]]:
-    server_1_libraries = server_1.get_libraries()
-    server_2_libraries = server_2.get_libraries()
+    server_1_libraries = generate_library_list(server_1)
+    server_2_libraries = generate_library_list(server_2)
 
-    logger.debug(f"{server_1.server_type}: Libraries and types {server_1_libraries}")
-    logger.debug(f"{server_2.server_type}: Libraries and types {server_2_libraries}")
+    logger.debug(
+        f"Server 1 ({server_1.server_settings.name}): Libraries and types {server_1_libraries}"
+    )
+    logger.debug(
+        f"Server 2 ({server_2.server_settings.name}): Libraries and types {server_2_libraries}"
+    )
 
-    # Filter out all blacklist, whitelist libaries
-    filtered_server_1_libraries = filter_libaries(
+    # Blacklist/whitelist (name + type) and per-library sync rules are all
+    # resolved inside combine_library_lists via the settings model, so there
+    # is no longer a separate filtering step.
+    libraries = combine_library_lists(
+        server_1.server_settings.name,
+        server_2.server_settings.name,
         server_1_libraries,
-        blacklist_library,
-        blacklist_library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_mapping,
-    )
-    filtered_server_2_libraries = filter_libaries(
         server_2_libraries,
-        blacklist_library,
-        blacklist_library_type,
-        whitelist_library,
-        whitelist_library_type,
-        library_mapping,
+        settings,
+    )
+    logger.debug(f"Library list to sync between servers {libraries}")
+
+    output_server_1_libraries = generate_server_libraries(server_1, libraries.keys())
+    target_library_names = [
+        target for targets in libraries.values() for target in targets
+    ]
+    output_server_2_libraries = generate_server_libraries(
+        server_2, target_library_names
     )
 
-    output_server_1_libaries = match_list(
-        filtered_server_1_libraries, filtered_server_2_libraries, library_mapping
-    )
-    output_server_2_libaries = match_list(
-        filtered_server_2_libraries, filtered_server_1_libraries, library_mapping
-    )
-
-    return output_server_1_libaries, output_server_2_libaries
+    return output_server_1_libraries, output_server_2_libraries

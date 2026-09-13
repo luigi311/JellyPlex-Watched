@@ -1,28 +1,35 @@
 # Functions for Jellyfin and Emby
 
-from datetime import datetime
-import requests
+from __future__ import annotations
+
 import traceback
+from datetime import datetime
 from math import floor
 from typing import Any, Literal
-from packaging.version import parse, Version
+
+import requests
 from loguru import logger
+from packaging.version import Version, parse
 
 from src.functions import (
     filename_from_any_path,
-    search_mapping,
     log_marked,
-    str_to_bool,
-    get_env_value,
+    normalize_name,
 )
+from src.settings import AppSettings, EmbySettings, JellyfinSettings
 from src.watched import (
     LibraryData,
     MediaIdentifiers,
     MediaItem,
-    WatchedStatus,
     Series,
     UserData,
+    WatchedStatus,
     check_same_identifiers,
+    expand_watched_updates,
+    WatchedUpdate,
+    WatchedWriteOutcome,
+    WriteOutcomeStatus,
+    resulting_media_item,
 )
 
 
@@ -102,27 +109,21 @@ def get_mediaitem(
 class JellyfinEmby:
     def __init__(
         self,
-        env,
+        app_settings: AppSettings,
+        server_settings: JellyfinSettings | EmbySettings,
         server_type: Literal["Jellyfin", "Emby"],
-        base_url: str,
-        token: str,
         headers: dict[str, str],
     ) -> None:
-        self.env = env
+        self.app_settings: AppSettings = app_settings
+        self.server_settings = server_settings
 
         if server_type not in ["Jellyfin", "Emby"]:
             raise Exception(f"Server type {server_type} not supported")
         self.server_type: str = server_type
-        self.base_url: str = base_url
-        self.token: str = token
         self.headers: dict[str, str] = headers
-        self.timeout: int = int(get_env_value(self.env, "REQUEST_TIMEOUT", 300))
 
-        if not self.base_url:
+        if not server_settings.baseurl:
             raise Exception(f"{self.server_type} base_url not set")
-
-        if not self.token:
-            raise Exception(f"{self.server_type} token not set")
 
         self.session = requests.Session()
         self.users: dict[str, str] = self.get_users()
@@ -130,12 +131,6 @@ class JellyfinEmby:
         self.server_version: Version = self.info(version_only=True)
         self.update_partial: bool = self.is_partial_update_supported(
             self.server_version
-        )
-        self.generate_guids: bool = str_to_bool(
-            get_env_value(self.env, "GENERATE_GUIDS", "True")
-        )
-        self.generate_locations: bool = str_to_bool(
-            get_env_value(self.env, "GENERATE_LOCATIONS", "True")
         )
 
     def query(
@@ -150,7 +145,9 @@ class JellyfinEmby:
 
             if query_type == "get":
                 response = self.session.get(
-                    self.base_url + query, headers=self.headers, timeout=self.timeout
+                    self.server_settings.baseurl + query,
+                    headers=self.headers,
+                    timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
                     raise Exception(
@@ -163,10 +160,10 @@ class JellyfinEmby:
 
             elif query_type == "post":
                 response = self.session.post(
-                    self.base_url + query,
+                    self.server_settings.baseurl + query,
                     headers=self.headers,
                     json=json,
-                    timeout=self.timeout,
+                    timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
                     raise Exception(
@@ -309,7 +306,7 @@ class JellyfinEmby:
         library_id: str,
         library_title: str,
     ) -> LibraryData:
-        user_name = user_name.lower()
+        user_name = normalize_name(user_name)
         try:
             logger.info(
                 f"{self.server_type}: Generating watched for {user_name} in library {library_title}",
@@ -355,8 +352,8 @@ class JellyfinEmby:
                             get_mediaitem(
                                 self.server_type,
                                 movie,
-                                self.generate_guids,
-                                self.generate_locations,
+                                self.app_settings.generate_guids,
+                                self.app_settings.generate_locations,
                             )
                         )
 
@@ -399,13 +396,19 @@ class JellyfinEmby:
                         watched_shows_filtered.append(show)
                         continue
 
+                    # Jellyfin can report a played series with an unavailable
+                    # aggregate episode count for custom libraries.
+                    if show["UserData"].get("Played"):
+                        watched_shows_filtered.append(show)
+                        continue
+
                     played_percentage = show["UserData"].get("PlayedPercentage")
                     if played_percentage is None:
                         # Emby no longer shows PlayedPercentage
                         total_episodes = show.get("RecursiveItemCount")
                         unplayed_episodes = show["UserData"].get("UnplayedItemCount")
 
-                        if total_episodes is None:
+                        if total_episodes is None or total_episodes <= 0:
                             # Failed to get total count of episodes
                             continue
 
@@ -462,8 +465,8 @@ class JellyfinEmby:
                                 get_mediaitem(
                                     self.server_type,
                                     episode,
-                                    self.generate_guids,
-                                    self.generate_locations,
+                                    self.app_settings.generate_guids,
+                                    self.app_settings.generate_locations,
                                 )
                             )
 
@@ -480,10 +483,6 @@ class JellyfinEmby:
                                 episodes=episode_mediaitem,
                             )
                         )
-
-            logger.info(
-                f"{self.server_type}: Finished getting watched for {user_name} in library {library_title}",
-            )
 
             return watched
         except Exception as e:
@@ -503,10 +502,12 @@ class JellyfinEmby:
         try:
             if not users_watched:
                 users_watched: dict[str, UserData] = {}
+            sync_library_names = {normalize_name(name) for name in sync_libraries}
 
             for user_name, user_id in users.items():
-                if user_name.lower() not in users_watched:
-                    users_watched[user_name.lower()] = UserData()
+                user_key = normalize_name(user_name)
+                if user_key not in users_watched:
+                    users_watched[user_key] = UserData()
 
                 all_libraries = self.query(f"/Users/{user_id}/Views", "get")
                 if not all_libraries or not isinstance(all_libraries, dict):
@@ -526,10 +527,10 @@ class JellyfinEmby:
                         )
                         continue
 
-                    if library_title not in sync_libraries:
+                    if normalize_name(library_title) not in sync_library_names:
                         continue
 
-                    if library_title in users_watched:
+                    if library_title in users_watched[user_key].libraries:
                         logger.info(
                             f"{self.server_type}: {user_name} {library_title} watched history has already been gathered, skipping"
                         )
@@ -544,10 +545,10 @@ class JellyfinEmby:
                         library_title,
                     )
 
-                    if user_name.lower() not in users_watched:
-                        users_watched[user_name.lower()] = UserData()
+                    if user_key not in users_watched:
+                        users_watched[user_key] = UserData()
 
-                    users_watched[user_name.lower()].libraries[library_title] = (
+                    users_watched[user_key].libraries[library_title] = (
                         library_data
                     )
 
@@ -564,356 +565,604 @@ class JellyfinEmby:
         library_name: str,
         library_id: str,
         dryrun: bool,
-    ) -> None:
-        try:
-            # If there are no movies or shows to update, exit early.
-            if not library_data.series and not library_data.movies:
-                return
+    ) -> list[WatchedWriteOutcome]:
+        outcomes: list[WatchedWriteOutcome] = []
+        target_user = normalize_name(user_name)
 
-            logger.info(
-                f"{self.server_type}: Updating watched for {user_name} in library {library_name}",
+        def optional_string(value: object) -> str | None:
+            return str(value) if value is not None else None
+
+        def add_outcome(
+            status: WriteOutcomeStatus,
+            media_item: MediaItem,
+            *,
+            completed: bool | None = None,
+            target_identifiers: MediaIdentifiers | None = None,
+            series_identifiers: MediaIdentifiers | None = None,
+            target_item_id: object = None,
+            reason: str | None = None,
+        ) -> None:
+            if status == "applied" and completed is not None:
+                media_item = resulting_media_item(
+                    media_item,
+                    completed,
+                    target_identifiers,
+                )
+            outcomes.append(
+                WatchedWriteOutcome(
+                    status=status,
+                    target_user=target_user,
+                    target_library=library_name,
+                    media_item=media_item,
+                    series_identifiers=series_identifiers,
+                    target_user_id=user_id,
+                    target_library_id=library_id,
+                    target_item_id=optional_string(target_item_id),
+                    reason=reason,
+                )
             )
 
-            # Update movies.
-            if library_data.movies:
+        # If there are no movies or shows to update, exit early.
+        if not library_data.series and not library_data.movies:
+            return outcomes
+
+        logger.info(
+            f"{self.server_type}: Updating watched for {user_name} in library {library_name}",
+        )
+
+        # Update movies.
+        if library_data.movies:
+            try:
                 jellyfin_search = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
                     + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Movie",
                     "get",
                 )
+            except Exception as error:
+                logger.debug(
+                    f"{self.server_type}: Failed to get movies for {user_name} {library_name}: {error}"
+                )
+                jellyfin_search = None
 
-                if not jellyfin_search or not isinstance(jellyfin_search, dict):
-                    logger.debug(
-                        f"{self.server_type}: Failed to get movies for {user_name} {library_name}"
-                    )
-                    return
-
+            matched_movies: set[int] = set()
+            if not jellyfin_search or not isinstance(jellyfin_search, dict):
+                for movie in library_data.movies:
+                    add_outcome("uncertain", movie, reason="movie discovery failed")
+            else:
                 for jellyfin_video in jellyfin_search.get("Items", []):
                     jelly_identifiers = extract_identifiers_from_item(
                         self.server_type,
                         jellyfin_video,
-                        self.generate_guids,
-                        self.generate_locations,
+                        self.app_settings.generate_guids,
+                        self.app_settings.generate_locations,
                     )
                     # Check each stored movie for a match.
-                    for stored_movie in library_data.movies:
-                        if check_same_identifiers(
+                    for movie_index, stored_movie in enumerate(library_data.movies):
+                        if not check_same_identifiers(
                             jelly_identifiers, stored_movie.identifiers
                         ):
-                            jellyfin_video_id = jellyfin_video.get("Id")
+                            continue
 
-                            viewed_date: str = (
-                                stored_movie.status.viewed_date.isoformat(
-                                    timespec="milliseconds"
-                                ).replace("+00:00", "Z")
+                        matched_movies.add(movie_index)
+                        jellyfin_video_id = jellyfin_video.get("Id")
+                        target_item_id = jellyfin_video_id
+                        viewed_date: str = stored_movie.status.viewed_date.isoformat(
+                            timespec="milliseconds"
+                        ).replace("+00:00", "Z")
+
+                        if stored_movie.status.completed:
+                            msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
+                            if not dryrun:
+                                user_data_payload: dict[str, Any] = {
+                                    "PlayCount": 1,
+                                    "Played": True,
+                                    "PlaybackPositionTicks": 0,
+                                    "LastPlayedDate": viewed_date,
+                                }
+                                try:
+                                    if jellyfin_video_id is None:
+                                        raise ValueError("destination item has no ID")
+                                    self.query(
+                                        f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
+                                        "post",
+                                        json=user_data_payload,
+                                    )
+                                except Exception as error:
+                                    logger.error(
+                                        f"{self.server_type}: Failed to mark {jellyfin_video.get('Name')} as watched, Error: {error}"
+                                    )
+                                    add_outcome(
+                                        "failed",
+                                        stored_movie,
+                                        completed=True,
+                                        target_item_id=target_item_id,
+                                        reason=str(error),
+                                    )
+                                    break
+
+                            logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
+                            log_marked(
+                                self.server_type,
+                                self.server_name,
+                                user_name,
+                                library_name,
+                                jellyfin_video.get("Name"),
+                                mark_file=self.app_settings.mark_file,
                             )
-
-                            if stored_movie.status.completed:
-                                msg = f"{self.server_type}: {jellyfin_video.get('Name')} as watched for {user_name} in {library_name}"
-                                if not dryrun:
-                                    user_data_payload: dict[str, Any] = {
-                                        "PlayCount": 1,
-                                        "Played": True,
-                                        "PlaybackPositionTicks": 0,
-                                        "LastPlayedDate": viewed_date,
-                                    }
+                            add_outcome(
+                                "skipped" if dryrun else "applied",
+                                stored_movie,
+                                completed=True,
+                                target_identifiers=jelly_identifiers,
+                                target_item_id=target_item_id,
+                                reason="dry-run" if dryrun else None,
+                            )
+                        elif self.update_partial:
+                            msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
+                            if not dryrun:
+                                user_data_payload = {
+                                    "PlayCount": 0,
+                                    "Played": False,
+                                    "PlaybackPositionTicks": stored_movie.status.time
+                                    * 10_000,
+                                    "LastPlayedDate": viewed_date,
+                                }
+                                try:
+                                    if jellyfin_video_id is None:
+                                        raise ValueError("destination item has no ID")
                                     self.query(
                                         f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
                                         "post",
                                         json=user_data_payload,
                                     )
-
-                                logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
-                                log_marked(
-                                    self.server_type,
-                                    self.server_name,
-                                    user_name,
-                                    library_name,
-                                    jellyfin_video.get("Name"),
-                                    mark_file=get_env_value(
-                                        self.env, "MARK_FILE", "mark.log"
-                                    ),
-                                )
-                            elif self.update_partial:
-                                msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
-
-                                if not dryrun:
-                                    user_data_payload: dict[str, Any] = {
-                                        "PlayCount": 0,
-                                        "Played": False,
-                                        "PlaybackPositionTicks": stored_movie.status.time
-                                        * 10_000,
-                                        "LastPlayedDate": viewed_date,
-                                    }
-                                    self.query(
-                                        f"/Users/{user_id}/Items/{jellyfin_video_id}/UserData",
-                                        "post",
-                                        json=user_data_payload,
+                                except Exception as error:
+                                    logger.error(
+                                        f"{self.server_type}: Failed to update {jellyfin_video.get('Name')} timeline, Error: {error}"
                                     )
+                                    add_outcome(
+                                        "failed",
+                                        stored_movie,
+                                        completed=False,
+                                        target_item_id=target_item_id,
+                                        reason=str(error),
+                                    )
+                                    break
 
-                                logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
-                                log_marked(
-                                    self.server_type,
-                                    self.server_name,
-                                    user_name,
-                                    library_name,
-                                    jellyfin_video.get("Name"),
-                                    duration=floor(stored_movie.status.time / 60_000),
-                                    mark_file=get_env_value(
-                                        self.env, "MARK_FILE", "mark.log"
-                                    ),
-                                )
+                            logger.success(f"{'[DRYRUN] ' if dryrun else ''}{msg}")
+                            log_marked(
+                                self.server_type,
+                                self.server_name,
+                                user_name,
+                                library_name,
+                                jellyfin_video.get("Name"),
+                                duration=floor(stored_movie.status.time / 60_000),
+                                mark_file=self.app_settings.mark_file,
+                            )
+                            add_outcome(
+                                "skipped" if dryrun else "applied",
+                                stored_movie,
+                                completed=False,
+                                target_identifiers=jelly_identifiers,
+                                target_item_id=target_item_id,
+                                reason="dry-run" if dryrun else None,
+                            )
                         else:
-                            logger.trace(
-                                f"{self.server_type}: Skipping movie {jellyfin_video.get('Name')} as it is not in mark list for {user_name}",
+                            add_outcome(
+                                "unsupported",
+                                stored_movie,
+                                target_item_id=target_item_id,
+                                reason="partial updates are unsupported",
                             )
+                        break
 
-            # Update TV Shows (series/episodes).
-            if library_data.series:
+                for movie_index, stored_movie in enumerate(library_data.movies):
+                    if movie_index not in matched_movies:
+                        add_outcome("skipped", stored_movie, reason="media not found")
+
+        # Update TV Shows (series/episodes).
+        if library_data.series:
+            try:
                 jellyfin_search = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
                     + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                     "get",
                 )
-                if not jellyfin_search or not isinstance(jellyfin_search, dict):
-                    logger.debug(
-                        f"{self.server_type}: Failed to get shows for {user_name} {library_name}"
-                    )
-                    return
+            except Exception as error:
+                logger.debug(
+                    f"{self.server_type}: Failed to get shows for {user_name} {library_name}: {error}"
+                )
+                jellyfin_search = None
 
+            matched_episodes: set[tuple[int, int]] = set()
+            if not jellyfin_search or not isinstance(jellyfin_search, dict):
+                for series in library_data.series:
+                    for episode in series.episodes:
+                        add_outcome(
+                            "uncertain",
+                            episode,
+                            series_identifiers=series.identifiers,
+                            reason="show discovery failed",
+                        )
+            else:
                 jellyfin_shows = [x for x in jellyfin_search.get("Items", [])]
-
                 for jellyfin_show in jellyfin_shows:
                     jellyfin_show_identifiers = extract_identifiers_from_item(
                         self.server_type,
                         jellyfin_show,
-                        self.generate_guids,
-                        self.generate_locations,
+                        self.app_settings.generate_guids,
+                        self.app_settings.generate_locations,
                     )
-                    # Try to find a matching series in your stored library.
-                    for stored_series in library_data.series:
-                        if check_same_identifiers(
+                    # Try to find a matching series in the stored library.
+                    for series_index, stored_series in enumerate(library_data.series):
+                        if not check_same_identifiers(
                             jellyfin_show_identifiers, stored_series.identifiers
                         ):
-                            logger.trace(
-                                f"Found matching show for '{jellyfin_show.get('Name')}'",
-                            )
-                            # Now update episodes.
-                            # Get the list of Plex episodes for this show.
-                            jellyfin_show_id = jellyfin_show.get("Id")
+                            continue
+
+                        logger.trace(
+                            f"Found matching show for '{jellyfin_show.get('Name')}'",
+                        )
+                        jellyfin_show_id = jellyfin_show.get("Id")
+                        try:
+                            if jellyfin_show_id is None:
+                                raise ValueError("destination show has no ID")
                             jellyfin_episodes = self.query(
                                 f"/Shows/{jellyfin_show_id}/Episodes"
                                 + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,Path",
                                 "get",
                             )
+                        except Exception as error:
+                            logger.debug(
+                                f"{self.server_type}: Failed to get episodes for {user_name} {library_name} {jellyfin_show.get('Name')}: {error}"
+                            )
+                            jellyfin_episodes = None
 
-                            if not jellyfin_episodes or not isinstance(
-                                jellyfin_episodes, dict
+                        if not jellyfin_episodes or not isinstance(
+                            jellyfin_episodes, dict
+                        ):
+                            for episode_index, stored_ep in enumerate(
+                                stored_series.episodes
                             ):
-                                logger.debug(
-                                    f"{self.server_type}: Failed to get episodes for {user_name} {library_name} {jellyfin_show.get('Name')}"
-                                )
-                                return
-
-                            for jellyfin_episode in jellyfin_episodes.get("Items", []):
-                                jellyfin_episode_identifiers = (
-                                    extract_identifiers_from_item(
-                                        self.server_type,
-                                        jellyfin_episode,
-                                        self.generate_guids,
-                                        self.generate_locations,
+                                if (series_index, episode_index) not in matched_episodes:
+                                    add_outcome(
+                                        "uncertain",
+                                        stored_ep,
+                                        series_identifiers=stored_series.identifiers,
+                                        reason="episode discovery failed",
                                     )
+                            break
+
+                        for jellyfin_episode in jellyfin_episodes.get("Items", []):
+                            jellyfin_episode_identifiers = extract_identifiers_from_item(
+                                self.server_type,
+                                jellyfin_episode,
+                                self.app_settings.generate_guids,
+                                self.app_settings.generate_locations,
+                            )
+                            for episode_index, stored_ep in enumerate(
+                                stored_series.episodes
+                            ):
+                                if not check_same_identifiers(
+                                    jellyfin_episode_identifiers,
+                                    stored_ep.identifiers,
+                                ):
+                                    continue
+
+                                matched_episodes.add((series_index, episode_index))
+                                jellyfin_episode_id = jellyfin_episode.get("Id")
+                                target_item_id = jellyfin_episode_id
+                                viewed_date: str = stored_ep.status.viewed_date.isoformat(
+                                    timespec="milliseconds"
+                                ).replace("+00:00", "Z")
+                                episode_name = (
+                                    f"{jellyfin_episode.get('SeriesName')} "
+                                    f"{jellyfin_episode.get('SeasonName')} Episode "
+                                    f"{jellyfin_episode.get('IndexNumber')} "
+                                    f"{jellyfin_episode.get('Name')}"
                                 )
-                                for stored_ep in stored_series.episodes:
-                                    if check_same_identifiers(
-                                        jellyfin_episode_identifiers,
-                                        stored_ep.identifiers,
-                                    ):
-                                        jellyfin_episode_id = jellyfin_episode.get("Id")
 
-                                        viewed_date: str = (
-                                            stored_ep.status.viewed_date.isoformat(
-                                                timespec="milliseconds"
-                                            ).replace("+00:00", "Z")
-                                        )
-
-                                        if stored_ep.status.completed:
-                                            msg = (
-                                                f"{self.server_type}: {jellyfin_episode.get('SeriesName')} {jellyfin_episode.get('SeasonName')} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                                + f" as watched for {user_name} in {library_name}"
-                                            )
-                                            if not dryrun:
-                                                user_data_payload: dict[str, Any] = {
-                                                    "PlayCount": 1,
-                                                    "Played": True,
-                                                    "PlaybackPositionTicks": 0,
-                                                    "LastPlayedDate": viewed_date,
-                                                }
-                                                self.query(
-                                                    f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
-                                                    "post",
-                                                    json=user_data_payload,
+                                if stored_ep.status.completed:
+                                    msg = (
+                                        f"{self.server_type}: {episode_name}"
+                                        + f" as watched for {user_name} in {library_name}"
+                                    )
+                                    if not dryrun:
+                                        user_data_payload = {
+                                            "PlayCount": 1,
+                                            "Played": True,
+                                            "PlaybackPositionTicks": 0,
+                                            "LastPlayedDate": viewed_date,
+                                        }
+                                        try:
+                                            if jellyfin_episode_id is None:
+                                                raise ValueError(
+                                                    "destination episode has no ID"
                                                 )
+                                            self.query(
+                                                f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
+                                                "post",
+                                                json=user_data_payload,
+                                            )
+                                        except Exception as error:
+                                            logger.error(
+                                                f"{self.server_type}: Failed to mark {episode_name} as watched, Error: {error}"
+                                            )
+                                            add_outcome(
+                                                "failed",
+                                                stored_ep,
+                                                completed=True,
+                                                series_identifiers=stored_series.identifiers,
+                                                target_item_id=target_item_id,
+                                                reason=str(error),
+                                            )
+                                            break
 
-                                            logger.success(
-                                                f"{'[DRYRUN] ' if dryrun else ''}{msg}"
-                                            )
-                                            log_marked(
-                                                self.server_type,
-                                                self.server_name,
-                                                user_name,
-                                                library_name,
-                                                jellyfin_episode.get("SeriesName"),
-                                                jellyfin_episode.get("Name"),
-                                                mark_file=get_env_value(
-                                                    self.env, "MARK_FILE", "mark.log"
-                                                ),
-                                            )
-                                        elif self.update_partial:
-                                            msg = (
-                                                f"{self.server_type}: {jellyfin_episode.get('SeriesName')} {jellyfin_episode.get('SeasonName')} Episode {jellyfin_episode.get('IndexNumber')} {jellyfin_episode.get('Name')}"
-                                                + f" as partially watched for {floor(stored_ep.status.time / 60_000)} minutes for {user_name} in {library_name}"
-                                            )
-
-                                            if not dryrun:
-                                                user_data_payload: dict[str, Any] = {
-                                                    "PlayCount": 0,
-                                                    "Played": False,
-                                                    "PlaybackPositionTicks": stored_ep.status.time
-                                                    * 10_000,
-                                                    "LastPlayedDate": viewed_date,
-                                                }
-                                                self.query(
-                                                    f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
-                                                    "post",
-                                                    json=user_data_payload,
+                                    logger.success(
+                                        f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                    )
+                                    log_marked(
+                                        self.server_type,
+                                        self.server_name,
+                                        user_name,
+                                        library_name,
+                                        jellyfin_episode.get("SeriesName"),
+                                        jellyfin_episode.get("Name"),
+                                        mark_file=self.app_settings.mark_file,
+                                    )
+                                    add_outcome(
+                                        "skipped" if dryrun else "applied",
+                                        stored_ep,
+                                        completed=True,
+                                        target_identifiers=jellyfin_episode_identifiers,
+                                        series_identifiers=jellyfin_show_identifiers,
+                                        target_item_id=target_item_id,
+                                        reason="dry-run" if dryrun else None,
+                                    )
+                                elif self.update_partial:
+                                    msg = (
+                                        f"{self.server_type}: {episode_name}"
+                                        + f" as partially watched for {floor(stored_ep.status.time / 60_000)} minutes for {user_name} in {library_name}"
+                                    )
+                                    if not dryrun:
+                                        user_data_payload = {
+                                            "PlayCount": 0,
+                                            "Played": False,
+                                            "PlaybackPositionTicks": stored_ep.status.time
+                                            * 10_000,
+                                            "LastPlayedDate": viewed_date,
+                                        }
+                                        try:
+                                            if jellyfin_episode_id is None:
+                                                raise ValueError(
+                                                    "destination episode has no ID"
                                                 )
+                                            self.query(
+                                                f"/Users/{user_id}/Items/{jellyfin_episode_id}/UserData",
+                                                "post",
+                                                json=user_data_payload,
+                                            )
+                                        except Exception as error:
+                                            logger.error(
+                                                f"{self.server_type}: Failed to update {episode_name} timeline, Error: {error}"
+                                            )
+                                            add_outcome(
+                                                "failed",
+                                                stored_ep,
+                                                completed=False,
+                                                series_identifiers=stored_series.identifiers,
+                                                target_item_id=target_item_id,
+                                                reason=str(error),
+                                            )
+                                            break
 
-                                            logger.success(
-                                                f"{'[DRYRUN] ' if dryrun else ''}{msg}"
-                                            )
-                                            log_marked(
-                                                self.server_type,
-                                                self.server_name,
-                                                user_name,
-                                                library_name,
-                                                jellyfin_episode.get("SeriesName"),
-                                                jellyfin_episode.get("Name"),
-                                                duration=floor(
-                                                    stored_ep.status.time / 60_000
-                                                ),
-                                                mark_file=get_env_value(
-                                                    self.env, "MARK_FILE", "mark.log"
-                                                ),
-                                            )
-                                    else:
-                                        logger.trace(
-                                            f"{self.server_type}: Skipping episode {jellyfin_episode.get('Name')} as it is not in mark list for {user_name}",
-                                        )
-                        else:
-                            logger.trace(
-                                f"{self.server_type}: Skipping show {jellyfin_show.get('Name')} as it is not in mark list for {user_name}",
+                                    logger.success(
+                                        f"{'[DRYRUN] ' if dryrun else ''}{msg}"
+                                    )
+                                    log_marked(
+                                        self.server_type,
+                                        self.server_name,
+                                        user_name,
+                                        library_name,
+                                        jellyfin_episode.get("SeriesName"),
+                                        jellyfin_episode.get("Name"),
+                                        duration=floor(stored_ep.status.time / 60_000),
+                                        mark_file=self.app_settings.mark_file,
+                                    )
+                                    add_outcome(
+                                        "skipped" if dryrun else "applied",
+                                        stored_ep,
+                                        completed=False,
+                                        target_identifiers=jellyfin_episode_identifiers,
+                                        series_identifiers=jellyfin_show_identifiers,
+                                        target_item_id=target_item_id,
+                                        reason="dry-run" if dryrun else None,
+                                    )
+                                else:
+                                    add_outcome(
+                                        "unsupported",
+                                        stored_ep,
+                                        series_identifiers=stored_series.identifiers,
+                                        target_item_id=target_item_id,
+                                        reason="partial updates are unsupported",
+                                    )
+                                break
+                        break
+
+                for series_index, stored_series in enumerate(library_data.series):
+                    for episode_index, stored_ep in enumerate(stored_series.episodes):
+                        if (series_index, episode_index) not in matched_episodes:
+                            add_outcome(
+                                "skipped",
+                                stored_ep,
+                                series_identifiers=stored_series.identifiers,
+                                reason="media not found",
                             )
 
-        except Exception as e:
-            logger.error(
-                f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
-            )
+        return outcomes
+
+    def _resolve_local_users(
+        self, source_server: str, source_user: str
+    ) -> list[tuple[str, str]]:
+        """
+        Resolve a source-server username to every matching local user.
+
+        Candidate names on this server come from the settings model
+        (sync_targets_for_user — explicit user_mappings aliases plus the
+        implicit same-username fallback). Every candidate matching one of this
+        server's actual users is returned so one-to-many mappings reach every
+        target account.
+        """
+        this_server = self.server_settings.name
+        candidates = self.app_settings.sync_targets_for_user(
+            source_server, source_user, this_server
+        )
+        candidates_normalized = {normalize_name(c) for c in candidates}
+        matched: list[tuple[str, str]] = []
+
+        for key, user_id in self.users.items():
+            if normalize_name(key) in candidates_normalized:
+                matched.append((key, user_id))
+
+        return matched
+
+    def _resolve_local_libraries(
+        self,
+        source_server: str,
+        source_library: str,
+        available_libraries: list[dict[str, Any]],
+    ) -> list[tuple[str, str]]:
+        """
+        Resolve a source-server library name to every matching local library.
+
+        Candidates come from sync_targets_for_library; every candidate present
+        in `available_libraries` (matched on Name, case-insensitive) is
+        returned, preserving the server's actual Name casing.
+        """
+        this_server = self.server_settings.name
+        candidates = self.app_settings.sync_targets_for_library(
+            source_server, source_library, this_server
+        )
+        candidates_normalized = {normalize_name(c) for c in candidates}
+        matched: list[tuple[str, str]] = []
+
+        for library in available_libraries:
+            name = library.get("Name")
+            lib_id = library.get("Id")
+            if name and lib_id and normalize_name(name) in candidates_normalized:
+                matched.append((name, lib_id))
+
+        return matched
 
     def update_watched(
         self,
-        watched_list: dict[str, UserData],
-        user_mapping: dict[str, str] | None = None,
-        library_mapping: dict[str, str] | None = None,
-        dryrun: bool = False,
-    ) -> None:
-        for user, user_data in watched_list.items():
-            user_other = None
-            user_name = None
-            if user_mapping:
-                if user in user_mapping.keys():
-                    user_other = user_mapping[user]
-                elif user in user_mapping.values():
-                    user_other = search_mapping(user_mapping, user)
+        watched_list: dict[str, UserData] | list[WatchedUpdate],
+        source_server_name: str,
+    ) -> list[WatchedWriteOutcome]:
+        """
+        Apply watch state from `watched_list` onto this server.
 
-            user_id = None
-            for key in self.users:
-                if user.lower() == key.lower():
-                    user_id = self.users[key]
-                    user_name = key
-                    break
-                elif user_other and user_other.lower() == key.lower():
-                    user_id = self.users[key]
-                    user_name = key
-                    break
+        User and library correspondence is resolved through the settings model
+        via source_server's configured name, so explicit mappings and the
+        implicit same-name fallback are both honored. A list of
+        :class:`WatchedUpdate` values is scoped to one target user and library;
+        a source-shaped dictionary is expanded to that form for compatibility.
+        A write requires both the source user and source library to pass
+        policy; the coarse server direction only admits the pair for
+        processing.
+        """
+        dryrun = self.app_settings.dryrun
+        write_outcomes: list[WatchedWriteOutcome] = []
 
-            if not user_id or not user_name:
-                logger.info(f"{user} {user_other} not found in Jellyfin")
-                continue
-
-            jellyfin_libraries = self.query(
-                f"/Users/{user_id}/Views",
-                "get",
+        pending_updates = (
+            watched_list
+            if isinstance(watched_list, list)
+            else expand_watched_updates(
+                watched_list,
+                source_server_name,
+                self.server_settings.name,
+                self.app_settings,
             )
+        )
 
-            if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
+        for update in pending_updates:
+            user = update.source_user
+            if not self.app_settings.should_sync_user(
+                user, source_server_name, self.server_settings.name
+            ):
                 logger.debug(
-                    f"{self.server_type}: Failed to get libraries for {user_name}"
+                    f"{self.server_type}: {user} (from {source_server_name}) skipped"
                 )
                 continue
 
-            jellyfin_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+            target_user_normalized = normalize_name(update.target_user)
+            resolved_users = [
+                resolved_user
+                for resolved_user in self._resolve_local_users(
+                    source_server_name, user
+                )
+                if normalize_name(resolved_user[0]) == target_user_normalized
+            ]
+            if not resolved_users:
+                logger.info(
+                    f"{self.server_type}: {user} (from {source_server_name}) not found on this server, skipping"
+                )
+                continue
 
-            for library_name in user_data.libraries:
-                library_data = user_data.libraries[library_name]
-                library_other = None
-                if library_mapping:
-                    if library_name in library_mapping.keys():
-                        library_other = library_mapping[library_name]
-                    elif library_name in library_mapping.values():
-                        library_other = search_mapping(library_mapping, library_name)
+            for user_name, user_id in resolved_users:
+                jellyfin_libraries = self.query(
+                    f"/Users/{user_id}/Views",
+                    "get",
+                )
 
-                if library_name.lower() not in [
-                    x["Name"].lower() for x in jellyfin_libraries
-                ]:
-                    if library_other:
-                        if library_other.lower() in [
-                            x["Name"].lower() for x in jellyfin_libraries
-                        ]:
-                            logger.info(
-                                f"{self.server_type}: Library {library_name} not found, but {library_other} found, using {library_other}",
-                            )
-                            library_name = library_other
-                        else:
-                            logger.info(
-                                f"{self.server_type}: Library {library_name} or {library_other} not found in library list",
-                            )
-                            continue
-                    else:
-                        logger.info(
-                            f"{self.server_type}: Library {library_name} not found in library list",
-                        )
-                        continue
+                if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
+                    logger.debug(
+                        f"{self.server_type}: Failed to get libraries for {user_name}"
+                    )
+                    continue
 
-                library_id = None
-                for jellyfin_library in jellyfin_libraries:
-                    if jellyfin_library["Name"].lower() == library_name.lower():
-                        library_id = jellyfin_library["Id"]
-                        continue
+                available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
 
-                if library_id:
+                if not self.app_settings.should_sync_library(
+                    update.source_library, source_server_name, self.server_settings.name
+                ):
+                    logger.debug(
+                        f"{self.server_type}: {update.source_library} (from {source_server_name}) skipped"
+                    )
+                    continue
+
+                target_library_normalized = normalize_name(update.target_library)
+                resolved_libraries = [
+                    resolved_library
+                    for resolved_library in self._resolve_local_libraries(
+                        source_server_name,
+                        update.source_library,
+                        available_libraries,
+                    )
+                    if normalize_name(resolved_library[0]) == target_library_normalized
+                ]
+                if not resolved_libraries:
+                    logger.info(
+                        f"{self.server_type}: Library {update.source_library} (from {source_server_name}) not found in library list",
+                    )
+                    continue
+
+                for resolved_library_name, library_id in resolved_libraries:
                     try:
-                        self.update_user_watched(
+                        outcomes = self.update_user_watched(
                             user_name,
                             user_id,
-                            library_data,
-                            library_name,
+                            update.library_data,
+                            resolved_library_name,
                             library_id,
                             dryrun,
                         )
+                        if outcomes:
+                            write_outcomes.extend(outcomes)
                     except Exception as e:
                         logger.error(
-                            f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
+                            f"{self.server_type}: Error updating watched for {user_name} in {resolved_library_name}, {e}",
                         )
+
+        return write_outcomes

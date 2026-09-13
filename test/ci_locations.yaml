@@ -1,0 +1,69 @@
+# Hand-authored YAML equivalent of test/ci_locations.env.
+#
+# The aliases below describe the actual CI server setup. They are deliberately
+# explicit because legacy USER_MAPPING and LIBRARY_MAPPING cannot identify
+# which server owns either side of a mapping during migration.
+
+dryrun: true
+debug_level: TRACE
+run_only_once: true
+sleep_duration: 10
+log_file: log.log
+mark_file: mark.log
+request_timeout: 300
+max_threads: 2
+generate_guids: false
+generate_locations: true
+
+blacklist_libraries: []
+whitelist_libraries: []
+blacklist_library_types: []
+whitelist_library_types: []
+blacklist_users: []
+whitelist_users:
+  - jellyplex_watched
+
+user_mappings:
+  - canonical: JellyUser
+    aliases:
+      - server: plex-main
+        username: jellyplex_watched
+      - server: jellyfin-main
+        username: JellyUser
+      - server: emby-main
+        username: jellyplex_watched
+
+library_mappings:
+  - canonical: Shows
+    aliases:
+      - server: plex-main
+        library: TV Shows
+      - server: jellyfin-main
+        library: Shows
+      - server: emby-main
+        library: TV Shows
+
+plex:
+  - name: plex-main
+    baseurl: http://localhost:32400
+    sync_to:
+      - jellyfin-main
+      - emby-main
+    token: "6S28yhwKg4y-vAXYMi1c"
+    ssl_bypass: true
+
+jellyfin:
+  - name: jellyfin-main
+    baseurl: http://localhost:8096
+    sync_to:
+      - plex-main
+      - emby-main
+    token: "d773c4db3ecc4b028fc0904d9694804c"
+
+emby:
+  - name: emby-main
+    baseurl: http://localhost:8097
+    sync_to:
+      - plex-main
+      - jellyfin-main
+    token: "ed9507cba8d14d469ae4d58e33afc515"
