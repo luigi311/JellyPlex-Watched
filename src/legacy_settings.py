@@ -115,10 +115,23 @@ def resolve_legacy_env(
     return resolved
 
 
-def _env_as_bool(v: str | None) -> bool | None:
-    if v is None or v == "":
+_TRUE_BOOLEAN_VALUES = frozenset({"1", "true", "yes", "on", "t", "y"})
+_FALSE_BOOLEAN_VALUES = frozenset({"0", "false", "no", "off", "f", "n"})
+
+
+def _env_as_bool(v: str | None, field_name: str) -> bool | None:
+    """Parse legacy boolean spellings without silently accepting typos."""
+    if v is None:
         return None
-    return v.strip().lower() in {"1", "true", "yes", "on"}
+
+    normalized = v.strip().casefold()
+    if not normalized:
+        return None
+    if normalized in _TRUE_BOOLEAN_VALUES:
+        return True
+    if normalized in _FALSE_BOOLEAN_VALUES:
+        return False
+    raise ValueError(f"invalid boolean value for {field_name}")
 
 
 def _env_as_int(v: str | None) -> int | None:
@@ -217,7 +230,7 @@ def _build_plex_servers(env: dict[str, str | None]) -> list[dict[str, Any]]:
     usernames = _env_as_indexed_list(env.get("PLEX_USERNAME"))
     passwords = _env_as_indexed_list(env.get("PLEX_PASSWORD"))
     servernames = _env_as_indexed_list(env.get("PLEX_SERVERNAME"))
-    ssl_bypass = _env_as_bool(env.get("SSL_BYPASS"))
+    ssl_bypass = _env_as_bool(env.get("SSL_BYPASS"), "SSL_BYPASS")
 
     servers: list[dict[str, Any]] = []
     for i, baseurl in enumerate(baseurls):
@@ -310,7 +323,7 @@ def _build_sync_to(
 
     def is_set(src: str, dst: str) -> bool:
         flag = f"SYNC_FROM_{src.upper()}_TO_{dst.upper()}"
-        return bool(_env_as_bool(env.get(flag)))
+        return bool(_env_as_bool(env.get(flag), flag))
 
     result: dict[str, list[str]] = {}
     type_order = ["plex", "jellyfin", "emby"]
@@ -371,14 +384,20 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
 
+    for src_key, dst_key in [
+        ("DRYRUN", "dryrun"),
+        ("RUN_ONLY_ONCE", "run_only_once"),
+        ("GENERATE_GUIDS", "generate_guids"),
+        ("GENERATE_LOCATIONS", "generate_locations"),
+    ]:
+        parsed = _env_as_bool(env.get(src_key), src_key)
+        if parsed is not None:
+            out[dst_key] = parsed
+
     for src_key, dst_key, parser in [
-        ("DRYRUN", "dryrun", _env_as_bool),
-        ("RUN_ONLY_ONCE", "run_only_once", _env_as_bool),
         ("SLEEP_DURATION", "sleep_duration", _env_as_int),
         ("REQUEST_TIMEOUT", "request_timeout", _env_as_int),
         ("MAX_THREADS", "max_threads", _env_as_int),
-        ("GENERATE_GUIDS", "generate_guids", _env_as_bool),
-        ("GENERATE_LOCATIONS", "generate_locations", _env_as_bool),
     ]:
         parsed = parser(env.get(src_key))
         if parsed is not None:
@@ -387,7 +406,7 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
     debug_level = env.get("DEBUG_LEVEL")
     if debug_level:
         out["debug_level"] = debug_level.upper()
-    elif _env_as_bool(env.get("DEBUG")):
+    elif _env_as_bool(env.get("DEBUG"), "DEBUG"):
         out["debug_level"] = "DEBUG"
 
     log_file = env.get("LOG_FILE") or env.get("LOGFILE")

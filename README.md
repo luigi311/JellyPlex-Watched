@@ -113,8 +113,10 @@ Use JSON `[]` when an empty list should replace a lower-priority list; a full
 JSON server list replaces the lower-priority server definitions as a whole.
 Malformed new-style JSON is rejected. Legacy empty and valueless entries are
 unset after process/file precedence is resolved and do not fall back to the
-file. A prefixed dotenv value therefore takes precedence over a legacy process
-value.
+file. Legacy boolean values accept `1/0`, `true/false`, `yes/no`, `on/off`,
+`t/f`, and `y/n` case-insensitively with surrounding whitespace ignored;
+other non-empty values are rejected. A prefixed dotenv value therefore takes
+precedence over a legacy process value.
 
 ### Compatibility notes
 

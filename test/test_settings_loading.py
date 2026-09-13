@@ -934,6 +934,63 @@ def test_legacy_fixture_covers_plex_username_password_auth(
     assert settings.plex[0].servername == "Plex Account Server"
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("1", True),
+        ("true", True),
+        ("yes", True),
+        ("on", True),
+        ("t", True),
+        ("y", True),
+        ("0", False),
+        ("false", False),
+        ("no", False),
+        ("off", False),
+        ("f", False),
+        ("n", False),
+        ("  Y  ", True),
+        ("  n  ", False),
+    ],
+)
+def test_r08_legacy_boolean_aliases_are_preserved(
+    tmp_path: Path,
+    controlled_environment: None,
+    raw: str,
+    expected: bool,
+) -> None:
+    settings = load_settings(
+        env_file=_write_env(tmp_path, {"DRYRUN": raw}),
+        yaml_file=_write_yaml(tmp_path, _base_yaml()),
+        auto_migrate=False,
+    )
+
+    assert settings.dryrun is expected
+
+
+@pytest.mark.parametrize("raw", [None, "", "  "])
+def test_r08_empty_legacy_boolean_is_unset(raw: str | None) -> None:
+    translated = legacy_env_to_field_dict({"DRYRUN": raw})
+
+    assert "dryrun" not in translated
+
+
+@pytest.mark.parametrize("raw", ["tru", "maybe", "2", "not-a-bool"])
+def test_r08_invalid_legacy_boolean_fails_before_loading_settings(
+    tmp_path: Path,
+    controlled_environment: None,
+    raw: str,
+) -> None:
+    with pytest.raises(ValueError, match="invalid boolean value for DRYRUN") as error:
+        load_settings(
+            env_file=_write_env(tmp_path, {"DRYRUN": raw}),
+            yaml_file=_write_yaml(tmp_path, _base_yaml()),
+            auto_migrate=False,
+        )
+
+    assert raw not in str(error.value)
+
+
 def test_c01_legacy_csv_isolated_from_new_environment_parsing(
     tmp_path: Path,
     controlled_environment: None,
