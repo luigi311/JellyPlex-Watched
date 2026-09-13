@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import cast
 
+from loguru import logger
 from plexapi.myplex import MyPlexAccount, MyPlexUser
 
 from src.emby import Emby
@@ -44,12 +45,22 @@ def generate_sync_inventory(
     for server, users in server_users.items():
         inventory[server] = {}
         for user in users:
-            if isinstance(server, Plex) and not isinstance(user, tuple):
-                libraries = server.get_user_libraries(user)
-            elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
-                libraries = server.get_user_libraries(cast(tuple[str, str], user))
-            else:
-                raise TypeError("User representation does not match server")
+            try:
+                if isinstance(server, Plex) and not isinstance(user, tuple):
+                    libraries = server.get_user_libraries(user)
+                elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
+                    libraries = server.get_user_libraries(cast(tuple[str, str], user))
+                else:
+                    raise TypeError("User representation does not match server")
+            except Exception as error:
+                # Adapter errors may contain credentials; log only the error type.
+                logger.warning(
+                    "Skipping library discovery for user {} on {} ({})",
+                    UserLibraries(user, {}).username,
+                    server.server_settings.name,
+                    type(error).__name__,
+                )
+                continue
             entry = UserLibraries(user, libraries)
             inventory[server][entry.username] = entry
 

@@ -154,3 +154,39 @@ def test_plex_library_discovery_uses_shared_user_access():
     server.login.assert_called_once_with("http://plex", "test-token", None, None, None)
     user.get_token.return_value = None
     assert server.get_user_libraries(user) == {}
+
+
+@pytest.mark.parametrize("failure_stage", ["token", "login", "sections"])
+def test_discovery_failure_does_not_discard_healthy_scopes(failure_stage):
+    settings = settings_override()
+    plex = object.__new__(Plex)
+    plex.server_settings = settings.plex[0]
+    plex.admin_user = object()
+    plex.plex = SimpleNamespace(machineIdentifier="server")
+    plex.base_url = "http://plex"
+    failed = Mock(spec=MyPlexUser, username="failed")
+    healthy = Mock(spec=MyPlexUser, username="healthy")
+    failed.get_token.return_value = "failed-token"
+    healthy.get_token.return_value = "healthy-token"
+    good_sections = Mock(return_value=[SimpleNamespace(title="Movies", type="movie")])
+    bad_sections = Mock(side_effect=RuntimeError("discovery failed"))
+
+    def login(_url, token, *_args):
+        if token == "failed-token" and failure_stage == "login":
+            raise RuntimeError("login failed")
+        sections = bad_sections if token == "failed-token" else good_sections
+        return SimpleNamespace(library=SimpleNamespace(sections=sections))
+
+    plex.login = Mock(side_effect=login)
+    if failure_stage == "token":
+        failed.get_token.side_effect = RuntimeError("token failed")
+    jf = object.__new__(Jellyfin)
+    jf.server_settings = settings.jellyfin[0]
+    jf.get_user_libraries = Mock(return_value={"Movies": "movies"})
+    result = generate_sync_inventory(
+        {plex: [failed, healthy], jf: [("healthy", "h")]}, settings
+    )
+    assert result[plex][0].user is healthy
+    assert len(result[plex]) == 1
+    assert result[jf][0].libraries == {"Movies": "movies"}
+    jf.get_user_libraries.assert_called_once_with(("healthy", "h"))
