@@ -26,7 +26,9 @@ from src.watched import (  # noqa: E402
     MediaItem,
     UserData,
     WatchedStatus,
+    WatchedWriteOutcome,
     cleanup_watched,
+    merge_destination_watched,
 )
 
 
@@ -311,12 +313,22 @@ def test_adapters_write_cleanup_pending_fanout_targets():
     def record_jellyfin_write(
         user_name: str,
         user_id: str,
-        _library_data: LibraryData,
+        library_data: LibraryData,
         library_name: str,
-        _library_id: str,
+        library_id: str,
         _dryrun: bool,
-    ) -> None:
+    ) -> list[WatchedWriteOutcome]:
         jellyfin_calls.append((user_name, user_id, library_name))
+        return [
+            WatchedWriteOutcome(
+                status="applied",
+                target_user=user_name,
+                target_library=library_name,
+                media_item=library_data.movies[0],
+                target_user_id=user_id,
+                target_library_id=library_id,
+            )
+        ]
 
     jellyfin_adapter.update_user_watched = record_jellyfin_write
     jellyfin_updated = jellyfin_adapter.update_watched(pending, "plex-main")
@@ -326,9 +338,15 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         ("bob", "bob-id", "Shows"),
         ("bob", "bob-id", "Shows Archive"),
     ]
-    assert set(jellyfin_updated) == {"alice", "bob"}
-    assert set(jellyfin_updated["alice"].libraries) == {"Shows Archive"}
-    assert set(jellyfin_updated["bob"].libraries) == {"Shows", "Shows Archive"}
+    assert sorted(
+        (outcome.target_user, outcome.target_library)
+        for outcome in jellyfin_updated
+        if outcome.status == "applied"
+    ) == [
+        ("alice", "Shows Archive"),
+        ("bob", "Shows"),
+        ("bob", "Shows Archive"),
+    ]
 
     class _EveryUserIsAdmin:
         def __eq__(self, _other: object) -> bool:
@@ -355,11 +373,19 @@ def test_adapters_write_cleanup_pending_fanout_targets():
     def record_plex_write(
         plex_user: SimpleNamespace,
         _plex_server: SimpleNamespace,
-        _library_data: LibraryData,
+        library_data: LibraryData,
         library_name: str,
         _dryrun: bool,
-    ) -> None:
+    ) -> list[WatchedWriteOutcome]:
         plex_calls.append((plex_user.username, library_name))
+        return [
+            WatchedWriteOutcome(
+                status="applied",
+                target_user=plex_user.username,
+                target_library=library_name,
+                media_item=library_data.movies[0],
+            )
+        ]
 
     plex_adapter.update_user_watched = record_plex_write
     plex_updated = plex_adapter.update_watched(pending, "plex-main")
@@ -369,9 +395,221 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         ("bob", "Shows"),
         ("bob", "Shows Archive"),
     ]
-    assert set(plex_updated) == {"alice", "bob"}
-    assert set(plex_updated["alice"].libraries) == {"Shows Archive"}
-    assert set(plex_updated["bob"].libraries) == {"Shows", "Shows Archive"}
+    assert sorted(
+        (outcome.target_user, outcome.target_library)
+        for outcome in plex_updated
+        if outcome.status == "applied"
+    ) == [
+        ("alice", "Shows Archive"),
+        ("bob", "Shows"),
+        ("bob", "Shows Archive"),
+    ]
+
+
+def test_jellyfin_receipt_contains_only_confirmed_item_writes(tmp_path):
+    """Failed, unsupported, and absent items never enter the write receipt."""
+    settings = settings_override(
+        dryrun=False,
+        mark_file=tmp_path / "mark.log",
+    )
+    adapter = object.__new__(JellyfinEmby)
+    adapter.app_settings = settings
+    adapter.server_type = "Jellyfin"
+    adapter.server_name = "Jellyfin CI"
+    adapter.update_partial = False
+
+    def movie(title: str, filename: str, completed: bool = True) -> MediaItem:
+        return MediaItem(
+            identifiers=MediaIdentifiers(title=title, locations=(filename,)),
+            status=WatchedStatus(
+                completed=completed,
+                time=300_000 if not completed else 0,
+                viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            ),
+        )
+
+    library_data = LibraryData(
+        title="Movies",
+        movies=[
+            movie("Applied", "applied.mkv"),
+            movie("Failed", "failed.mkv"),
+            movie("Applied after failure", "after-failure.mkv"),
+            movie("Unsupported", "unsupported.mkv", completed=False),
+            movie("Absent", "absent.mkv"),
+        ],
+    )
+    destination_items = [
+        {
+            "Name": "Applied",
+            "Id": "applied-id",
+            "Path": "/media/applied.mkv",
+            "ProviderIds": {},
+        },
+        {
+            "Name": "Failed",
+            "Id": "failed-id",
+            "Path": "/media/failed.mkv",
+            "ProviderIds": {},
+        },
+        {
+            "Name": "Applied after failure",
+            "Id": "after-failure-id",
+            "Path": "/media/after-failure.mkv",
+            "ProviderIds": {},
+        },
+        {
+            "Name": "Unsupported",
+            "Id": "unsupported-id",
+            "Path": "/media/unsupported.mkv",
+            "ProviderIds": {},
+        },
+    ]
+    posted_ids: list[str] = []
+
+    def query(path: str, query_type: str, **_kwargs):
+        if query_type == "get":
+            return {"Items": destination_items}
+        item_id = path.split("/Items/", 1)[1].split("/", 1)[0]
+        if item_id == "failed-id":
+            raise RuntimeError("simulated write failure")
+        posted_ids.append(item_id)
+        return None
+
+    adapter.query = query
+    outcomes = adapter.update_user_watched(
+        "alice",
+        "alice-id",
+        library_data,
+        "Movies",
+        "movies-id",
+        False,
+    )
+
+    assert [
+        (outcome.status, outcome.target_item_id)
+        for outcome in outcomes
+    ] == [
+        ("applied", "applied-id"),
+        ("failed", "failed-id"),
+        ("applied", "after-failure-id"),
+        ("unsupported", "unsupported-id"),
+        ("skipped", None),
+    ]
+    assert posted_ids == ["applied-id", "after-failure-id"]
+    applied = [outcome for outcome in outcomes if outcome.status == "applied"]
+    assert [outcome.media_item.identifiers.title for outcome in applied] == [
+        "Applied",
+        "Applied after failure",
+    ]
+    assert all(outcome.media_item.status.completed for outcome in applied)
+    assert all(outcome.media_item.status.time == 0 for outcome in applied)
+
+
+def test_destination_receipts_do_not_remap_crossed_identities():
+    """A destination receipt updates its concrete target cache entry only."""
+    settings = settings_override(
+        user_mappings=[
+            {
+                "canonical": "alice-source",
+                "aliases": [
+                    {"server": "plex-main", "username": "alice"},
+                    {"server": "jellyfin-main", "username": "bob"},
+                ],
+            },
+            {
+                "canonical": "charlie-source",
+                "aliases": [
+                    {"server": "plex-main", "username": "charlie"},
+                    {"server": "jellyfin-main", "username": "alice"},
+                ],
+            },
+        ],
+        library_mappings=[
+            {
+                "canonical": "shows",
+                "aliases": [
+                    {"server": "plex-main", "library": "TV Shows"},
+                    {"server": "jellyfin-main", "library": "Shows"},
+                ],
+            }
+        ],
+    )
+    movie = MediaItem(
+        identifiers=MediaIdentifiers(
+            title="Destination movie",
+            locations=("destination.mkv",),
+        ),
+        status=WatchedStatus(
+            completed=True,
+            time=0,
+            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        ),
+    )
+    cache = {
+        "alice": UserData(
+            libraries={"Shows": LibraryData(title="Shows")}
+        ),
+        "charlie": UserData(
+            libraries={"Shows": LibraryData(title="Shows")}
+        ),
+    }
+    receipt = WatchedWriteOutcome(
+        status="applied",
+        target_user="alice",
+        target_library="Shows",
+        media_item=movie,
+        target_user_id="alice-id",
+        target_library_id="shows-id",
+        target_item_id="movie-id",
+    )
+    second_movie = movie.model_copy(
+        update={
+            "identifiers": MediaIdentifiers(
+                title="Second destination movie",
+                locations=("second-destination.mkv",),
+            )
+        }
+    )
+    second_receipt = WatchedWriteOutcome(
+        status="applied",
+        target_user="alice",
+        target_library="Shows",
+        media_item=second_movie,
+        target_user_id="alice-id",
+        target_library_id="shows-id",
+        target_item_id="second-movie-id",
+    )
+
+    merged = merge_destination_watched(
+        cache,
+        [receipt, second_receipt],
+        settings,
+        average_time=0.0,
+    )
+
+    assert [
+        item.identifiers.title for item in merged["alice"].libraries["Shows"].movies
+    ] == ["Destination movie", "Second destination movie"]
+    assert merged["charlie"].libraries["Shows"].movies == []
+
+    unknown_receipt = WatchedWriteOutcome(
+        status=receipt.status,
+        target_user="missing",
+        target_library=receipt.target_library,
+        media_item=receipt.media_item,
+        series_identifiers=receipt.series_identifiers,
+        target_user_id=receipt.target_user_id,
+        target_library_id=receipt.target_library_id,
+        target_item_id=receipt.target_item_id,
+        reason=receipt.reason,
+    )
+    merged_with_unknown = merge_destination_watched(
+        cache,
+        [unknown_receipt],
+        settings,
+        average_time=0.0,
+    )
+    assert "missing" not in merged_with_unknown
 
 
 def test_adapter_requires_library_authorization_for_each_write():
@@ -409,7 +647,7 @@ def test_adapter_requires_library_authorization_for_each_write():
     )
 
     assert writes == []
-    assert updated == {}
+    assert updated == []
 
 
 def test_jellyfin_watched_includes_played_series_with_zero_aggregate_count():

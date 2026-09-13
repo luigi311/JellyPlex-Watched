@@ -28,6 +28,9 @@ from src.watched import (
     check_same_identifiers,
     expand_watched_updates,
     WatchedUpdate,
+    WatchedWriteOutcome,
+    WriteOutcomeStatus,
+    resulting_media_item,
 )
 
 
@@ -380,10 +383,49 @@ class Plex:
         library_data: LibraryData,
         library_name: str,
         dryrun: bool,
-    ) -> None:
+    ) -> list[WatchedWriteOutcome]:
+        outcomes: list[WatchedWriteOutcome] = []
+        target_user = normalize_name(user.username if user.username else user.title)
+        target_user_id = getattr(user, "id", None)
+        target_user_id = (
+            str(target_user_id) if target_user_id is not None else None
+        )
+
+        def optional_string(value: object) -> str | None:
+            return str(value) if value is not None else None
+
+        def add_outcome(
+            status: WriteOutcomeStatus,
+            media_item: MediaItem,
+            *,
+            completed: bool | None = None,
+            target_identifiers: MediaIdentifiers | None = None,
+            series_identifiers: MediaIdentifiers | None = None,
+            target_item_id: object = None,
+            reason: str | None = None,
+        ) -> None:
+            if status == "applied" and completed is not None:
+                media_item = resulting_media_item(
+                    media_item,
+                    completed,
+                    target_identifiers,
+                )
+            outcomes.append(
+                WatchedWriteOutcome(
+                    status=status,
+                    target_user=target_user,
+                    target_library=library_name,
+                    media_item=media_item,
+                    series_identifiers=series_identifiers,
+                    target_user_id=target_user_id,
+                    target_item_id=optional_string(target_item_id),
+                    reason=reason,
+                )
+            )
+
         # If there are no movies or shows to update, exit early.
         if not library_data.series and not library_data.movies:
-            return
+            return outcomes
 
         logger.info(
             f"Plex: Updating watched for {user.title} in library {library_name}"
@@ -393,22 +435,45 @@ class Plex:
             logger.error(
                 f"Plex: Library {library_name} not found for {user.title}, skipping",
             )
-            return
+            for movie in library_data.movies:
+                add_outcome("uncertain", movie, reason="destination library missing")
+            for series in library_data.series:
+                for episode in series.episodes:
+                    add_outcome(
+                        "uncertain",
+                        episode,
+                        series_identifiers=series.identifiers,
+                        reason="destination library missing",
+                    )
+            return outcomes
 
         # Update movies.
         if library_data.movies:
             # Search for Plex movies that are currently marked as unwatched.
-            for plex_movie in library_section.search():
+            try:
+                plex_movies = library_section.search()
+            except Exception as error:
+                logger.error(
+                    f"Plex: Failed to find movies for {user.title} in {library_name}, Error: {error}"
+                )
+                for movie in library_data.movies:
+                    add_outcome("uncertain", movie, reason="movie discovery failed")
+                plex_movies = []
+
+            matched_movies: set[int] = set()
+            for plex_movie in plex_movies:
                 plex_identifiers = extract_identifiers_from_item(
                     plex_movie,
                     self.app_settings.generate_guids,
                     self.app_settings.generate_locations,
                 )
                 # Check each stored movie for a match.
-                for stored_movie in library_data.movies:
+                for movie_index, stored_movie in enumerate(library_data.movies):
                     if check_same_identifiers(
                         plex_identifiers, stored_movie.identifiers
                     ):
+                        matched_movies.add(movie_index)
+                        target_item_id = getattr(plex_movie, "ratingKey", None)
                         # If the stored movie is marked as watched (or has enough progress),
                         # update the Plex movie accordingly.
                         if stored_movie.status.completed:
@@ -419,6 +484,13 @@ class Plex:
                                 except Exception as e:
                                     logger.error(
                                         f"Plex: Failed to mark {plex_movie.title} as watched, Error: {e}"
+                                    )
+                                    add_outcome(
+                                        "failed",
+                                        stored_movie,
+                                        completed=True,
+                                        target_item_id=target_item_id,
+                                        reason=str(e),
                                     )
                                     continue
 
@@ -433,6 +505,14 @@ class Plex:
                                 None,
                                 mark_file=self.app_settings.mark_file,
                             )
+                            add_outcome(
+                                "skipped" if dryrun else "applied",
+                                stored_movie,
+                                completed=True,
+                                target_identifiers=plex_identifiers,
+                                target_item_id=target_item_id,
+                                reason="dry-run" if dryrun else None,
+                            )
                         else:
                             msg = f"Plex: {plex_movie.title} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user.title} in {library_name}"
                             if not dryrun:
@@ -442,6 +522,13 @@ class Plex:
                                 except Exception as e:
                                     logger.error(
                                         f"Plex: Failed to update {plex_movie.title} timeline, Error: {e}"
+                                    )
+                                    add_outcome(
+                                        "failed",
+                                        stored_movie,
+                                        completed=False,
+                                        target_item_id=target_item_id,
+                                        reason=str(e),
                                     )
                                     continue
 
@@ -455,13 +542,41 @@ class Plex:
                                 duration=stored_movie.status.time,
                                 mark_file=self.app_settings.mark_file,
                             )
+                            add_outcome(
+                                "skipped" if dryrun else "applied",
+                                stored_movie,
+                                completed=False,
+                                target_identifiers=plex_identifiers,
+                                target_item_id=target_item_id,
+                                reason="dry-run" if dryrun else None,
+                            )
                         # Once matched, no need to check further.
                         break
+
+            for movie_index, stored_movie in enumerate(library_data.movies):
+                if movie_index not in matched_movies:
+                    add_outcome("skipped", stored_movie, reason="media not found")
 
         # Update TV Shows (series/episodes).
         if library_data.series:
             # For each Plex show in the library section:
-            plex_shows = library_section.search()
+            try:
+                plex_shows = library_section.search()
+            except Exception as error:
+                logger.error(
+                    f"Plex: Failed to find shows for {user.title} in {library_name}, Error: {error}"
+                )
+                for series in library_data.series:
+                    for episode in series.episodes:
+                        add_outcome(
+                            "uncertain",
+                            episode,
+                            series_identifiers=series.identifiers,
+                            reason="show discovery failed",
+                        )
+                plex_shows = []
+
+            matched_episodes: set[tuple[int, int]] = set()
             for plex_show in plex_shows:
                 # Extract identifiers from the Plex show.
                 plex_show_identifiers = extract_identifiers_from_item(
@@ -470,24 +585,47 @@ class Plex:
                     self.app_settings.generate_locations,
                 )
                 # Try to find a matching series in your stored library.
-                for stored_series in library_data.series:
+                for series_index, stored_series in enumerate(library_data.series):
                     if check_same_identifiers(
                         plex_show_identifiers, stored_series.identifiers
                     ):
                         logger.trace(f"Found matching show for '{plex_show.title}'")
                         # Now update episodes.
                         # Get the list of Plex episodes for this show.
-                        plex_episodes = plex_show.episodes()
+                        try:
+                            plex_episodes = plex_show.episodes()
+                        except Exception as error:
+                            logger.error(
+                                f"Plex: Failed to find episodes for {user.title} in {library_name} {plex_show.title}, Error: {error}"
+                            )
+                            for episode_index, stored_ep in enumerate(
+                                stored_series.episodes
+                            ):
+                                if (series_index, episode_index) not in matched_episodes:
+                                    add_outcome(
+                                        "uncertain",
+                                        stored_ep,
+                                        series_identifiers=stored_series.identifiers,
+                                        reason="episode discovery failed",
+                                    )
+                            break
+
                         for plex_episode in plex_episodes:
                             plex_episode_identifiers = extract_identifiers_from_item(
                                 plex_episode,
                                 self.app_settings.generate_guids,
                                 self.app_settings.generate_locations,
                             )
-                            for stored_ep in stored_series.episodes:
+                            for episode_index, stored_ep in enumerate(
+                                stored_series.episodes
+                            ):
                                 if check_same_identifiers(
                                     plex_episode_identifiers, stored_ep.identifiers
                                 ):
+                                    matched_episodes.add((series_index, episode_index))
+                                    target_item_id = getattr(
+                                        plex_episode, "ratingKey", None
+                                    )
                                     if stored_ep.status.completed:
                                         msg = f"Plex: {plex_show.title} {plex_episode.title} as watched for {user.title} in {library_name}"
                                         if not dryrun:
@@ -496,6 +634,14 @@ class Plex:
                                             except Exception as e:
                                                 logger.error(
                                                     f"Plex: Failed to mark {plex_show.title} {plex_episode.title} as watched, Error: {e}"
+                                                )
+                                                add_outcome(
+                                                    "failed",
+                                                    stored_ep,
+                                                    completed=True,
+                                                    series_identifiers=stored_series.identifiers,
+                                                    target_item_id=target_item_id,
+                                                    reason=str(e),
                                                 )
                                                 continue
 
@@ -511,6 +657,15 @@ class Plex:
                                             plex_episode.title,
                                             mark_file=self.app_settings.mark_file,
                                         )
+                                        add_outcome(
+                                            "skipped" if dryrun else "applied",
+                                            stored_ep,
+                                            completed=True,
+                                            target_identifiers=plex_episode_identifiers,
+                                            series_identifiers=plex_show_identifiers,
+                                            target_item_id=target_item_id,
+                                            reason="dry-run" if dryrun else None,
+                                        )
                                     else:
                                         msg = f"Plex: {plex_show.title} {plex_episode.title} as partially watched for {floor(stored_ep.status.time / 60_000)} minutes for {user.title} in {library_name}"
                                         if not dryrun:
@@ -521,6 +676,14 @@ class Plex:
                                             except Exception as e:
                                                 logger.error(
                                                     f"Plex: Failed to update {plex_show.title} {plex_episode.title} timeline, Error: {e}"
+                                                )
+                                                add_outcome(
+                                                    "failed",
+                                                    stored_ep,
+                                                    completed=False,
+                                                    series_identifiers=stored_series.identifiers,
+                                                    target_item_id=target_item_id,
+                                                    reason=str(e),
                                                 )
                                                 continue
 
@@ -537,8 +700,29 @@ class Plex:
                                             stored_ep.status.time,
                                             mark_file=self.app_settings.mark_file,
                                         )
+                                        add_outcome(
+                                            "skipped" if dryrun else "applied",
+                                            stored_ep,
+                                            completed=False,
+                                            target_identifiers=plex_episode_identifiers,
+                                            series_identifiers=plex_show_identifiers,
+                                            target_item_id=target_item_id,
+                                            reason="dry-run" if dryrun else None,
+                                        )
                                     break  # Found a matching episode.
                         break  # Found a matching show.
+
+            for series_index, stored_series in enumerate(library_data.series):
+                for episode_index, stored_ep in enumerate(stored_series.episodes):
+                    if (series_index, episode_index) not in matched_episodes:
+                        add_outcome(
+                            "skipped",
+                            stored_ep,
+                            series_identifiers=stored_series.identifiers,
+                            reason="media not found",
+                        )
+
+        return outcomes
 
     def _resolve_local_users(
         self, source_server: str, source_user: str
@@ -599,7 +783,7 @@ class Plex:
         self,
         watched_list: dict[str, UserData] | list[WatchedUpdate],
         source_server_name: str,
-    ) -> dict[str, UserData]:
+    ) -> list[WatchedWriteOutcome]:
         """
         Apply watch state from `watched_list` onto this Plex server.
 
@@ -613,7 +797,7 @@ class Plex:
         processing.
         """
         dryrun = self.app_settings.dryrun
-        updated_watched: dict[str, UserData] = {}
+        write_outcomes: list[WatchedWriteOutcome] = []
 
         pending_updates = (
             watched_list
@@ -679,10 +863,6 @@ class Plex:
                 library_list = plex_server.library.sections()
                 available_titles = [section.title for section in library_list]
 
-                user_name = normalize_name(
-                    plex_user.username if plex_user.username else plex_user.title
-                )
-
                 if not self.app_settings.should_sync_library(
                     update.source_library, source_server_name, self.server_settings.name
                 ):
@@ -709,19 +889,15 @@ class Plex:
 
                 for resolved_library in resolved_libraries:
                     try:
-                        self.update_user_watched(
+                        outcomes = self.update_user_watched(
                             plex_user,
                             plex_server,
                             update.library_data,
                             resolved_library,
                             dryrun,
                         )
-
-                        if user_name not in updated_watched:
-                            updated_watched[user_name] = UserData()
-                        updated_watched[user_name].libraries[resolved_library] = (
-                            update.library_data
-                        )
+                        if outcomes:
+                            write_outcomes.extend(outcomes)
 
                     except Exception as e:
                         logger.error(
@@ -729,4 +905,4 @@ class Plex:
                         )
                         continue
 
-        return updated_watched
+        return write_outcomes

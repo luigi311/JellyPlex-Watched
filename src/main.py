@@ -11,7 +11,7 @@ from src.settings import AppSettings, load_settings
 from src.users import setup_users
 from src.watched import (
     cleanup_watched,
-    merge_server_watched,
+    merge_destination_watched,
 )
 
 
@@ -113,17 +113,16 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
             ):
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
 
-                updated_watched = server_1.update_watched(
+                write_outcomes = server_1.update_watched(
                     server_2_watched_filtered, server_2.server_settings.name
                 )
 
-                # Add server_2_watched_filtered to server_1_watched that way the stored version isn't stale for the next server
-                if not settings.dryrun and updated_watched:
-                    server_1_watched = merge_server_watched(
+                # Keep the cached target history current for the next server
+                # pair using only confirmed, destination-native write results.
+                if not settings.dryrun and write_outcomes:
+                    server_1_watched = merge_destination_watched(
                         server_1_watched,
-                        updated_watched,
-                        server_1.server_settings.name,
-                        server_2.server_settings.name,
+                        write_outcomes,
                         settings,
                         average_time,
                     )

@@ -4,7 +4,7 @@ import copy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -66,6 +66,51 @@ class WatchedUpdate:
     source_library: str
     target_library: str
     library_data: LibraryData
+
+
+WriteOutcomeStatus = Literal[
+    "applied",
+    "skipped",
+    "unsupported",
+    "failed",
+    "uncertain",
+]
+
+
+@dataclass(frozen=True)
+class WatchedWriteOutcome:
+    """Result for one attempted item update on a concrete destination."""
+
+    status: WriteOutcomeStatus
+    target_user: str
+    target_library: str
+    media_item: MediaItem
+    series_identifiers: MediaIdentifiers | None = None
+    target_user_id: str | None = None
+    target_library_id: str | None = None
+    target_item_id: str | None = None
+    reason: str | None = None
+
+
+def resulting_media_item(
+    media_item: MediaItem,
+    completed: bool,
+    identifiers: MediaIdentifiers | None = None,
+) -> MediaItem:
+    """Return the state represented by a completed or partial write."""
+    updates: dict[str, Any] = {
+        "status": media_item.status.model_copy(
+            update={
+                "completed": completed,
+                "time": 0 if completed else media_item.status.time,
+            }
+        )
+    }
+    if identifiers is not None:
+        updates["identifiers"] = identifiers
+    return media_item.model_copy(
+        update=updates
+    )
 
 
 _WatchedData = TypeVar("_WatchedData")
@@ -265,6 +310,70 @@ def merge_library_data(
             merged.series.append(copy.deepcopy(series2))
 
     return merged
+
+
+def merge_destination_watched(
+    watched_list: dict[str, UserData],
+    outcomes: list[WatchedWriteOutcome],
+    settings: AppSettings,
+    average_time: float,
+) -> dict[str, UserData]:
+    """Merge confirmed writes into the cache using destination-native names.
+
+    Adapter receipts already identify the concrete user and library that were
+    written. They must be merged against the cache for that same destination;
+    translating them through the source server can credit a write to an
+    unrelated identity. A receipt for an identity absent from the cache is
+    ignored because it cannot be safely associated with the snapshot.
+    """
+    merged_watched = copy.deepcopy(watched_list)
+    user_keys = {normalize_name(key): key for key in merged_watched}
+
+    for outcome in outcomes:
+        if outcome.status != "applied":
+            continue
+
+        user_key = user_keys.get(normalize_name(outcome.target_user))
+        if user_key is None:
+            logger.warning(
+                "Skipping confirmed watched receipt for unknown destination user {}",
+                outcome.target_user,
+            )
+            continue
+
+        library_keys = {
+            normalize_name(key): key
+            for key in merged_watched[user_key].libraries
+        }
+        library_key = library_keys.get(normalize_name(outcome.target_library))
+        if library_key is None:
+            logger.warning(
+                "Skipping confirmed watched receipt for unknown destination "
+                "library {} for user {}",
+                outcome.target_library,
+                outcome.target_user,
+            )
+            continue
+
+        receipt_library = LibraryData(title=library_key)
+        if outcome.series_identifiers is None:
+            receipt_library.movies.append(copy.deepcopy(outcome.media_item))
+        else:
+            receipt_library.series.append(
+                Series(
+                    identifiers=copy.deepcopy(outcome.series_identifiers),
+                    episodes=[copy.deepcopy(outcome.media_item)],
+                )
+            )
+
+        merged_watched[user_key].libraries[library_key] = merge_library_data(
+            merged_watched[user_key].libraries[library_key],
+            receipt_library,
+            settings,
+            average_time,
+        )
+
+    return merged_watched
 
 
 def _coalesce_watched_updates(
