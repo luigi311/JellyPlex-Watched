@@ -1,6 +1,7 @@
 from loguru import logger
 
 from src.emby import Emby
+from src.functions import normalize_name
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.settings import AppSettings
@@ -46,6 +47,12 @@ def combine_library_lists(
     """
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
+    server_1_by_name = {
+        normalize_name(name): name for name in server_1_libraries
+    }
+    server_2_by_name = {
+        normalize_name(name): name for name in server_2_libraries
+    }
 
     def add(s1_library: str, s2_library: str) -> None:
         accumulator.setdefault(s1_library, set()).add(s2_library)
@@ -62,8 +69,9 @@ def combine_library_lists(
         for target in settings.sync_targets_for_library(
             server_1_name, s1_library, server_2_name
         ):
-            if target in server_2_libraries:
-                add(s1_library, target)
+            target_name = server_2_by_name.get(normalize_name(target))
+            if target_name is not None:
+                add(s1_library, target_name)
 
     # server_2 -> server_1 (fills in relationships declared the other way)
     for s2_library, s2_type in server_2_libraries.items():
@@ -77,9 +85,10 @@ def combine_library_lists(
         for target in settings.sync_targets_for_library(
             server_2_name, s2_library, server_1_name
         ):
-            if target in server_1_libraries:
+            target_name = server_1_by_name.get(normalize_name(target))
+            if target_name is not None:
                 # key is always the server_1-side library name
-                add(target, s2_library)
+                add(target_name, s2_library)
 
     # Freeze to sorted lists for a stable, deterministic result.
     return {s1_library: sorted(targets) for s1_library, targets in accumulator.items()}
@@ -94,11 +103,17 @@ def generate_server_libraries(
     map, matched against both the server_1-side keys and the server_2-side
     targets. Mirrors users.generate_server_users.
     """
-    source_names = set(libraries.keys())
-    target_names = {target for targets in libraries.values() for target in targets}
+    source_names = {normalize_name(name) for name in libraries}
+    target_names = {
+        normalize_name(target) for targets in libraries.values() for target in targets
+    }
     all_names = source_names | target_names
 
-    return [library for library in server.get_libraries() if library in all_names]
+    return [
+        library
+        for library in server.get_libraries()
+        if normalize_name(library) in all_names
+    ]
 
 
 def setup_libraries(

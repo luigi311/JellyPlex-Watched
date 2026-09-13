@@ -2,6 +2,7 @@ from loguru import logger
 from plexapi.myplex import MyPlexAccount, MyPlexUser
 
 from src.emby import Emby
+from src.functions import normalize_name
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.settings import AppSettings
@@ -13,11 +14,11 @@ def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
     if isinstance(server, Plex):
         for user in server.users:
             server_users.append(
-                user.username.lower() if user.username else user.title.lower()
+                normalize_name(user.username if user.username else user.title)
             )
 
     elif isinstance(server, (Jellyfin, Emby)):
-        server_users = [key.lower() for key in server.users.keys()]
+        server_users = [normalize_name(key) for key in server.users.keys()]
 
     return server_users
 
@@ -51,6 +52,9 @@ def combine_user_lists(
     relationships declared on either side, and targets discovered from each
     direction are merged rather than overwritten.
     """
+    server_1_user_names = {normalize_name(user) for user in server_1_users}
+    server_2_user_names = {normalize_name(user) for user in server_2_users}
+
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
 
@@ -59,26 +63,28 @@ def combine_user_lists(
 
     # server_1 -> server_2
     for s1_user in server_1_users:
-        if not settings.should_sync_user(s1_user, server_1_name, server_2_name):
+        source_user = normalize_name(s1_user)
+        if not settings.should_sync_user(source_user, server_1_name, server_2_name):
             continue
         for target in settings.sync_targets_for_user(
-            server_1_name, s1_user, server_2_name
+            server_1_name, source_user, server_2_name
         ):
-            target = target.lower()
-            if target in server_2_users:
-                add(s1_user, target)
+            target = normalize_name(target)
+            if target in server_2_user_names:
+                add(source_user, target)
 
     # server_2 -> server_1 (fills in relationships declared the other way)
     for s2_user in server_2_users:
-        if not settings.should_sync_user(s2_user, server_2_name, server_1_name):
+        source_user = normalize_name(s2_user)
+        if not settings.should_sync_user(source_user, server_2_name, server_1_name):
             continue
         for target in settings.sync_targets_for_user(
-            server_2_name, s2_user, server_1_name
+            server_2_name, source_user, server_1_name
         ):
-            target = target.lower()
-            if target in server_1_users:
+            target = normalize_name(target)
+            if target in server_1_user_names:
                 # key is always the server_1-side username
-                add(target, s2_user)
+                add(target, source_user)
 
     # Freeze to sorted lists for a stable, deterministic result.
     return {s1_user: sorted(targets) for s1_user, targets in accumulator.items()}
@@ -90,8 +96,10 @@ def generate_server_users(
 ) -> list[MyPlexAccount | MyPlexUser] | dict[str, str] | None:
     # Flatten the fan-out map into the full set of usernames relevant to
     # either side: every server_1-side key and every server_2-side target.
-    source_names = set(users.keys())
-    target_names = {target for targets in users.values() for target in targets}
+    source_names = {normalize_name(name) for name in users}
+    target_names = {
+        normalize_name(target) for targets in users.values() for target in targets
+    }
     all_names = source_names | target_names
 
     if isinstance(server, Plex):
@@ -101,14 +109,14 @@ def generate_server_users(
                 plex_user.username if plex_user.username else plex_user.title
             )
 
-            if username_title.lower() in all_names:
+            if normalize_name(username_title) in all_names:
                 plex_server_users.append(plex_user)
 
         return plex_server_users
     elif isinstance(server, (Jellyfin, Emby)):
         jelly_emby_server_users: dict[str, str] = {}
         for jellyfin_user, jellyfin_id in server.users.items():
-            if jellyfin_user.lower() in all_names:
+            if normalize_name(jellyfin_user) in all_names:
                 jelly_emby_server_users[jellyfin_user] = jellyfin_id
 
         return jelly_emby_server_users

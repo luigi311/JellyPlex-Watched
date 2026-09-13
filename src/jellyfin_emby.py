@@ -14,6 +14,7 @@ from packaging.version import Version, parse
 from src.functions import (
     filename_from_any_path,
     log_marked,
+    normalize_name,
 )
 from src.settings import AppSettings, EmbySettings, JellyfinSettings
 from src.watched import (
@@ -24,6 +25,8 @@ from src.watched import (
     UserData,
     WatchedStatus,
     check_same_identifiers,
+    expand_watched_updates,
+    WatchedUpdate,
 )
 
 
@@ -300,7 +303,7 @@ class JellyfinEmby:
         library_id: str,
         library_title: str,
     ) -> LibraryData:
-        user_name = user_name.lower()
+        user_name = normalize_name(user_name)
         try:
             logger.info(
                 f"{self.server_type}: Generating watched for {user_name} in library {library_title}",
@@ -490,10 +493,12 @@ class JellyfinEmby:
         try:
             if not users_watched:
                 users_watched: dict[str, UserData] = {}
+            sync_library_names = {normalize_name(name) for name in sync_libraries}
 
             for user_name, user_id in users.items():
-                if user_name.lower() not in users_watched:
-                    users_watched[user_name.lower()] = UserData()
+                user_key = normalize_name(user_name)
+                if user_key not in users_watched:
+                    users_watched[user_key] = UserData()
 
                 all_libraries = self.query(f"/Users/{user_id}/Views", "get")
                 if not all_libraries or not isinstance(all_libraries, dict):
@@ -513,10 +518,10 @@ class JellyfinEmby:
                         )
                         continue
 
-                    if library_title not in sync_libraries:
+                    if normalize_name(library_title) not in sync_library_names:
                         continue
 
-                    if library_title in users_watched[user_name.lower()].libraries:
+                    if library_title in users_watched[user_key].libraries:
                         logger.info(
                             f"{self.server_type}: {user_name} {library_title} watched history has already been gathered, skipping"
                         )
@@ -531,10 +536,10 @@ class JellyfinEmby:
                         library_title,
                     )
 
-                    if user_name.lower() not in users_watched:
-                        users_watched[user_name.lower()] = UserData()
+                    if user_key not in users_watched:
+                        users_watched[user_key] = UserData()
 
-                    users_watched[user_name.lower()].libraries[library_title] = (
+                    users_watched[user_key].libraries[library_title] = (
                         library_data
                     )
 
@@ -801,77 +806,92 @@ class JellyfinEmby:
                 f"{self.server_type}: Error updating watched for {user_name} in library {library_name}, {e}",
             )
 
-    def _resolve_local_user(
+    def _resolve_local_users(
         self, source_server: str, source_user: str
-    ) -> tuple[str, str] | None:
+    ) -> list[tuple[str, str]]:
         """
-        Resolve a source-server username to (user_name, user_id) on this
-        server.
+        Resolve a source-server username to every matching local user.
 
         Candidate names on this server come from the settings model
         (sync_targets_for_user — explicit user_mappings aliases plus the
-        implicit same-username fallback). The first candidate matching one of
-        this server's actual users (case-insensitive) wins. Returns None if no
-        candidate matches.
+        implicit same-username fallback). Every candidate matching one of this
+        server's actual users is returned so one-to-many mappings reach every
+        target account.
         """
         this_server = self.server_settings.name
         candidates = self.app_settings.sync_targets_for_user(
             source_server, source_user, this_server
         )
-        candidates_lc = {c.lower() for c in candidates}
+        candidates_normalized = {normalize_name(c) for c in candidates}
+        matched: list[tuple[str, str]] = []
 
         for key, user_id in self.users.items():
-            if key.lower() in candidates_lc:
-                return key, user_id
+            if normalize_name(key) in candidates_normalized:
+                matched.append((key, user_id))
 
-        return None
+        return matched
 
-    def _resolve_local_library(
+    def _resolve_local_libraries(
         self,
         source_server: str,
         source_library: str,
         available_libraries: list[dict[str, Any]],
-    ) -> tuple[str, str] | None:
+    ) -> list[tuple[str, str]]:
         """
-        Resolve a source-server library name to (library_name, library_id) on
-        this server.
+        Resolve a source-server library name to every matching local library.
 
-        Candidates come from sync_targets_for_library; the first present in
-        `available_libraries` (matched on Name, case-insensitive) is returned,
-        preserving the server's actual Name casing.
+        Candidates come from sync_targets_for_library; every candidate present
+        in `available_libraries` (matched on Name, case-insensitive) is
+        returned, preserving the server's actual Name casing.
         """
         this_server = self.server_settings.name
         candidates = self.app_settings.sync_targets_for_library(
             source_server, source_library, this_server
         )
-        candidates_lc = {c.lower() for c in candidates}
+        candidates_normalized = {normalize_name(c) for c in candidates}
+        matched: list[tuple[str, str]] = []
 
         for library in available_libraries:
             name = library.get("Name")
             lib_id = library.get("Id")
-            if name and lib_id and name.lower() in candidates_lc:
-                return name, lib_id
+            if name and lib_id and normalize_name(name) in candidates_normalized:
+                matched.append((name, lib_id))
 
-        return None
+        return matched
 
     def update_watched(
         self,
-        watched_list: dict[str, UserData],
+        watched_list: dict[str, UserData] | list[WatchedUpdate],
         source_server_name: str,
     ) -> dict[str, UserData]:
         """
-        Apply watch state from `watched_list` (keyed by names as reported on
-        `source_server`) onto this server.
+        Apply watch state from `watched_list` onto this server.
 
         User and library correspondence is resolved through the settings model
         via source_server's configured name, so explicit mappings and the
-        implicit same-name fallback are both honored. Fan-out is resolved
-        upstream; each key here maps to a single user/library on this server.
+        implicit same-name fallback are both honored. A list of
+        :class:`WatchedUpdate` values is scoped to one target user and library;
+        a source-shaped dictionary is expanded to that form for compatibility.
+        A write requires both the source user and source library to pass
+        policy; the coarse server direction only admits the pair for
+        processing.
         """
         dryrun = self.app_settings.dryrun
         updated_watched: dict[str, UserData] = {}
 
-        for user, user_data in watched_list.items():
+        pending_updates = (
+            watched_list
+            if isinstance(watched_list, list)
+            else expand_watched_updates(
+                watched_list,
+                source_server_name,
+                self.server_settings.name,
+                self.app_settings,
+            )
+        )
+
+        for update in pending_updates:
+            user = update.source_user
             if not self.app_settings.should_sync_user(
                 user, source_server_name, self.server_settings.name
             ):
@@ -880,68 +900,78 @@ class JellyfinEmby:
                 )
                 continue
 
-            resolved_user = self._resolve_local_user(source_server_name, user)
-            if resolved_user is None:
+            target_user_normalized = normalize_name(update.target_user)
+            resolved_users = [
+                resolved_user
+                for resolved_user in self._resolve_local_users(
+                    source_server_name, user
+                )
+                if normalize_name(resolved_user[0]) == target_user_normalized
+            ]
+            if not resolved_users:
                 logger.info(
                     f"{self.server_type}: {user} (from {source_server_name}) not found on this server, skipping"
                 )
                 continue
 
-            user_name, user_id = resolved_user
-
-            jellyfin_libraries = self.query(
-                f"/Users/{user_id}/Views",
-                "get",
-            )
-
-            if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
-                logger.debug(
-                    f"{self.server_type}: Failed to get libraries for {user_name}"
+            for user_name, user_id in resolved_users:
+                jellyfin_libraries = self.query(
+                    f"/Users/{user_id}/Views",
+                    "get",
                 )
-                continue
 
-            available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+                if not jellyfin_libraries or not isinstance(jellyfin_libraries, dict):
+                    logger.debug(
+                        f"{self.server_type}: Failed to get libraries for {user_name}"
+                    )
+                    continue
 
-            for library_name in user_data.libraries:
+                available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+
                 if not self.app_settings.should_sync_library(
-                    library_name, source_server_name, self.server_settings.name
+                    update.source_library, source_server_name, self.server_settings.name
                 ):
                     logger.debug(
-                        f"{self.server_type}: {library_name} (from {source_server_name}) skipped"
+                        f"{self.server_type}: {update.source_library} (from {source_server_name}) skipped"
                     )
                     continue
 
-                library_data = user_data.libraries[library_name]
-
-                resolved_library = self._resolve_local_library(
-                    source_server_name, library_name, available_libraries
-                )
-                if resolved_library is None:
+                target_library_normalized = normalize_name(update.target_library)
+                resolved_libraries = [
+                    resolved_library
+                    for resolved_library in self._resolve_local_libraries(
+                        source_server_name,
+                        update.source_library,
+                        available_libraries,
+                    )
+                    if normalize_name(resolved_library[0]) == target_library_normalized
+                ]
+                if not resolved_libraries:
                     logger.info(
-                        f"{self.server_type}: Library {library_name} (from {source_server_name}) not found in library list",
+                        f"{self.server_type}: Library {update.source_library} (from {source_server_name}) not found in library list",
                     )
                     continue
 
-                resolved_library_name, library_id = resolved_library
+                for resolved_library_name, library_id in resolved_libraries:
+                    try:
+                        self.update_user_watched(
+                            user_name,
+                            user_id,
+                            update.library_data,
+                            resolved_library_name,
+                            library_id,
+                            dryrun,
+                        )
 
-                try:
-                    self.update_user_watched(
-                        user_name,
-                        user_id,
-                        library_data,
-                        resolved_library_name,
-                        library_id,
-                        dryrun,
-                    )
-
-                    if user_name not in updated_watched:
-                        updated_watched[user_name] = UserData()
-                    updated_watched[user_name].libraries[resolved_library_name] = (
-                        library_data
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"{self.server_type}: Error updating watched for {user_name} in library {resolved_library_name}, {e}",
-                    )
+                        user_key = normalize_name(user_name)
+                        if user_key not in updated_watched:
+                            updated_watched[user_key] = UserData()
+                        updated_watched[user_key].libraries[resolved_library_name] = (
+                            update.library_data
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"{self.server_type}: Error updating watched for {user_name} in {resolved_library_name}, {e}",
+                        )
 
         return updated_watched

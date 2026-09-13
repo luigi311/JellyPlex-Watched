@@ -44,19 +44,23 @@ def test_combine_library_lists_with_mapping():
                 "aliases": [
                     {"server": "plex-main", "library": "TV Shows"},
                     {"server": "jellyfin-main", "library": "Shows"},
+                    {
+                        "server": "jellyfin-main",
+                        "library": "Shows Archive",
+                    },
                 ],
             }
         ],
     )
 
     server_1_libs = {"TV Shows": "show"}
-    server_2_libs = {"Shows": "tvshows"}
+    server_2_libs = {"Shows": "tvshows", "Shows Archive": "tvshows"}
 
     combined = combine_library_lists(
         "plex-main", "jellyfin-main", server_1_libs, server_2_libs, settings
     )
 
-    assert combined == {"TV Shows": ["Shows"]}
+    assert combined == {"TV Shows": ["Shows", "Shows Archive"]}
 
 
 def test_combine_library_lists_type_blacklist():
@@ -104,7 +108,10 @@ def test_combine_library_lists_name_blacklist():
 
 def test_combine_library_lists_name_whitelist():
     """With a library whitelist set, only whitelisted libraries sync."""
-    settings = settings_override(whitelist_libraries=["Movies"])
+    settings = settings_override(
+        blacklist_libraries=["Movies"],
+        whitelist_libraries=["Movies"],
+    )
 
     server_1_libs = {"Movies": "movie", "TV Shows": "show"}
     server_2_libs = {"Movies": "movies", "TV Shows": "tvshows"}

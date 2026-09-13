@@ -15,6 +15,7 @@ from urllib3.poolmanager import PoolManager
 from src.functions import (
     filename_from_any_path,
     log_marked,
+    normalize_name,
 )
 from src.settings import AppSettings, PlexSettings
 from src.watched import (
@@ -25,6 +26,8 @@ from src.watched import (
     UserData,
     WatchedStatus,
     check_same_identifiers,
+    expand_watched_updates,
+    WatchedUpdate,
 )
 
 
@@ -327,6 +330,7 @@ class Plex:
         try:
             if not users_watched:
                 users_watched: dict[str, UserData] = {}
+            sync_library_names = {normalize_name(name) for name in sync_libraries}
 
             for user in users:
                 if self.admin_user == user:
@@ -341,14 +345,12 @@ class Plex:
                         )
                         continue
 
-                user_name: str = (
-                    user.username.lower() if user.username else user.title.lower()
-                )
+                user_name = normalize_name(user.username if user.username else user.title)
 
                 libraries = user_plex.library.sections()
 
                 for library in libraries:
-                    if library.title not in sync_libraries:
+                    if normalize_name(library.title) not in sync_library_names:
                         continue
 
                     if user_name not in users_watched:
@@ -538,169 +540,193 @@ class Plex:
                                     break  # Found a matching episode.
                         break  # Found a matching show.
 
-    def _resolve_local_user(
+    def _resolve_local_users(
         self, source_server: str, source_user: str
-    ) -> MyPlexUser | MyPlexAccount | None:
+    ) -> list[MyPlexUser | MyPlexAccount]:
         """
-        Resolve a source-server username to the matching Plex user object on
-        this server.
+        Resolve a source-server username to every matching Plex user object.
 
         Candidate names on this Plex server are produced by the settings
         model (sync_targets_for_user — explicit user_mappings aliases plus the
-        implicit same-username fallback). The first candidate that matches one
-        of this server's actual users (by username or title, case-insensitive)
-        is returned. Returns None if no candidate matches.
+        implicit same-username fallback). Every candidate that matches one of
+        this server's actual users is returned so one-to-many mappings reach
+        every target account.
         """
         this_server = self.server_settings.name
         candidates = self.app_settings.sync_targets_for_user(
             source_server, source_user, this_server
         )
-        candidates_lc = {c.lower() for c in candidates}
+        candidates_normalized = {normalize_name(c) for c in candidates}
+        matched: list[MyPlexUser | MyPlexAccount] = []
 
         for plex_user in self.users:
-            username_title = (
-                plex_user.username.lower()
-                if plex_user.username
-                else plex_user.title.lower()
-            )
-            if username_title in candidates_lc:
-                return plex_user
+            username_title = plex_user.username if plex_user.username else plex_user.title
+            if normalize_name(username_title) in candidates_normalized:
+                matched.append(plex_user)
 
-        return None
+        return matched
 
-    def _resolve_local_library(
+    def _resolve_local_libraries(
         self,
         source_server: str,
         source_library: str,
         available_titles: list[str],
-    ) -> str | None:
+    ) -> list[str]:
         """
-        Resolve a source-server library name to the matching library title on
-        this Plex server.
+        Resolve a source-server library name to every matching library title.
 
-        Mirrors _resolve_local_user: candidates come from
-        sync_targets_for_library, and the first one present in
-        `available_titles` (case-insensitive) is returned, preserving the
-        actual title casing as this server reports it.
+        Mirrors _resolve_local_users: every candidate present in
+        `available_titles` is returned, preserving the actual title casing as
+        this server reports it.
         """
         this_server = self.server_settings.name
         candidates = self.app_settings.sync_targets_for_library(
             source_server, source_library, this_server
         )
 
-        titles_by_lc = {title.lower(): title for title in available_titles}
+        normalized_titles = {
+            normalize_name(title): title for title in available_titles
+        }
+        matched: list[str] = []
         for candidate in candidates:
-            actual = titles_by_lc.get(candidate.lower())
+            actual = normalized_titles.get(normalize_name(candidate))
             if actual is not None:
-                return actual
+                matched.append(actual)
 
-        return None
+        return matched
 
     def update_watched(
         self,
-        watched_list: dict[str, UserData],
+        watched_list: dict[str, UserData] | list[WatchedUpdate],
         source_server_name: str,
     ) -> dict[str, UserData]:
         """
-        Apply watch state from `watched_list` (keyed by names as reported on
-        `source_server`) onto this Plex server.
+        Apply watch state from `watched_list` onto this Plex server.
 
         User and library correspondence is resolved through the settings model
         via source_server's configured name, so explicit mappings and the
-        implicit same-name fallback are both honored. Fan-out is resolved
-        upstream; each key here maps to a single user/library on this server.
+        implicit same-name fallback are both honored. A list of
+        :class:`WatchedUpdate` values is scoped to one target user and library;
+        a source-shaped dictionary is expanded to that form for compatibility.
+        A write requires both the source user and source library to pass
+        policy; the coarse server direction only admits the pair for
+        processing.
         """
         dryrun = self.app_settings.dryrun
         updated_watched: dict[str, UserData] = {}
 
-        for source_user, user_data in watched_list.items():
+        pending_updates = (
+            watched_list
+            if isinstance(watched_list, list)
+            else expand_watched_updates(
+                watched_list,
+                source_server_name,
+                self.server_settings.name,
+                self.app_settings,
+            )
+        )
+
+        for update in pending_updates:
+            source_user = update.source_user
             if not self.app_settings.should_sync_user(
                 source_user, source_server_name, self.server_settings.name
             ):
                 logger.debug(f"Plex: {source_user} (from {source_server_name}) skipped")
                 continue
 
-            # Resolve the source-server user to a Plex user object on this server.
-            plex_user = self._resolve_local_user(source_server_name, source_user)
-            if plex_user is None:
+            target_user_normalized = normalize_name(update.target_user)
+            plex_users = [
+                plex_user
+                for plex_user in self._resolve_local_users(
+                    source_server_name, source_user
+                )
+                if normalize_name(
+                    plex_user.username if plex_user.username else plex_user.title
+                )
+                == target_user_normalized
+            ]
+            if not plex_users:
                 logger.info(
                     f"Plex: {source_user} (from {source_server_name}) not found on this server, skipping",
                 )
                 continue
 
-            if self.admin_user == plex_user:
-                plex_server = self.plex
-            else:
-                if not isinstance(plex_user, MyPlexUser):
-                    logger.error(f"Plex: {plex_user} failed to get PlexUser")
-                    continue
-
-                token = plex_user.get_token(self.plex.machineIdentifier)
-                if token:
-                    plex_server = PlexServer(
-                        self.base_url,
-                        token,
-                        session=self.session,
-                    )
+            for plex_user in plex_users:
+                if self.admin_user == plex_user:
+                    plex_server = self.plex
                 else:
-                    logger.error(
-                        f"Plex: Failed to get token for {plex_user.title}, skipping",
-                    )
+                    if not isinstance(plex_user, MyPlexUser):
+                        logger.error(f"Plex: {plex_user} failed to get PlexUser")
+                        continue
+
+                    token = plex_user.get_token(self.plex.machineIdentifier)
+                    if token:
+                        plex_server = PlexServer(
+                            self.base_url,
+                            token,
+                            session=self.session,
+                        )
+                    else:
+                        logger.error(
+                            f"Plex: Failed to get token for {plex_user.title}, skipping",
+                        )
+                        continue
+
+                if not plex_server:
+                    logger.error(f"Plex: {plex_user} Failed to get PlexServer")
                     continue
 
-            if not plex_server:
-                logger.error(f"Plex: {plex_user} Failed to get PlexServer")
-                continue
+                library_list = plex_server.library.sections()
+                available_titles = [section.title for section in library_list]
 
-            library_list = plex_server.library.sections()
-            available_titles = [x.title for x in library_list]
+                user_name = normalize_name(
+                    plex_user.username if plex_user.username else plex_user.title
+                )
 
-            user_name: str = (
-                plex_user.username.lower()
-                if plex_user.username
-                else plex_user.title.lower()
-            )
-
-            for library_name in user_data.libraries:
                 if not self.app_settings.should_sync_library(
-                    library_name, source_server_name, self.server_settings.name
+                    update.source_library, source_server_name, self.server_settings.name
                 ):
                     logger.debug(
-                        f"Plex: {library_name} (from {source_server_name}) skipped"
+                        f"Plex: {update.source_library} (from {source_server_name}) skipped"
                     )
                     continue
 
-                library_data = user_data.libraries[library_name]
-
-                # Resolve the source-server library name to a title on this server.
-                resolved_library = self._resolve_local_library(
-                    source_server_name, library_name, available_titles
-                )
-                if resolved_library is None:
+                resolved_libraries = [
+                    library_name
+                    for library_name in self._resolve_local_libraries(
+                        source_server_name,
+                        update.source_library,
+                        available_titles,
+                    )
+                    if normalize_name(library_name)
+                    == normalize_name(update.target_library)
+                ]
+                if not resolved_libraries:
                     logger.info(
-                        f"Plex: Library {library_name} (from {source_server_name}) not found in library list",
+                        f"Plex: Library {update.source_library} (from {source_server_name}) not found in library list",
                     )
                     continue
 
-                try:
-                    self.update_user_watched(
-                        plex_user,
-                        plex_server,
-                        library_data,
-                        resolved_library,
-                        dryrun,
-                    )
+                for resolved_library in resolved_libraries:
+                    try:
+                        self.update_user_watched(
+                            plex_user,
+                            plex_server,
+                            update.library_data,
+                            resolved_library,
+                            dryrun,
+                        )
 
-                    if user_name not in updated_watched:
-                        updated_watched[user_name] = UserData()
-                    updated_watched[user_name].libraries[resolved_library] = (
-                        library_data
-                    )
+                        if user_name not in updated_watched:
+                            updated_watched[user_name] = UserData()
+                        updated_watched[user_name].libraries[resolved_library] = (
+                            update.library_data
+                        )
 
-                except Exception as e:
-                    logger.error(
-                        f"Plex: Failed to update watched for {plex_user.title} in {resolved_library}, Error: {e}",
-                    )
-                    continue
+                    except Exception as e:
+                        logger.error(
+                            f"Plex: Failed to update watched for {plex_user.title} in {resolved_library}, Error: {e}",
+                        )
+                        continue
 
         return updated_watched

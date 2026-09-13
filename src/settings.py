@@ -47,8 +47,9 @@ Backward compatibility:
     which name, so the migration adds *both* names as aliases on *every*
     server — over-broad but correct. Users can prune the YAML afterward.
 
-Settings priority (highest to lowest):
-    1. Explicit kwargs to AppSettings(...)
+For source-backed loading through ``load_settings()`` and its internal
+settings loader, priority is highest to lowest:
+    1. Explicit field values supplied to the source loader
     2. `JPW_`-prefixed process environment variables
     3. `JPW_`-prefixed values in the selected dotenv file
     4. Legacy process environment variables
@@ -56,6 +57,11 @@ Settings priority (highest to lowest):
     6. config.yaml
     7. Field defaults
 
+``AppSettings(...)`` is the plain validated data model. It validates only
+the values supplied to it; it does not read environment or YAML sources and
+does not accept ``_env_file`` or other ``BaseSettings`` source options.
+
+Input handling:
     An absent, empty, or valueless new-style input is omitted so the next
     lower-priority source remains effective. Use JSON ``[]`` to explicitly
     replace a list with an empty list. Malformed new-style JSON is rejected.
@@ -71,6 +77,7 @@ import os
 import tempfile
 from collections import Counter
 from collections.abc import Mapping
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -80,7 +87,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PrivateAttr,
     SecretStr,
     ValidationError,
     field_validator,
@@ -96,7 +102,7 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
-from src.functions import get_env_value
+from src.functions import get_env_value, normalize_name
 from src.legacy_settings import (
     LEGACY_ENV_VARS,
     LegacyEnvSettingsSource,
@@ -378,6 +384,13 @@ class SyncRule(BaseModel):
         hide_input_in_errors=True,
     )
 
+    @field_validator("users")
+    @classmethod
+    def _validate_wildcard_entry(cls, users: list[str]) -> list[str]:
+        if "*" in users and users != ["*"]:
+            raise ValueError('"*" must be the only entry in a wildcard user rule.')
+        return users
+
 
 class LibrarySyncRule(BaseModel):
     libraries: list[str] = Field(..., min_length=1)
@@ -388,6 +401,134 @@ class LibrarySyncRule(BaseModel):
         populate_by_name=True,
         hide_input_in_errors=True,
     )
+
+    @field_validator("libraries")
+    @classmethod
+    def _validate_wildcard_entry(cls, libraries: list[str]) -> list[str]:
+        if "*" in libraries and libraries != ["*"]:
+            raise ValueError('"*" must be the only entry in a wildcard library rule.')
+        return libraries
+
+
+def _normalized_names(values: list[str]) -> set[str]:
+    """Normalize a list of user, library, or type names for lookup."""
+    return {normalize_name(value) for value in values}
+
+
+def _validate_alias_ownership(
+    mappings: list[UserMapping] | list[LibraryMapping],
+    server_names: set[str],
+    mapping_field: str,
+    alias_field: Literal["username", "library"],
+    entity_label: str,
+) -> None:
+    """Validate server references and ownership for one mapping family."""
+    seen_global: dict[tuple[str, str], str] = {}
+    for mapping in mappings:
+        seen_local: set[tuple[str, str]] = set()
+        for alias in mapping.aliases:
+            alias_name = getattr(alias, alias_field)
+            if alias.server not in server_names:
+                raise ValueError(
+                    f"{mapping_field}[{mapping.canonical}].aliases references "
+                    f"unknown server '{alias.server}'."
+                )
+
+            key = (alias.server, normalize_name(alias_name))
+            if key in seen_local:
+                raise ValueError(
+                    f"{mapping_field}[{mapping.canonical}] has duplicate alias "
+                    f"({alias.server}, {alias_name})."
+                )
+            seen_local.add(key)
+
+            if key in seen_global and seen_global[key] != mapping.canonical:
+                raise ValueError(
+                    f"{entity_label} alias ({alias.server}, {alias_name}) is "
+                    f"claimed by both '{seen_global[key]}' and "
+                    f"'{mapping.canonical}'. A given (server, {alias_field}) "
+                    f"can belong to at most one canonical {entity_label.lower()}."
+                )
+            seen_global[key] = mapping.canonical
+
+
+def _alias_servers_by_canonical(
+    mappings: list[UserMapping] | list[LibraryMapping],
+) -> dict[str, set[str]]:
+    """Index the servers represented by each canonical mapping."""
+    return {
+        normalize_name(mapping.canonical): {
+            alias.server for alias in mapping.aliases
+        }
+        for mapping in mappings
+    }
+
+
+def _validate_rule_direction(
+    collection_name: str,
+    index: int,
+    from_server: str,
+    to_server: str,
+    server_names: set[str],
+) -> None:
+    """Validate the server portion shared by user and library rules."""
+    if from_server not in server_names:
+        raise ValueError(
+            f"{collection_name}[{index}].from='{from_server}' is unknown."
+        )
+    if to_server not in server_names:
+        raise ValueError(f"{collection_name}[{index}].to='{to_server}' is unknown.")
+    if from_server == to_server:
+        raise ValueError(
+            f"{collection_name}[{index}] has from == to ('{from_server}')."
+        )
+
+
+def _validate_mapped_rule_target(
+    target: str,
+    canonical_names: set[str],
+    alias_servers: dict[str, set[str]],
+    from_server: str,
+    to_server: str,
+    collection_name: str,
+    index: int,
+    entity_label: str,
+) -> None:
+    """Require declared identities named by literal rules on both servers."""
+    if target not in canonical_names:
+        return
+
+    target_servers = alias_servers.get(target, set())
+    if from_server not in target_servers:
+        raise ValueError(
+            f"{collection_name}[{index}]: {entity_label} '{target}' has no alias "
+            f"on server '{from_server}'."
+        )
+    if to_server not in target_servers:
+        raise ValueError(
+            f"{collection_name}[{index}]: {entity_label} '{target}' has no alias "
+            f"on server '{to_server}'."
+        )
+
+
+def _check_duplicate_rule_coverage(
+    seen_triples: set[tuple[str, str, str]],
+    target: str,
+    from_server: str,
+    to_server: str,
+    collection_name: str,
+    entity_label: str,
+) -> None:
+    """Reject duplicate coverage for one identity and server direction."""
+    triple = (target, from_server, to_server)
+    if triple in seen_triples:
+        raise ValueError(
+            f"{collection_name} has duplicate coverage for "
+            f"{entity_label}='{target}', from='{from_server}', to='{to_server}'. "
+            "Each ("
+            f"{entity_label}, from, to) triple may appear in at most one rule."
+        )
+    seen_triples.add(triple)
 
 
 class _PrefixedEnvSettingsSource(EnvSettingsSource):
@@ -501,14 +642,10 @@ def _env_source_options(source: EnvSettingsSource) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        yaml_file="config.yaml",
-        yaml_file_encoding="utf-8",
-        env_file=".env",
-        env_prefix="JPW_",
-        env_ignore_empty=True,
-        nested_model_default_partial_update=True,
+class AppSettings(BaseModel):
+    """Validated configuration data independent of environment sources."""
+
+    model_config = ConfigDict(
         extra="forbid",
         hide_input_in_errors=True,
     )
@@ -571,151 +708,135 @@ class AppSettings(BaseSettings):
         return data
 
     # ------------------------------------------------------------------ #
-    # Pre-built indexes (populated by model_post_init)                    #
+    # Derived indexes                                                      #
     #                                                                     #
-    # These exist as PrivateAttr because BaseSettings with extra="forbid" #
-    # rejects attribute assignment that doesn't correspond to a declared  #
-    # field — that's exactly what cached_property tries to do.            #
-    # PrivateAttr is the supported escape hatch.                          #
+    # These cached properties are evaluated only after a successfully      #
+    # validated model is returned to a caller. The resulting collections   #
+    # are a snapshot of the validated configuration.                      #
     # ------------------------------------------------------------------ #
 
-    _all_servers: list[_ServerBase] = PrivateAttr(default_factory=list)
-    _server_names: set[str] = PrivateAttr(default_factory=set)
-    _user_canonicals: set[str] = PrivateAttr(default_factory=set)
-    _library_canonicals: set[str] = PrivateAttr(default_factory=set)
-    _user_index: dict[tuple[str, str], str] = PrivateAttr(default_factory=dict)
-    _library_index: dict[tuple[str, str], str] = PrivateAttr(default_factory=dict)
-    _user_aliases_by_canonical: dict[str, list[UserAlias]] = PrivateAttr(
-        default_factory=dict
-    )
-    _library_aliases_by_canonical: dict[str, list[LibraryAlias]] = PrivateAttr(
-        default_factory=dict
-    )
-    _server_sync_to_index: dict[str, set[str]] = PrivateAttr(default_factory=dict)
-    _user_rule_index: set[tuple[str, str, str]] = PrivateAttr(default_factory=set)
-    _library_rule_index: set[tuple[str, str, str]] = PrivateAttr(default_factory=set)
-    _rule_directions: set[tuple[str, str]] = PrivateAttr(default_factory=set)
-    _whitelist_users_lc: set[str] = PrivateAttr(default_factory=set)
-    _blacklist_users_lc: set[str] = PrivateAttr(default_factory=set)
-    _whitelist_libraries_lc: set[str] = PrivateAttr(default_factory=set)
-    _blacklist_libraries_lc: set[str] = PrivateAttr(default_factory=set)
-    _whitelist_library_types_lc: set[str] = PrivateAttr(default_factory=set)
-    _blacklist_library_types_lc: set[str] = PrivateAttr(default_factory=set)
-    _user_identity_names: dict[str, set[str]] = PrivateAttr(default_factory=dict)
+    @cached_property
+    def _all_servers(self) -> list[_ServerBase]:
+        return [*self.plex, *self.jellyfin, *self.emby]
 
-    def model_post_init(self, __context: Any) -> None:
-        """
-        Build all derived indexes from the validated config.
+    @cached_property
+    def _server_names(self) -> set[str]:
+        return {server.name for server in self._all_servers}
 
-        Runs after every validator, so it sees a fully-checked model.
-        """
-        self._all_servers = [*self.plex, *self.jellyfin, *self.emby]
-        self._server_names = {s.name for s in self._all_servers}
-        self._user_canonicals = {u.canonical for u in self.user_mappings}
-        self._library_canonicals = {lib.canonical for lib in self.library_mappings}
-
+    @cached_property
+    def _user_index(self) -> dict[tuple[str, str], str]:
         # User/library names are matched case-insensitively: servers report
         # usernames and library names with inconsistent casing, while the
         # config is written with whatever casing the user prefers. Server
         # names are NOT lowercased — they're internal identifiers only ever
         # compared within the config.
         #
-        # Index keys store the lowercased name; the canonical *value* is
-        # lowercased too, so it round-trips against the lowercased rule
-        # indexes and lowercased lookup arguments below.
-        self._user_index = {
-            (alias.server, alias.username.lower()): u.canonical.lower()
-            for u in self.user_mappings
-            for alias in u.aliases
-        }
-        self._library_index = {
-            (alias.server, alias.library.lower()): lib.canonical.lower()
-            for lib in self.library_mappings
-            for alias in lib.aliases
+        # Index keys store the case-folded name; the canonical *value* is
+        # case-folded too, so it round-trips against the case-folded rule
+        # indexes and lookup arguments below.
+        return {
+            (alias.server, normalize_name(alias.username)): normalize_name(
+                user.canonical
+            )
+            for user in self.user_mappings
+            for alias in user.aliases
         }
 
-        # Keyed by lowercased canonical to match the lowercased values stored
-        # in _user_index / _library_index. The alias objects themselves are
-        # kept intact (original casing) so sync_targets_for_* returns the
-        # real target names the servers expect.
-        self._user_aliases_by_canonical = {
-            u.canonical.lower(): u.aliases for u in self.user_mappings
-        }
-        self._library_aliases_by_canonical = {
-            lib.canonical.lower(): lib.aliases for lib in self.library_mappings
+    @cached_property
+    def _library_index(self) -> dict[tuple[str, str], str]:
+        return {
+            (alias.server, normalize_name(alias.library)): normalize_name(
+                library.canonical
+            )
+            for library in self.library_mappings
+            for alias in library.aliases
         }
 
-        self._server_sync_to_index = {s.name: set(s.sync_to) for s in self._all_servers}
+    @cached_property
+    def _user_aliases_by_canonical(self) -> dict[str, list[UserAlias]]:
+        # The alias objects themselves are kept intact (original casing) so
+        # sync_targets_for_* returns the real target names the servers expect.
+        return {
+            normalize_name(user.canonical): user.aliases
+            for user in self.user_mappings
+        }
 
-        # Pre-expand wildcards so the runtime check is a single set lookup.
-        # Note: wildcards only expand to declared canonicals; implicit
-        # same-username users are matched by literal name in should_sync_user.
-        # User names (canonicals from "*" expansion, or literal usernames)
-        # are lowercased; from_/to are server names and stay as-is.
+    @cached_property
+    def _library_aliases_by_canonical(self) -> dict[str, list[LibraryAlias]]:
+        return {
+            normalize_name(library.canonical): library.aliases
+            for library in self.library_mappings
+        }
+
+    @cached_property
+    def _server_sync_to_index(self) -> dict[str, set[str]]:
+        return {server.name: set(server.sync_to) for server in self._all_servers}
+
+    @cached_property
+    def _user_rule_index(self) -> set[tuple[str, str, str]]:
+        # Index wildcard rules explicitly so they also cover implicit
+        # same-name users that have no declared canonical identity. Literal
+        # names are case-folded; from_/to are server names and stay as-is.
         user_rules: set[tuple[str, str, str]] = set()
         for rule in self.sync_rules:
-            users = (
-                {c.lower() for c in self._user_canonicals}
-                if rule.users == ["*"]
-                else {u.lower() for u in rule.users}
-            )
+            users = {"*"} if rule.users == ["*"] else _normalized_names(rule.users)
             for user in users:
                 user_rules.add((user, rule.from_, rule.to))
-        self._user_rule_index = user_rules
+        return user_rules
 
+    @cached_property
+    def _library_rule_index(self) -> set[tuple[str, str, str]]:
+        # Index wildcard rules explicitly so they also cover implicit
+        # same-name libraries that have no declared canonical identity.
         library_rules: set[tuple[str, str, str]] = set()
         for rule in self.library_sync_rules:
-            libs = (
-                {c.lower() for c in self._library_canonicals}
+            libraries = (
+                {"*"}
                 if rule.libraries == ["*"]
-                else {lib.lower() for lib in rule.libraries}
+                else _normalized_names(rule.libraries)
             )
-            for lib in libs:
-                library_rules.add((lib, rule.from_, rule.to))
-        self._library_rule_index = library_rules
+            for library in libraries:
+                library_rules.add((library, rule.from_, rule.to))
+        return library_rules
 
+    @cached_property
+    def _rule_directions(self) -> set[tuple[str, str]]:
         # Project rule indexes onto (from, to) so should_sync_server can
         # tell in O(1) whether any user or library rule enables a given
         # direction independently of server-level sync_to.
-        self._rule_directions = {
+        return {
             (from_, to) for (_, from_, to) in self._user_rule_index
         } | {(from_, to) for (_, from_, to) in self._library_rule_index}
 
-        # Lowercased filter sets for case-insensitive blacklist/whitelist
-        # checks (the public lists keep their original casing for display).
-        self._whitelist_users_lc = {u.lower() for u in self.whitelist_users}
-        self._blacklist_users_lc = {u.lower() for u in self.blacklist_users}
-        self._whitelist_libraries_lc = {lib.lower() for lib in self.whitelist_libraries}
-        self._blacklist_libraries_lc = {lib.lower() for lib in self.blacklist_libraries}
-        self._whitelist_library_types_lc = {
-            t.lower() for t in self.whitelist_library_types
-        }
-        self._blacklist_library_types_lc = {
-            t.lower() for t in self.blacklist_library_types
-        }
+    @cached_property
+    def _whitelist_users_lc(self) -> set[str]:
+        return _normalized_names(self.whitelist_users)
 
-        # Map every lowercased user alias/canonical name to the full set of
-        # lowercased names that share its canonical identity. This lets the
-        # whitelist/blacklist match on identity rather than on the single
-        # literal name the user happened to list: if any name belonging to a
-        # user's identity is whitelisted, the user (under any of their
-        # server-specific names) is allowed.
-        self._user_identity_names: dict[str, set[str]] = {}
-        for u in self.user_mappings:
-            identity_names = {u.canonical.lower()} | {
-                a.username.lower() for a in u.aliases
-            }
-            for name in identity_names:
-                # A name should resolve to one identity (validators forbid a
-                # (server, username) belonging to two canonicals); union to be
-                # safe if the same bare name appears under multiple canonicals.
-                self._user_identity_names.setdefault(name, set()).update(identity_names)
+    @cached_property
+    def _blacklist_users_lc(self) -> set[str]:
+        return _normalized_names(self.blacklist_users)
+
+    @cached_property
+    def _whitelist_libraries_lc(self) -> set[str]:
+        return _normalized_names(self.whitelist_libraries)
+
+    @cached_property
+    def _blacklist_libraries_lc(self) -> set[str]:
+        return _normalized_names(self.blacklist_libraries)
+
+    @cached_property
+    def _whitelist_library_types_lc(self) -> set[str]:
+        return _normalized_names(self.whitelist_library_types)
+
+    @cached_property
+    def _blacklist_library_types_lc(self) -> set[str]:
+        return _normalized_names(self.blacklist_library_types)
 
     # ------------------------------------------------------------------ #
     # Cross-field validation                                              #
     #                                                                     #
-    # Validators run before model_post_init, so they can't use the index #
-    # attributes. They compute their own local views instead.            #
+    # Validators compute their own local views so these lazy index caches
+    # remain available only after successful model validation.
     # ------------------------------------------------------------------ #
 
     def _collect_servers(self) -> list[_ServerBase]:
@@ -734,14 +855,14 @@ class AppSettings(BaseSettings):
                 "Each server entry needs a unique 'name'."
             )
 
-        canonicals = [u.canonical.casefold() for u in self.user_mappings]
+        canonicals = [normalize_name(u.canonical) for u in self.user_mappings]
         dupes = {c for c, n in Counter(canonicals).items() if n > 1}
         if dupes:
             raise ValueError(
                 f"Duplicate user_mappings.canonical values (case-insensitive): {sorted(dupes)}"
             )
 
-        lib_canonicals = [lib.canonical.casefold() for lib in self.library_mappings]
+        lib_canonicals = [normalize_name(lib.canonical) for lib in self.library_mappings]
         dupes = {c for c, n in Counter(lib_canonicals).items() if n > 1}
         if dupes:
             raise ValueError(
@@ -773,90 +894,59 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_user_aliases(self) -> "AppSettings":
-        names = self._collect_server_names()
-        # Allow multiple aliases per server within one canonical (fan-out
-        # case). Forbid duplicate exact (server, username) within one
-        # canonical (a typo, not a feature). Forbid the same (server,
-        # username) appearing across *different* canonicals (genuinely
-        # ambiguous identity).
-        seen_global: dict[tuple[str, str], str] = {}
-        for user in self.user_mappings:
-            seen_local: set[tuple[str, str]] = set()
-            for alias in user.aliases:
-                if alias.server not in names:
-                    raise ValueError(
-                        f"user_mappings[{user.canonical}].aliases references "
-                        f"unknown server '{alias.server}'."
-                    )
-                key = (alias.server, alias.username.lower())
-                if key in seen_local:
-                    raise ValueError(
-                        f"user_mappings[{user.canonical}] has duplicate alias "
-                        f"({alias.server}, {alias.username})."
-                    )
-                seen_local.add(key)
-                if key in seen_global and seen_global[key] != user.canonical:
-                    raise ValueError(
-                        f"User alias ({alias.server}, {alias.username}) is "
-                        f"claimed by both '{seen_global[key]}' and "
-                        f"'{user.canonical}'. A given (server, username) can "
-                        "belong to at most one canonical user."
-                    )
-                seen_global[key] = user.canonical
+        _validate_alias_ownership(
+            self.user_mappings,
+            self._collect_server_names(),
+            "user_mappings",
+            "username",
+            "User",
+        )
         return self
 
     @model_validator(mode="after")
     def _validate_library_aliases(self) -> "AppSettings":
-        names = self._collect_server_names()
-        seen_global: dict[tuple[str, str], str] = {}
-        for lib in self.library_mappings:
-            seen_local: set[tuple[str, str]] = set()
-            for alias in lib.aliases:
-                if alias.server not in names:
-                    raise ValueError(
-                        f"library_mappings[{lib.canonical}].aliases references "
-                        f"unknown server '{alias.server}'."
-                    )
-                key = (alias.server, alias.library.lower())
-                if key in seen_local:
-                    raise ValueError(
-                        f"library_mappings[{lib.canonical}] has duplicate alias "
-                        f"({alias.server}, {alias.library})."
-                    )
-                seen_local.add(key)
-                if key in seen_global and seen_global[key] != lib.canonical:
-                    raise ValueError(
-                        f"Library alias ({alias.server}, {alias.library}) is "
-                        f"claimed by both '{seen_global[key]}' and "
-                        f"'{lib.canonical}'. A given (server, library) can "
-                        "belong to at most one canonical library."
-                    )
-                seen_global[key] = lib.canonical
+        _validate_alias_ownership(
+            self.library_mappings,
+            self._collect_server_names(),
+            "library_mappings",
+            "library",
+            "Library",
+        )
         return self
 
     @model_validator(mode="after")
     def _validate_sync_rules(self) -> "AppSettings":
         names = self._collect_server_names()
-        canonicals = {u.canonical for u in self.user_mappings}
-
-        # canonical -> set of servers it has aliases on
-        alias_servers: dict[str, set[str]] = {}
-        for u in self.user_mappings:
-            alias_servers.setdefault(u.canonical, set()).update(
-                a.server for a in u.aliases
-            )
+        canonicals = {normalize_name(u.canonical) for u in self.user_mappings}
+        alias_servers = _alias_servers_by_canonical(self.user_mappings)
 
         seen_triples: set[tuple[str, str, str]] = set()
 
         for i, rule in enumerate(self.sync_rules):
-            if rule.from_ not in names:
-                raise ValueError(f"sync_rules[{i}].from='{rule.from_}' is unknown.")
-            if rule.to not in names:
-                raise ValueError(f"sync_rules[{i}].to='{rule.to}' is unknown.")
-            if rule.from_ == rule.to:
-                raise ValueError(f"sync_rules[{i}] has from == to ('{rule.from_}').")
+            _validate_rule_direction(
+                "sync_rules",
+                i,
+                rule.from_,
+                rule.to,
+                names,
+            )
 
-            target_users = list(canonicals) if rule.users == ["*"] else rule.users
+            if rule.users == ["*"]:
+                # Wildcards apply to runtime identities, including identities
+                # that are only present on one side of a mapping. Validate
+                # their direction and duplicate coverage without requiring
+                # every declared canonical to have aliases on both servers.
+                _check_duplicate_rule_coverage(
+                    seen_triples,
+                    "*",
+                    rule.from_,
+                    rule.to,
+                    "sync_rules",
+                    "user",
+                )
+                continue
+
+            target_users = [normalize_name(user) for user in rule.users]
 
             for user in target_users:
                 # Names that aren't canonicals are accepted as literal
@@ -864,82 +954,83 @@ class AppSettings(BaseSettings):
                 # validate at config-load time that the user actually
                 # exists on both servers — the sync engine will skip them
                 # at runtime if they don't.
-                if user in canonicals:
-                    user_servers = alias_servers.get(user, set())
-                    if rule.from_ not in user_servers:
-                        raise ValueError(
-                            f"sync_rules[{i}]: user '{user}' has no alias on "
-                            f"server '{rule.from_}'."
-                        )
-                    if rule.to not in user_servers:
-                        raise ValueError(
-                            f"sync_rules[{i}]: user '{user}' has no alias on "
-                            f"server '{rule.to}'."
-                        )
-
-                triple = (user, rule.from_, rule.to)
-                if triple in seen_triples:
-                    raise ValueError(
-                        f"sync_rules has duplicate coverage for user='{user}', "
-                        f"from='{rule.from_}', to='{rule.to}'. "
-                        "Each (user, from, to) triple may appear in at most one rule."
-                    )
-                seen_triples.add(triple)
+                _validate_mapped_rule_target(
+                    user,
+                    canonicals,
+                    alias_servers,
+                    rule.from_,
+                    rule.to,
+                    "sync_rules",
+                    i,
+                    "user",
+                )
+                _check_duplicate_rule_coverage(
+                    seen_triples,
+                    user,
+                    rule.from_,
+                    rule.to,
+                    "sync_rules",
+                    "user",
+                )
 
         return self
 
     @model_validator(mode="after")
     def _validate_library_sync_rules(self) -> "AppSettings":
         names = self._collect_server_names()
-        lib_canonicals = {lib.canonical for lib in self.library_mappings}
-
-        alias_servers: dict[str, set[str]] = {}
-        for lib in self.library_mappings:
-            alias_servers.setdefault(lib.canonical, set()).update(
-                a.server for a in lib.aliases
-            )
+        lib_canonicals = {
+            normalize_name(lib.canonical) for lib in self.library_mappings
+        }
+        alias_servers = _alias_servers_by_canonical(self.library_mappings)
 
         seen_triples: set[tuple[str, str, str]] = set()
 
         for i, rule in enumerate(self.library_sync_rules):
-            if rule.from_ not in names:
-                raise ValueError(
-                    f"library_sync_rules[{i}].from='{rule.from_}' is unknown."
-                )
-            if rule.to not in names:
-                raise ValueError(f"library_sync_rules[{i}].to='{rule.to}' is unknown.")
-            if rule.from_ == rule.to:
-                raise ValueError(
-                    f"library_sync_rules[{i}] has from == to ('{rule.from_}')."
-                )
-
-            target_libs = (
-                list(lib_canonicals) if rule.libraries == ["*"] else rule.libraries
+            _validate_rule_direction(
+                "library_sync_rules",
+                i,
+                rule.from_,
+                rule.to,
+                names,
             )
+
+            if rule.libraries == ["*"]:
+                # See the corresponding user-rule validation above. A
+                # wildcard must remain independent of declared mappings so
+                # runtime resolution can skip identities without a target.
+                _check_duplicate_rule_coverage(
+                    seen_triples,
+                    "*",
+                    rule.from_,
+                    rule.to,
+                    "library_sync_rules",
+                    "library",
+                )
+                continue
+
+            target_libs = [normalize_name(lib) for lib in rule.libraries]
 
             for lib in target_libs:
                 # Same logic as sync_rules: unknown names are accepted as
                 # literal library names (implicit same-name case).
-                if lib in lib_canonicals:
-                    lib_servers = alias_servers.get(lib, set())
-                    if rule.from_ not in lib_servers:
-                        raise ValueError(
-                            f"library_sync_rules[{i}]: library '{lib}' has no alias "
-                            f"on server '{rule.from_}'."
-                        )
-                    if rule.to not in lib_servers:
-                        raise ValueError(
-                            f"library_sync_rules[{i}]: library '{lib}' has no alias "
-                            f"on server '{rule.to}'."
-                        )
-
-                triple = (lib, rule.from_, rule.to)
-                if triple in seen_triples:
-                    raise ValueError(
-                        f"library_sync_rules has duplicate coverage for "
-                        f"library='{lib}', from='{rule.from_}', to='{rule.to}'."
-                    )
-                seen_triples.add(triple)
+                _validate_mapped_rule_target(
+                    lib,
+                    lib_canonicals,
+                    alias_servers,
+                    rule.from_,
+                    rule.to,
+                    "library_sync_rules",
+                    i,
+                    "library",
+                )
+                _check_duplicate_rule_coverage(
+                    seen_triples,
+                    lib,
+                    rule.from_,
+                    rule.to,
+                    "library_sync_rules",
+                    "library",
+                )
 
         return self
 
@@ -964,6 +1055,17 @@ class AppSettings(BaseSettings):
     # Public accessors                                                    #
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _is_allowed_by_name_filter(
+        names: set[str],
+        whitelist: set[str],
+        blacklist: set[str],
+    ) -> bool:
+        """Apply the shared whitelist-first policy to one or more names."""
+        if whitelist:
+            return bool(names & whitelist)
+        return names.isdisjoint(blacklist)
+
     @property
     def all_servers(self) -> tuple[_ServerBase, ...]:
         """
@@ -979,33 +1081,39 @@ class AppSettings(BaseSettings):
 
     def lookup_user(self, server: str, username: str) -> str | None:
         """Find the canonical user for a (server, username) pair, or None."""
-        return self._user_index.get((server, username.lower()))
+        return self._user_index.get((server, normalize_name(username)))
 
     def lookup_library(self, server: str, library: str) -> str | None:
         """Find the canonical library for a (server, library) pair, or None."""
-        return self._library_index.get((server, library.lower()))
+        return self._library_index.get((server, normalize_name(library)))
 
-    def is_user_allowed(self, username: str) -> bool:
+    def is_user_allowed(self, username: str, server: str) -> bool:
         """
-        Check the global user blacklist/whitelist.
+        Check the global user blacklist/whitelist for a server-local user.
 
         Whitelist takes precedence: if non-empty, the user must appear in it.
         Otherwise the user must not appear in the blacklist. Matching is
-        case-insensitive AND identity-aware: if the user is declared in
-        user_mappings, the check considers *every* name belonging to their
-        canonical identity (canonical + all aliases on all servers). So
-        whitelisting any one of a user's names (e.g. the Plex name) allows
-        that user even when a server reports them under a different mapped
-        name (e.g. the Jellyfin name).
+        case-insensitive and identity-aware. The server context selects the
+        canonical identity first, so the same username used by unrelated
+        accounts on different servers is not merged. The selected identity's
+        canonical and all aliases are then compared with the filter entries.
+        An unmapped user retains literal-name matching.
         """
-        username = username.lower()
-        # All names that share this user's identity (falls back to just the
-        # given name when the user isn't in user_mappings).
-        identity = self._user_identity_names.get(username, {username})
+        username_lc = normalize_name(username)
+        canonical = self._user_index.get((server, username_lc))
+        identity = {username_lc}
+        if canonical is not None:
+            identity.add(canonical)
+            identity.update(
+                normalize_name(alias.username)
+                for alias in self._user_aliases_by_canonical.get(canonical, [])
+            )
 
-        if self._whitelist_users_lc:
-            return bool(identity & self._whitelist_users_lc)
-        return not (identity & self._blacklist_users_lc)
+        return self._is_allowed_by_name_filter(
+            identity,
+            self._whitelist_users_lc,
+            self._blacklist_users_lc,
+        )
 
     def is_library_type_allowed(self, library_type: str | list[str]) -> bool:
         """
@@ -1022,9 +1130,9 @@ class AppSettings(BaseSettings):
         allowed.
         """
         if isinstance(library_type, str):
-            types = {library_type.lower()}
+            types = {normalize_name(library_type)}
         else:
-            types = {t.lower() for t in library_type}
+            types = {normalize_name(t) for t in library_type}
 
         if not types:
             return True
@@ -1088,10 +1196,10 @@ class AppSettings(BaseSettings):
         named 'test123' on both servers will sync if from_server pushes
         to to_server, with no further configuration.
         """
-        if not self.is_user_allowed(username):
+        if not self.is_user_allowed(username, from_server):
             return False
 
-        username_lc = username.lower()
+        username_lc = normalize_name(username)
         canonical = self._user_index.get((from_server, username_lc))
 
         # Per-user rule check. Match against the canonical name if one
@@ -1103,6 +1211,8 @@ class AppSettings(BaseSettings):
         ):
             return True
         if (username_lc, from_server, to_server) in self._user_rule_index:
+            return True
+        if ("*", from_server, to_server) in self._user_rule_index:
             return True
 
         # Server-level fallback.
@@ -1121,13 +1231,12 @@ class AppSettings(BaseSettings):
         blacklist/whitelist first, then per-library rules (canonical or
         literal), then server-level sync_to.
         """
-        library_lc = library.lower()
-        if (
-            self._whitelist_libraries_lc
-            and library_lc not in self._whitelist_libraries_lc
+        library_lc = normalize_name(library)
+        if not self._is_allowed_by_name_filter(
+            {library_lc},
+            self._whitelist_libraries_lc,
+            self._blacklist_libraries_lc,
         ):
-            return False
-        if library_lc in self._blacklist_libraries_lc:
             return False
 
         canonical = self._library_index.get((from_server, library_lc))
@@ -1137,6 +1246,8 @@ class AppSettings(BaseSettings):
         ):
             return True
         if (library_lc, from_server, to_server) in self._library_rule_index:
+            return True
+        if ("*", from_server, to_server) in self._library_rule_index:
             return True
 
         return to_server in self._server_sync_to_index.get(from_server, set())
@@ -1163,7 +1274,9 @@ class AppSettings(BaseSettings):
         Returns [] only when the user is mapped but has no alias on the
         target server.
         """
-        canonical = self._user_index.get((source_server, source_username.lower()))
+        canonical = self._user_index.get(
+            (source_server, normalize_name(source_username))
+        )
         if canonical is None:
             # Implicit same-username fallback.
             return [source_username]
@@ -1186,7 +1299,9 @@ class AppSettings(BaseSettings):
         Mirrors sync_targets_for_user: undeclared libraries fall back to
         the same name on the target server.
         """
-        canonical = self._library_index.get((source_server, source_library.lower()))
+        canonical = self._library_index.get(
+            (source_server, normalize_name(source_library))
+        )
         if canonical is None:
             return [source_library]
         return [
@@ -1195,9 +1310,33 @@ class AppSettings(BaseSettings):
             if a.server == target_server
         ]
 
-    # ------------------------------------------------------------------ #
-    # Settings source order                                               #
-    # ------------------------------------------------------------------ #
+# ---------------------------------------------------------------------------
+# Environment and YAML source loader
+# ---------------------------------------------------------------------------
+
+
+def _settings_loader_config(
+    *,
+    yaml_file: str | None = None,
+    yaml_file_encoding: str | None = None,
+) -> SettingsConfigDict:
+    """Build the shared source configuration for settings loader classes."""
+    return SettingsConfigDict(
+        yaml_file=yaml_file,
+        yaml_file_encoding=yaml_file_encoding,
+        env_file=None,
+        env_prefix="JPW_",
+        env_ignore_empty=True,
+        nested_model_default_partial_update=True,
+        extra="forbid",
+        hide_input_in_errors=True,
+    )
+
+
+class _SettingsLoader(BaseSettings, AppSettings):
+    """Thin source loader that validates into the plain AppSettings model."""
+
+    model_config = _settings_loader_config()
 
     @classmethod
     def settings_customise_sources(
@@ -1251,7 +1390,9 @@ def _dump_for_yaml(model: Any) -> Any:
     emitted in class-declaration order rather than the order pydantic
     happened to populate them — so the generated config matches the
     grouping in AppSettings (operational knobs, filtering, mappings,
-    sync rules, servers). SecretStr is unwrapped to plaintext.
+    sync rules, servers). SecretStr is unwrapped to plaintext. This helper
+    is used only by the one-shot migration path; regular model serialization
+    keeps secrets redacted.
     """
     if isinstance(model, BaseModel):
         set_fields = model.model_fields_set
@@ -1373,18 +1514,8 @@ def _migrate_env_to_yaml(env_path: Path, yaml_path: Path) -> bool:
         # selected file explicitly keeps migration aligned with normal loading
         # while preventing the repository's default .env/config.yaml from
         # contaminating the generated file.
-        class _MigrationModel(AppSettings):
-            model_config = SettingsConfigDict(
-                yaml_file=None,
-                yaml_file_encoding=None,
-                env_file=None,
-                nested_model_default_partial_update=True,
-                extra="forbid",
-                hide_input_in_errors=True,
-            )
-
         constructor_options: dict[str, Any] = {"_env_file": env_path}
-        settings = _MigrationModel(**constructor_options)
+        settings = _SettingsLoader(**constructor_options)
         data = _dump_for_yaml(settings)
         _write_migration_yaml(yaml_path, data)
 
@@ -1410,10 +1541,9 @@ def load_settings(
     """
     Load settings.
 
-    `env_file` is the path to the legacy .env file. Callers should resolve it
-    (e.g. honoring an ENV_FILE environment variable) and pass it in; when None,
-    it falls back to ENV_FILE / ".env" for backward compatibility. `yaml_file`
-    works the same way against YAML_FILE / "config.yaml".
+    `env_file` is the path to the legacy .env file. When None, it falls back
+    to ENV_FILE / ".env" for backward compatibility. `yaml_file` works the
+    same way against YAML_FILE / "config.yaml".
 
     On every load, the selected dotenv file (if present) is read by both
     interfaces: `JPW_`-prefixed values use JSON/Pydantic parsing, while
@@ -1424,6 +1554,11 @@ def load_settings(
     On first run after upgrade — if the YAML is missing but a legacy .env
     exists — a config.yaml is also generated as a starter for the new
     format. The .env is never modified.
+
+    The returned model and its derived lookup indexes represent one startup
+    snapshot. This function does not watch or reload configuration files;
+    callers apply file changes by loading settings again, normally on
+    restart.
     """
     if yaml_file is None:
         yaml_file = get_env_value(None, "YAML_FILE", "config.yaml")
@@ -1441,15 +1576,14 @@ def load_settings(
                 "ready to fully switch to the new config format.",
             )
 
-    class _Configured(AppSettings):
-        model_config = SettingsConfigDict(
+    class _ConfiguredSettingsLoader(_SettingsLoader):
+        # pydantic-settings exposes the dotenv path as a constructor option but
+        # takes the YAML path from model_config, so this small class is needed
+        # to honor load_settings(yaml_file=...).
+        model_config = _settings_loader_config(
             yaml_file=str(yaml_p),
             yaml_file_encoding="utf-8",
-            env_prefix="JPW_",
-            nested_model_default_partial_update=True,
-            extra="forbid",
-            hide_input_in_errors=True,
         )
 
     constructor_options: dict[str, Any] = {"_env_file": env_p}
-    return _Configured(**constructor_options)
+    return _ConfiguredSettingsLoader(**constructor_options)

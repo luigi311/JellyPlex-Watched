@@ -105,6 +105,11 @@ def get_env_value(env, key: str, default: Any = None):
         return default
 
 
+def normalize_name(value: str) -> str:
+    """Normalize case-insensitive user, library, and type names."""
+    return value.casefold()
+
+
 def future_thread_executor(
     args: list[tuple[Callable[..., Any], ...]],
     threads: int | None = None,

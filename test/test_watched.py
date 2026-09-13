@@ -16,7 +16,7 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.watched import (
+from src.watched import (  # noqa: E402
     LibraryData,
     MediaIdentifiers,
     MediaItem,
@@ -691,5 +691,13 @@ def test_simple_cleanup_watched():
         average_time,
     )
 
-    assert return_watched_list_1 == expected_watched_list_1
-    assert return_watched_list_2 == expected_watched_list_2
+    def as_watched_dict(pending_updates):
+        watched: dict[str, UserData] = {}
+        for update in pending_updates:
+            watched.setdefault(update.target_user, UserData()).libraries[
+                update.target_library
+            ] = update.library_data
+        return watched
+
+    assert as_watched_dict(return_watched_list_1) == expected_watched_list_1
+    assert as_watched_dict(return_watched_list_2) == expected_watched_list_2

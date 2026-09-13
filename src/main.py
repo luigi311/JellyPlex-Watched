@@ -5,10 +5,7 @@ from time import perf_counter, sleep
 from loguru import logger
 
 from src.connection import generate_server_connections
-from src.functions import (
-    configure_logger,
-    get_env_value,
-)
+from src.functions import configure_logger
 from src.library import setup_libraries
 from src.settings import AppSettings, load_settings
 from src.users import setup_users
@@ -141,13 +138,9 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
 
 
 def main() -> None:
-    # Resolve config file paths, honoring ENV_FILE / YAML_FILE overrides and
-    # falling back to the conventional defaults. Resolving here keeps the path
-    # discovery in one place and lets load_settings stay path-agnostic.
-    env_file = get_env_value(None, "ENV_FILE", ".env")
-    yaml_file = get_env_value(None, "YAML_FILE", "config.yaml")
-
-    settings: AppSettings = load_settings(env_file=env_file, yaml_file=yaml_file)
+    # load_settings resolves ENV_FILE / YAML_FILE and creates one startup
+    # snapshot for the lifetime of the process.
+    settings: AppSettings = load_settings()
 
     times: list[float] = []
     average_time: float = 100.0  # Seed average time at 100

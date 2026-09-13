@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from typing import Any
+from typing import Any, TypeVar
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.functions import to_aware_utc
+from src.functions import normalize_name, to_aware_utc
 from src.settings import AppSettings
 
 
@@ -54,6 +55,72 @@ class LibraryData(BaseModel):
 
 class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class WatchedUpdate:
+    """One pending library update for one concrete destination pair."""
+
+    source_user: str
+    target_user: str
+    source_library: str
+    target_library: str
+    library_data: LibraryData
+
+
+_WatchedData = TypeVar("_WatchedData")
+
+
+def _lookup_named(
+    values: dict[str, _WatchedData], name: str
+) -> _WatchedData | None:
+    """Find a watched-data entry using the same case-folded lookup as settings."""
+    if name in values:
+        return values[name]
+
+    name_normalized = normalize_name(name)
+    for actual_name, value in values.items():
+        if normalize_name(actual_name) == name_normalized:
+            return value
+    return None
+
+
+def expand_watched_updates(
+    watched_list: dict[str, UserData],
+    source_server_name: str,
+    target_server_name: str,
+    settings: AppSettings,
+) -> list[WatchedUpdate]:
+    """Expand source-shaped watched data into destination-scoped updates.
+
+    This is also used for callers that provide a complete source watched
+    dictionary directly to an adapter. A missing destination history is
+    represented by an update with the source library data unchanged; the
+    adapter will still verify that the destination user and library exist.
+    """
+    updates: list[WatchedUpdate] = []
+    for source_user, user_data in watched_list.items():
+        target_users = settings.sync_targets_for_user(
+            source_server_name, source_user, target_server_name
+        )
+        for target_user in target_users:
+            for source_library, library_data in user_data.libraries.items():
+                target_libraries = settings.sync_targets_for_library(
+                    source_server_name,
+                    source_library,
+                    target_server_name,
+                )
+                for target_library in target_libraries:
+                    updates.append(
+                        WatchedUpdate(
+                            source_user=source_user,
+                            target_user=target_user,
+                            source_library=source_library,
+                            target_library=target_library,
+                            library_data=library_data,
+                        )
+                    )
+    return updates
 
 
 def compare_media_items(
@@ -216,18 +283,19 @@ def find_target_user_keys(
     same-username fallback) and returns *every* candidate that is actually
     present as a key in `target_watched`. A single source user may fan out
     to multiple target users (e.g. a shared family Plex account mapping to
-    several individual Jellyfin users), so this returns a list. Keys in the
-    watched dicts are the literal names each server reports (lowercased), so
-    matching is done on lowercased names.
+    several individual Jellyfin users), so this returns a list. Matching uses
+    the shared case-folded name normalization.
     """
     matched: list[str] = []
+    target_keys = {normalize_name(key): key for key in target_watched}
     for target in settings.sync_targets_for_user(
         source_server, source_user, target_server
     ):
-        if target in target_watched:
-            matched.append(target)
-        elif target.lower() in target_watched:
-            matched.append(target.lower())
+        target_key = target if target in target_watched else target_keys.get(
+            normalize_name(target)
+        )
+        if target_key is not None:
+            matched.append(target_key)
     return matched
 
 
@@ -244,13 +312,15 @@ def find_target_library_keys(
     present in `target_libraries` (libraries can fan out too).
     """
     matched: list[str] = []
+    target_keys = {normalize_name(key): key for key in target_libraries}
     for target in settings.sync_targets_for_library(
         source_server, source_library, target_server
     ):
-        if target in target_libraries:
-            matched.append(target)
-        elif target.lower() in target_libraries:
-            matched.append(target.lower())
+        target_key = target if target in target_libraries else target_keys.get(
+            normalize_name(target)
+        )
+        if target_key is not None:
+            matched.append(target_key)
     return matched
 
 
@@ -355,109 +425,100 @@ def cleanup_watched(
     server_2_name: str,
     settings: AppSettings,
     average_time: float,
-) -> dict[str, UserData]:
-    modified_watched_list_1 = copy.deepcopy(watched_list_1)
+) -> list[WatchedUpdate]:
+    """Return pending updates with comparisons scoped to each destination.
 
-    # remove entries from watched_list_1 that are in watched_list_2
-    for user_1 in watched_list_1:
-        # A server_1 user may correspond to multiple server_2 users
-        # (fan-out). An item is eligible for removal if it's already watched
-        # on ANY of the matched server_2 users.
-        user_2_keys = find_target_user_keys(
-            settings, server_1_name, user_1, server_2_name, watched_list_2
+    A source user or library can fan out to several destinations. Each
+    destination gets its own comparison against its own watched history, so
+    one destination having an item does not suppress the update for another.
+    """
+    pending_updates: list[WatchedUpdate] = []
+
+    for update in expand_watched_updates(
+        watched_list_1,
+        server_1_name,
+        server_2_name,
+        settings,
+    ):
+        target_user_data = _lookup_named(watched_list_2, update.target_user)
+        target_library = (
+            _lookup_named(target_user_data.libraries, update.target_library)
+            if target_user_data is not None
+            else None
         )
-        if not user_2_keys:
-            continue
 
-        for library_1_key in watched_list_1[user_1].libraries:
-            # Gather every matching server_2 library across all matched
-            # server_2 users, and pool their movies/series so a "watched on
-            # the other side" check considers all fan-out targets together.
-            pooled_movies: list[MediaItem] = []
-            pooled_series: list[Series] = []
-            for user_2 in user_2_keys:
-                library_2_keys = find_target_library_keys(
-                    settings,
-                    server_1_name,
-                    library_1_key,
-                    server_2_name,
-                    watched_list_2[user_2].libraries,
+        source_library = update.library_data
+        target_movies = target_library.movies if target_library else []
+        target_series_list = target_library.series if target_library else []
+
+        filtered_movies = []
+        for movie in source_library.movies:
+            if any(
+                check_remove_entry(movie, target_movie, settings, average_time)
+                for target_movie in target_movies
+            ):
+                logger.trace(
+                    f"Removing movie '{movie.identifiers.title}' for "
+                    f"{update.target_user} in {update.target_library}"
                 )
-                for library_2_key in library_2_keys:
-                    library_2 = watched_list_2[user_2].libraries[library_2_key]
-                    pooled_movies.extend(library_2.movies)
-                    pooled_series.extend(library_2.series)
+            else:
+                filtered_movies.append(copy.deepcopy(movie))
 
-            if not pooled_movies and not pooled_series:
+        filtered_series_list: list[Series] = []
+        for source_series in source_library.series:
+            matching_episodes: list[MediaItem] = []
+            for target_series in target_series_list:
+                if check_same_identifiers(
+                    source_series.identifiers, target_series.identifiers
+                ):
+                    matching_episodes.extend(target_series.episodes)
+
+            if not matching_episodes:
+                filtered_series_list.append(copy.deepcopy(source_series))
                 continue
 
-            library_1 = watched_list_1[user_1].libraries[library_1_key]
-
-            filtered_movies = []
-            for movie in library_1.movies:
-                remove_flag = False
-                for movie2 in pooled_movies:
-                    if check_remove_entry(movie, movie2, settings, average_time):
-                        logger.trace(f"Removing movie: {movie.identifiers.title}")
-                        remove_flag = True
-                        break
-
-                if not remove_flag:
-                    filtered_movies.append(movie)
-
-            modified_watched_list_1[user_1].libraries[
-                library_1_key
-            ].movies = filtered_movies
-
-            # TV Shows
-            filtered_series_list = []
-            for series1 in library_1.series:
-                # Collect every matching show across the pooled targets, then
-                # treat their episodes as one pool for removal decisions.
-                matching_episodes: list[MediaItem] = []
-                for series2 in pooled_series:
-                    if check_same_identifiers(series1.identifiers, series2.identifiers):
-                        matching_episodes.extend(series2.episodes)
-
-                if not matching_episodes:
-                    # No matching show on any target; keep the series as is.
-                    filtered_series_list.append(series1)
+            filtered_episodes = []
+            for source_episode in source_series.episodes:
+                if any(
+                    check_remove_entry(
+                        source_episode,
+                        target_episode,
+                        settings,
+                        average_time,
+                    )
+                    for target_episode in matching_episodes
+                ):
+                    logger.trace(
+                        f"Removing episode '{source_episode.identifiers.title}' "
+                        f"from show '{source_series.identifiers.title}' for "
+                        f"{update.target_user} in {update.target_library}"
+                    )
                 else:
-                    # We have a matching show; now clean up the episodes.
-                    filtered_episodes = []
-                    for ep1 in series1.episodes:
-                        remove_flag = False
-                        for ep2 in matching_episodes:
-                            if check_remove_entry(ep1, ep2, settings, average_time):
-                                logger.trace(
-                                    f"Removing episode '{ep1.identifiers.title}' from show '{series1.identifiers.title}'",
-                                )
-                                remove_flag = True
-                                break
-                        if not remove_flag:
-                            filtered_episodes.append(ep1)
+                    filtered_episodes.append(copy.deepcopy(source_episode))
 
-                    # Only keep the series if there are remaining episodes.
-                    if filtered_episodes:
-                        modified_series1 = copy.deepcopy(series1)
-                        modified_series1.episodes = filtered_episodes
-                        filtered_series_list.append(modified_series1)
-                    else:
-                        logger.trace(
-                            f"Removing entire show '{series1.identifiers.title}' as no episodes remain after cleanup.",
-                        )
-            modified_watched_list_1[user_1].libraries[
-                library_1_key
-            ].series = filtered_series_list
-
-    # After processing, remove any library that is completely empty.
-    for user, user_data in modified_watched_list_1.items():
-        new_libraries = {}
-        for lib_key, library in user_data.libraries.items():
-            if library.movies or library.series:
-                new_libraries[lib_key] = library
+            if filtered_episodes:
+                filtered_series = copy.deepcopy(source_series)
+                filtered_series.episodes = filtered_episodes
+                filtered_series_list.append(filtered_series)
             else:
-                logger.trace(f"Removing empty library '{lib_key}' for user '{user}'")
-        user_data.libraries = new_libraries
+                logger.trace(
+                    f"Removing entire show '{source_series.identifiers.title}' "
+                    f"for {update.target_user} in {update.target_library}"
+                )
 
-    return modified_watched_list_1
+        if filtered_movies or filtered_series_list:
+            pending_updates.append(
+                WatchedUpdate(
+                    source_user=update.source_user,
+                    target_user=update.target_user,
+                    source_library=update.source_library,
+                    target_library=update.target_library,
+                    library_data=LibraryData(
+                        title=source_library.title,
+                        movies=filtered_movies,
+                        series=filtered_series_list,
+                    ),
+                )
+            )
+
+    return pending_updates

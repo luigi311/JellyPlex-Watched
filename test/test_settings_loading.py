@@ -9,7 +9,7 @@ import pytest
 import yaml
 from loguru import logger
 from pydantic import SecretStr, ValidationError
-from pydantic_settings import SettingsConfigDict, SettingsError
+from pydantic_settings import SettingsError
 
 from conftest import settings_override
 from src.legacy_settings import (
@@ -17,7 +17,13 @@ from src.legacy_settings import (
     legacy_env_to_field_dict,
     resolve_legacy_env,
 )
-from src.settings import AppSettings, _dump_for_yaml, _migrate_env_to_yaml, load_settings
+from src.settings import (
+    AppSettings,
+    _SettingsLoader,
+    _dump_for_yaml,
+    _migrate_env_to_yaml,
+    load_settings,
+)
 
 
 _CONFIGURATION_ENV_NAMES = {
@@ -29,20 +35,6 @@ _CONFIGURATION_ENV_NAMES_CASEFOLD = {
     name.casefold() for name in _CONFIGURATION_ENV_NAMES
 }
 _LEGACY_ENV_NAMES_CASEFOLD = {name.casefold() for name in LEGACY_ENV_VARS}
-
-
-class _ConstructorOptionsSettings(AppSettings):
-    """Disable YAML while retaining AppSettings' production source chain."""
-
-    model_config = SettingsConfigDict(
-        yaml_file=None,
-        yaml_file_encoding=None,
-        env_prefix="JPW_",
-        env_ignore_empty=True,
-        nested_model_default_partial_update=True,
-        extra="forbid",
-        hide_input_in_errors=True,
-    )
 
 
 def _base_yaml() -> dict[str, Any]:
@@ -535,6 +527,10 @@ def test_yaml_fixture_covers_supported_configuration_shape(
     ) == ["Shows"]
     assert settings.should_sync_user("alice-plex", "plex-main", "jellyfin-main")
     assert not settings.should_sync_user("family-shared", "plex-main", "jellyfin-main")
+    assert settings.should_sync_user("alice", "plex-account", "jellyfin-main")
+    assert not settings.should_sync_user(
+        "alice-jellyfin", "jellyfin-main", "plex-account"
+    )
     assert settings.should_sync_library("Movies", "plex-main", "jellyfin-main")
     assert not settings.should_sync_library("TV Shows", "plex-main", "jellyfin-main")
     assert settings.is_library_type_allowed("movie")
@@ -1230,7 +1226,7 @@ def test_c03_constructor_values_override_prefixed_process_values(
         "blacklist_libraries": ["constructor"],
         "_env_file": None,
     }
-    settings = _ConstructorOptionsSettings(**constructor_options)
+    settings = _SettingsLoader(**constructor_options)
 
     assert settings.blacklist_libraries == ["constructor"]
 
@@ -1248,7 +1244,7 @@ def test_c03_constructor_source_options_are_preserved(
         "_env_file": env_path,
         "_env_prefix": "OTHER_",
     }
-    settings = _ConstructorOptionsSettings(**constructor_options)
+    settings = _SettingsLoader(**constructor_options)
 
     assert settings.dryrun is False
 
@@ -1268,7 +1264,7 @@ def test_c03_constructor_encoding_is_preserved_for_legacy_source(
         "_env_file_encoding": "latin-1",
     }
 
-    settings = _ConstructorOptionsSettings(**constructor_options)
+    settings = _SettingsLoader(**constructor_options)
 
     assert settings.whitelist_users == ["café"]
 
@@ -1556,11 +1552,6 @@ def test_c04_legacy_token_only_rejects_multiple_plex_targets(
     assert "synthetic-secret" not in str(error.value)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="C05 is scheduled for Phase 3",
-)
 def test_c05_wildcard_rule_applies_to_unmapped_users(
     controlled_environment: None,
 ) -> None:
@@ -1584,17 +1575,210 @@ def test_c05_wildcard_rule_applies_to_unmapped_users(
         sync_rules=[
             {"users": ["*"], "from": "plex-main", "to": "jellyfin-main"}
         ],
+        library_sync_rules=[
+            {"libraries": ["*"], "from": "plex-main", "to": "jellyfin-main"}
+        ],
     )
 
     assert settings.should_sync_server("plex-main", "jellyfin-main") is True
+    assert settings.should_sync_server("jellyfin-main", "plex-main") is False
     assert settings.should_sync_user("alice", "plex-main", "jellyfin-main") is True
+    assert settings.should_sync_user("alice", "jellyfin-main", "plex-main") is False
+    assert (
+        settings.should_sync_library("Movies", "plex-main", "jellyfin-main") is True
+    )
+    assert (
+        settings.should_sync_library("Movies", "jellyfin-main", "plex-main") is False
+    )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="C06 is scheduled for Phase 3",
+def test_c05_wildcards_skip_partial_and_unrelated_mappings(
+    controlled_environment: None,
+) -> None:
+    """Wildcards do not require every mapped identity on both servers."""
+    settings = settings_override(
+        plex=[
+            {
+                "name": "plex-main",
+                "baseurl": "http://plex",
+                "token": "x",
+                "sync_to": [],
+            }
+        ],
+        jellyfin=[
+            {
+                "name": "jellyfin-main",
+                "baseurl": "http://jellyfin",
+                "token": "x",
+                "sync_to": [],
+            }
+        ],
+        emby=[
+            {
+                "name": "emby-main",
+                "baseurl": "http://emby",
+                "token": "x",
+                "sync_to": [],
+            }
+        ],
+        user_mappings=[
+            {
+                "canonical": "partial",
+                "aliases": [
+                    {"server": "plex-main", "username": "partial"},
+                ],
+            },
+            {
+                "canonical": "unrelated",
+                "aliases": [
+                    {"server": "emby-main", "username": "elsewhere"},
+                ],
+            },
+        ],
+        library_mappings=[
+            {
+                "canonical": "partial-library",
+                "aliases": [
+                    {"server": "plex-main", "library": "Partial"},
+                ],
+            },
+            {
+                "canonical": "unrelated-library",
+                "aliases": [
+                    {"server": "emby-main", "library": "Elsewhere"},
+                ],
+            },
+        ],
+        sync_rules=[
+            {"users": ["*"], "from": "plex-main", "to": "jellyfin-main"}
+        ],
+        library_sync_rules=[
+            {
+                "libraries": ["*"],
+                "from": "plex-main",
+                "to": "jellyfin-main",
+            }
+        ],
+    )
+
+    assert settings.should_sync_user("partial", "plex-main", "jellyfin-main")
+    assert (
+        settings.sync_targets_for_user("plex-main", "partial", "jellyfin-main")
+        == []
+    )
+    assert settings.should_sync_user("implicit", "plex-main", "jellyfin-main")
+    assert settings.sync_targets_for_user(
+        "plex-main", "implicit", "jellyfin-main"
+    ) == ["implicit"]
+
+    assert settings.should_sync_library(
+        "Partial", "plex-main", "jellyfin-main"
+    )
+    assert settings.sync_targets_for_library(
+        "plex-main", "Partial", "jellyfin-main"
+    ) == []
+    assert settings.should_sync_library(
+        "Implicit", "plex-main", "jellyfin-main"
+    )
+    assert settings.sync_targets_for_library(
+        "plex-main", "Implicit", "jellyfin-main"
+    ) == ["Implicit"]
+
+
+@pytest.mark.parametrize(
+    ("field", "rule"),
+    [
+        ("sync_rules", {"users": ["*", "alice"]}),
+        ("library_sync_rules", {"libraries": ["*", "Movies"]}),
+    ],
 )
+def test_c05_wildcard_rule_must_not_mix_literal_entries(
+    controlled_environment: None,
+    field: str,
+    rule: dict[str, list[str]],
+) -> None:
+    with pytest.raises(ValidationError, match="must be the only entry"):
+        settings_override(
+            **{
+                field: [
+                    {
+                        **rule,
+                        "from": "plex-main",
+                        "to": "jellyfin-main",
+                    }
+                ]
+            }
+        )
+
+
+def test_phase3_casefolds_identity_validation_indexes_and_lookups(
+    controlled_environment: None,
+) -> None:
+    settings = settings_override(
+        plex=[
+            {
+                "name": "plex-main",
+                "baseurl": "http://plex",
+                "token": "x",
+                "sync_to": [],
+            }
+        ],
+        jellyfin=[
+            {
+                "name": "jellyfin-main",
+                "baseurl": "http://jellyfin",
+                "token": "x",
+                "sync_to": [],
+            }
+        ],
+        user_mappings=[
+            {
+                "canonical": "Person",
+                "aliases": [
+                    {"server": "plex-main", "username": "Straße"},
+                    {"server": "jellyfin-main", "username": "target-user"},
+                ],
+            }
+        ],
+        library_mappings=[
+            {
+                "canonical": "Library",
+                "aliases": [
+                    {"server": "plex-main", "library": "Straße"},
+                    {"server": "jellyfin-main", "library": "target-library"},
+                ],
+            }
+        ],
+        sync_rules=[
+            {"users": ["PERSON"], "from": "plex-main", "to": "jellyfin-main"}
+        ],
+        library_sync_rules=[
+            {
+                "libraries": ["LIBRARY"],
+                "from": "plex-main",
+                "to": "jellyfin-main",
+            }
+        ],
+    )
+
+    assert settings.lookup_user("plex-main", "STRASSE") == "person"
+    assert settings.lookup_library("plex-main", "STRASSE") == "library"
+    assert settings.sync_targets_for_user(
+        "plex-main", "STRASSE", "jellyfin-main"
+    ) == ["target-user"]
+    assert settings.sync_targets_for_library(
+        "plex-main", "STRASSE", "jellyfin-main"
+    ) == ["target-library"]
+    assert settings.should_sync_user("STRASSE", "plex-main", "jellyfin-main") is True
+    assert (
+        settings.should_sync_library("STRASSE", "plex-main", "jellyfin-main") is True
+    )
+    assert settings.should_sync_user("STRASSE", "jellyfin-main", "plex-main") is False
+    assert (
+        settings.should_sync_library("STRASSE", "jellyfin-main", "plex-main") is False
+    )
+
+
 def test_c06_user_filters_keep_same_name_identities_separate(
     controlled_environment: None,
 ) -> None:
@@ -1622,13 +1806,10 @@ def test_c06_user_filters_keep_same_name_identities_separate(
     assert (
         settings.should_sync_user("shared", "jellyfin-main", "plex-main") is False
     )
+    assert settings.is_user_allowed("shared", "plex-main") is True
+    assert settings.is_user_allowed("shared", "jellyfin-main") is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="C07 is scheduled for Phase 3",
-)
 def test_c07_library_whitelist_takes_precedence_over_blacklist(
     controlled_environment: None,
 ) -> None:
