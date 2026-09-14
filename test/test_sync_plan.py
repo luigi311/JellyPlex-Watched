@@ -685,7 +685,11 @@ def apply_jellyfin_plan(monkeypatch, target, plan, item, show=None):
             writes.append((path, kwargs["json"]))
             return {}
         if path.endswith("/Views"):
-            return {"Items": [{"Name": "Movies", "Id": "library-id"}]}
+            return {
+                "Items": [
+                    {"Name": "Movies", "Id": "library-id", "CollectionType": "movies"}
+                ]
+            }
         if "IncludeItemTypes=Series" in path:
             assert show is not None
             return {"Items": [show]}
@@ -1062,3 +1066,32 @@ def test_additive_plan_does_not_enable_unmatched_fetched_pairs(reverse):
     assert {
         (update.target_user, update.target_library) for update in pending
     } == expected
+
+
+def test_plan_preserves_native_type_of_each_final_incoming_scope(monkeypatch):
+    settings = make_settings(
+        {"a": ["b"], "b": ["c"], "c": []},
+        dryrun=False,
+        blacklist_library_types=["show"],
+        library_sync_rules=[{"libraries": ["Movies"], "from": "a", "to": "b"}],
+    )
+    servers = make_servers(settings)
+    watched = {
+        servers[name]: history(movie()) if name == "a" else history() for name in "abc"
+    }
+    for name in "abc":
+        watched[servers[name]]["alice"].libraries["Movies"].library_type = (
+            "show" if name == "a" else "movies"
+        )
+    plan = generate_watched_plan(watched, settings, 0)
+    assert updates_for(plan, servers["b"])[0].library_data.library_type == "show"
+    # c's write is authorized as b -> c, whose incoming type is movies.
+    assert updates_for(plan, servers["c"])[0].library_data.library_type == "movies"
+    writes, outcomes = apply_jellyfin_plan(
+        monkeypatch,
+        servers["c"],
+        plan,
+        {"Id": "item-id", "Name": "shared", "ProviderIds": {"Imdb": "shared"}},
+    )
+    assert len(writes) == 1
+    assert outcomes[0].status == "applied"

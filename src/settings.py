@@ -1321,6 +1321,7 @@ class AppSettings(BaseModel):
         source name and both endpoint types, and server-level sync_to or a
         user rule must enable the direction. Use should_sync_scope to authorize
         a concrete user/library pair before planning or writing.
+        Normal type filtering requires known types for both endpoints.
         """
         if not self.should_sync_server(from_server, to_server):
             return False
@@ -1332,6 +1333,10 @@ class AppSettings(BaseModel):
             {normalize_name(library)},
             self._whitelist_libraries_lc,
             self._blacklist_libraries_lc,
+        ):
+            return False
+        if (self._whitelist_library_types_lc or self._blacklist_library_types_lc) and (
+            not library_type or not target_library_type
         ):
             return False
         if any(

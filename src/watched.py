@@ -158,8 +158,8 @@ def expand_watched_updates(
 ) -> list[WatchedUpdate]:
     """Expand source-shaped watched data into destination-scoped updates.
 
-    Authorize each source scope before fan-in can combine its history with
-    other scopes and discard the original source identity.
+    Preserve each source scope for authorization before fan-in. Callers must
+    check should_sync_scope once the destination library type is known.
 
     This is also used for callers that provide a complete source watched
     dictionary directly to an adapter. A missing destination history is
@@ -177,14 +177,6 @@ def expand_watched_updates(
         )
         for target_user in target_users:
             for source_library, library_data in user_data.libraries.items():
-                if not settings.should_sync_scope(
-                    source_user,
-                    source_library,
-                    source_server_name,
-                    target_server_name,
-                    library_type=library_data.library_type,
-                ):
-                    continue
                 target_libraries = settings.sync_targets_for_library(
                     source_server_name,
                     source_library,

@@ -178,14 +178,19 @@ def test_matching_user_and_library_exceptions_add_filtered_library(filter_kind):
         }
     )
     assert settings.should_sync_scope(
-        "alice", "Shows", "a", "b", library_type="tvshows"
+        "alice",
+        "Shows",
+        "a",
+        "b",
+        library_type="tvshows",
+        target_library_type="tvshows",
     )
     assert settings.should_sync_scope(
         "alice", "Movies", "a", "b", library_type="movies"
     )
     assert settings.should_sync_scope("bob", "Movies", "a", "b", library_type="movies")
     assert not settings.should_sync_scope(
-        "bob", "Shows", "a", "b", library_type="tvshows"
+        "bob", "Shows", "a", "b", library_type="tvshows", target_library_type="tvshows"
     )
 
 
@@ -282,6 +287,111 @@ def test_adapter_authorizes_additive_rules_for_the_concrete_pair(
                 target_user=username,
                 source_library=library,
                 target_library=library,
+                library_data=data,
+            )
+        ]
+    )
+    target.update_watched(payload, "a")
+    assert target.update_user_watched.call_count == int(allowed)
+
+
+@pytest.mark.parametrize(
+    "filter_name,values",
+    [
+        ("whitelist_library_types", ["movie", "movies"]),
+        ("blacklist_library_types", ["show", "tvshows"]),
+    ],
+)
+@pytest.mark.parametrize(
+    "source_type,target_type",
+    [
+        (None, "movies"),
+        ("movie", None),
+        ("", "movies"),
+        ("movie", []),
+    ],
+)
+def test_type_filters_reject_unknown_endpoints(
+    filter_name, values, source_type, target_type
+):
+    settings = policy_settings(server_direction=True, **{filter_name: values})
+    assert not settings.should_sync_library(
+        "Movies", "a", "b", library_type=source_type, target_library_type=target_type
+    )
+
+
+def test_missing_types_still_allow_unfiltered_defaults_and_library_overrides():
+    settings = policy_settings(server_direction=True)
+    assert settings.should_sync_library("Movies", "a", "b")
+    settings = policy_settings(
+        whitelist_library_types=["movies"],
+        library_sync_rules=[{"libraries": ["Movies"], "from": "a", "to": "b"}],
+    )
+    assert settings.should_sync_library("Movies", "a", "b")
+
+
+@pytest.mark.parametrize("adapter", [Plex, Jellyfin, Emby])
+@pytest.mark.parametrize("representation", ["dictionary", "updates"])
+@pytest.mark.parametrize(
+    "source_type,destination_kind,allowed",
+    [
+        ("movie", "allowed", True),
+        ("movie", "blocked", False),
+        ("movie", "missing", False),
+        (None, "allowed", False),
+    ],
+)
+def test_adapter_checks_resolved_native_type_before_writing(
+    adapter, representation, source_type, destination_kind, allowed
+):
+    settings = policy_settings(
+        user_sync_rules=[{"users": ["alice"], "from": "a", "to": "b"}],
+        whitelist_library_types=["movie", "movies"],
+    )
+    target = object.__new__(adapter)
+    target.app_settings = settings
+    target.server_settings = settings.jellyfin[1]
+    target.server_type = adapter.__name__
+    if adapter is Plex:
+        native_type = {"allowed": "movie", "blocked": "show", "missing": None}[
+            destination_kind
+        ]
+        user = Mock(spec=MyPlexAccount, username="alice", title="Alice")
+        target.users = [user]
+        target.admin_user = user
+        target.plex = Mock()
+        target.plex.library.sections.return_value = [
+            SimpleNamespace(title="Other", type="movie"),
+            SimpleNamespace(title="Movies", type=native_type),
+        ]
+    else:
+        native_type = {"allowed": "movies", "blocked": "tvshows", "missing": None}[
+            destination_kind
+        ]
+        target.users = {"alice": "user-id"}
+        target.query = Mock(
+            return_value={
+                "Items": [
+                    {"Name": "Other", "Id": "other-id", "CollectionType": "movies"},
+                    {
+                        "Name": "Movies",
+                        "Id": "movies-id",
+                        "CollectionType": native_type,
+                    },
+                ]
+            }
+        )
+    target.update_user_watched = Mock(return_value=[])
+    data = LibraryData(title="Movies", library_type=source_type)
+    payload = (
+        {"alice": UserData(libraries={"Movies": data})}
+        if representation == "dictionary"
+        else [
+            WatchedUpdate(
+                source_user="alice",
+                target_user="alice",
+                source_library="Movies",
+                target_library="Movies",
                 library_data=data,
             )
         ]

@@ -1115,12 +1115,8 @@ class JellyfinEmby:
 
         for update in pending_updates:
             user = update.source_user
-            if not self.app_settings.should_sync_scope(
-                user,
-                update.source_library,
-                source_server_name,
-                self.server_settings.name,
-                library_type=update.library_data.library_type,
+            if not self.app_settings.should_sync_user(
+                user, source_server_name, self.server_settings.name
             ):
                 logger.debug(
                     f"{self.server_type}: {user} (from {source_server_name}) skipped"
@@ -1154,6 +1150,10 @@ class JellyfinEmby:
                     continue
 
                 available_libraries = [x for x in jellyfin_libraries.get("Items", [])]
+                library_types = {
+                    library.get("Id"): library.get("CollectionType")
+                    for library in available_libraries
+                }
 
                 target_library_normalized = normalize_name(update.target_library)
                 resolved_libraries = [
@@ -1172,6 +1172,15 @@ class JellyfinEmby:
                     continue
 
                 for resolved_library_name, library_id in resolved_libraries:
+                    if not self.app_settings.should_sync_scope(
+                        user,
+                        update.source_library,
+                        source_server_name,
+                        self.server_settings.name,
+                        library_type=update.library_data.library_type,
+                        target_library_type=library_types.get(library_id),
+                    ):
+                        continue
                     try:
                         outcomes = self.update_user_watched(
                             user_name,

@@ -36,6 +36,8 @@ generate_locations: true # match items across servers via file paths
 # entries pass and the matching blacklist is ignored. Can be list or
 # new line entries. Library types use the values reported by each adapter:
 # Plex uses movie/show; Jellyfin and Emby use movies/tvshows.
+# Without a library override, configured type filters require known types
+# for both source and destination libraries before writing history.
 # A user exception does not bypass library filters; a library exception does
 # not bypass user filters. Unsupported media types remain unsupported.
 blacklist_users: []

@@ -204,8 +204,10 @@ runtime identities and overrides the corresponding filters for all matches.
 
 Without a matching exception, a non-empty whitelist takes precedence over its
 blacklist. Otherwise blacklist matches are rejected. User filters resolve the
-source server's canonical identity and aliases. Mappings still resolve actual
-accounts and libraries; unmapped identities use same-name matching only when
+source server's canonical identity and aliases. Without a matching library
+exception, configured type filters require both endpoint types to be known and
+allowed before writing history. Mappings still resolve actual accounts and
+libraries; unmapped identities use same-name matching only when
 the target name is not owned by another mapping. Rules do not create missing
 accounts or libraries, or enable unsupported media types.
 

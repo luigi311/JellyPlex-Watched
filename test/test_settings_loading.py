@@ -531,7 +531,13 @@ def test_yaml_fixture_covers_supported_configuration_shape(
     assert not settings.should_sync_user(
         "alice-jellyfin", "jellyfin-main", "plex-account"
     )
-    assert settings.should_sync_library("Movies", "plex-main", "jellyfin-main")
+    assert settings.should_sync_library(
+        "Movies",
+        "plex-main",
+        "jellyfin-main",
+        library_type="movie",
+        target_library_type="movie",
+    )
     assert not settings.should_sync_library("TV Shows", "plex-main", "jellyfin-main")
     assert settings.is_library_type_allowed("movie")
     assert not settings.is_library_type_allowed("music")
