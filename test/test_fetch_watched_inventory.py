@@ -35,7 +35,12 @@ def test_fetch_uses_each_users_libraries_and_preserves_results_on_failure(adapte
             ]
         }
     )
-    assert result == {server: {"alice": alice, "bob": bob}}
+    assert set(result[server]) == {"alice", "bob"}
+    assert result[server]["alice"].libraries["Movies"] == alice.libraries[
+        "Movies"
+    ].model_copy(update={"library_type": "movies"})
+    assert result[server]["bob"].libraries["Shows"].library_type == "tvshows"
+    assert alice.libraries["Movies"].library_type is None
     assert server.get_watched.call_count == 3
     assert server.get_watched.call_args_list[0].args == ({"Alice": "a"}, ["Movies"])
     assert server.get_watched.call_args_list[2].args == ({"Bob": "b"}, ["Shows"])
@@ -53,10 +58,11 @@ def test_fetch_keeps_servers_separate_and_preserves_plex_objects():
     first.get_watched = Mock(return_value={"alice": first_data})
     second.get_watched = Mock(return_value={"alice": second_data})
     entry = UserLibraries(user, {"Movies": "movie"})
-    assert fetch_watched_inventory({first: [entry], second: [entry]}) == {
-        first: {"alice": first_data},
-        second: {"alice": second_data},
-    }
+    result = fetch_watched_inventory({first: [entry], second: [entry]})
+    assert set(result) == {first, second}
+    for server in (first, second):
+        assert result[server]["alice"].libraries["Movies"].library_type == "movie"
+    assert result[first]["alice"] is not result[second]["alice"]
     first.get_watched.assert_called_once_with([user], ["Movies"])
     second.get_watched.assert_called_once_with([user], ["Movies"])
     assert fetch_watched_inventory({}) == {}
@@ -82,7 +88,9 @@ def test_custom_library_uses_discovered_type_and_only_selected_history_is_fetche
             ]
         }
     )
-    assert result[server]["alice"].libraries == {"Custom": data}
+    assert result[server]["alice"].libraries == {
+        "Custom": data.model_copy(update={"library_type": "tvshows"})
+    }
     server.get_user_library_watched.assert_called_once_with(
         "Alice", "a", "tvshows", "c", "Custom"
     )

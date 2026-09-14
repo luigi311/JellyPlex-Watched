@@ -46,14 +46,6 @@ def test_fanin_authorizes_each_source_before_coalescing(scope, reverse):
                     "to": "third",
                 },
             ],
-            f"{'user' if scope == 'library' else 'library'}_sync_rules": [
-                {
-                    f"{'users' if scope == 'library' else 'libraries'}": ["*"],
-                    "from": source,
-                    "to": destination,
-                }
-                for destination in [target, "third"]
-            ],
         },
     )
     watched = {}

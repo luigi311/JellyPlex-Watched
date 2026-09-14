@@ -9,7 +9,9 @@ from conftest import settings_override
 from src import main
 from src.jellyfin import Jellyfin
 from src.settings import AppSettings
+from src.sync_inventory import fetch_watched_inventory, generate_sync_inventory
 from src.sync_plan import generate_watched_plan
+from src.users import generate_all_server_users
 from src.watched import (
     LibraryData,
     MediaIdentifiers,
@@ -327,9 +329,6 @@ def test_user_and_library_fanout_respects_each_destinations_history(reverse):
 def test_policy_is_applied_before_global_fanin(scope):
     field = "username" if scope == "user" else "library"
     plural = "users" if scope == "user" else "libraries"
-    other_scope, other_plural = (
-        ("library", "libraries") if scope == "user" else ("user", "users")
-    )
     settings = make_settings(
         {"a": [], "b": ["c"], "c": []},
         **{
@@ -345,9 +344,6 @@ def test_policy_is_applied_before_global_fanin(scope):
                 )
             ],
             f"{scope}_sync_rules": [{plural: ["Allowed"], "from": "b", "to": "a"}],
-            f"{other_scope}_sync_rules": [
-                {other_plural: ["*"], "from": "b", "to": "a"}
-            ],
         },
     )
     servers = make_servers(settings)
@@ -585,15 +581,22 @@ def test_unknown_intermediate_scope_blocks_the_path(missing):
 
 
 @pytest.mark.parametrize("blocked_scope", ["user", "library"])
-def test_every_intermediate_hop_must_allow_both_user_and_library(blocked_scope):
+def test_every_intermediate_hop_respects_unmatched_scope_filters(blocked_scope):
     permitted_scope = "library" if blocked_scope == "user" else "user"
     permitted_field = "libraries" if permitted_scope == "library" else "users"
+    blocked_field = "libraries" if blocked_scope == "library" else "users"
     settings = make_settings(
         {"a": ["b"], "b": [], "c": []},
         **{
+            f"blacklist_{blocked_field}": [
+                "alice" if blocked_scope == "user" else "Movies"
+            ],
             f"{permitted_scope}_sync_rules": [
                 {permitted_field: ["*"], "from": "b", "to": "c"}
-            ]
+            ],
+            f"{blocked_scope}_sync_rules": [
+                {blocked_field: ["*"], "from": "a", "to": "b"}
+            ],
         },
     )
     servers = make_servers(settings)
@@ -682,7 +685,11 @@ def apply_jellyfin_plan(monkeypatch, target, plan, item, show=None):
             writes.append((path, kwargs["json"]))
             return {}
         if path.endswith("/Views"):
-            return {"Items": [{"Name": "Movies", "Id": "library-id"}]}
+            return {
+                "Items": [
+                    {"Name": "Movies", "Id": "library-id", "CollectionType": "movies"}
+                ]
+            }
         if "IncludeItemTypes=Series" in path:
             assert show is not None
             return {"Items": [show]}
@@ -872,3 +879,219 @@ def test_indirect_baseline_match_prevents_stale_write():
         )
         == {}
     )
+
+
+@pytest.mark.parametrize("scope", ["user", "library", "both"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_additive_exceptions_survive_discovery_planning_and_adapter(
+    monkeypatch, scope, reverse
+):
+    source, target = ("b", "a") if reverse else ("a", "b")
+    filters = {}
+    if scope in ("user", "both"):
+        filters["whitelist_users"] = ["bob"]
+    if scope in ("library", "both"):
+        filters.update(
+            whitelist_libraries=["Shows"], blacklist_library_types=["movies"]
+        )
+    settings = make_settings(
+        {source: [], target: []},
+        dryrun=False,
+        **filters,
+        user_sync_rules=[{"users": ["alice"], "from": source, "to": target}]
+        if scope in ("user", "both")
+        else [],
+        library_sync_rules=[{"libraries": ["Movies"], "from": source, "to": target}]
+        if scope in ("library", "both")
+        else [],
+    )
+    servers = make_servers(settings)
+    for name, server in servers.items():
+        server.users = {"alice": "alice-id", "bob": "bob-id"}
+        server.get_user_libraries = Mock(
+            return_value={"Movies": "movies", "Shows": "tvshows"}
+        )
+
+        def get_watched(users, libraries, *, library_types, name=name):
+            return {
+                user: UserData(
+                    libraries={
+                        library: LibraryData(
+                            title=library, movies=[movie()] if name == source else []
+                        )
+                        for library in libraries
+                    }
+                )
+                for user in users
+            }
+
+        server.get_watched = Mock(side_effect=get_watched)
+    inventory = generate_sync_inventory(
+        generate_all_server_users(list(servers.values()), settings), settings
+    )
+    fetched = fetch_watched_inventory(inventory)
+    plan = generate_watched_plan(fetched, settings, 0)
+    assert set(plan) == {servers[target]}
+    expected = {
+        "user": {("alice", "Movies"), ("alice", "Shows")},
+        "library": {("alice", "Movies"), ("bob", "Movies")},
+        "both": {("alice", "Movies"), ("alice", "Shows"), ("bob", "Movies")},
+    }[scope]
+    assert {
+        (update.target_user, update.target_library)
+        for update in updates_for(plan, servers[target])
+    } == expected
+    # The helper exposes Alice's Movies library; the real adapter must keep
+    # the exception despite rechecking the original whitelist/blacklist.
+    writes, outcomes = apply_jellyfin_plan(
+        monkeypatch,
+        servers[target],
+        plan,
+        {"Id": "item-id", "Name": "shared", "ProviderIds": {"Imdb": "shared"}},
+    )
+    assert len(writes) == 1
+    assert outcomes[0].status == "applied"
+
+
+def test_opposite_direction_exceptions_cannot_be_combined_during_inventory():
+    settings = make_settings(
+        {"a": [], "b": []},
+        whitelist_users=["bob"],
+        blacklist_library_types=["movies"],
+        user_sync_rules=[{"users": ["alice"], "from": "a", "to": "b"}],
+        library_sync_rules=[{"libraries": ["Movies"], "from": "b", "to": "a"}],
+    )
+    servers = make_servers(settings)
+    for server in servers.values():
+        server.users = {"alice": "alice-id"}
+        server.get_user_libraries = Mock(return_value={"Movies": "movies"})
+    inventory = generate_sync_inventory(
+        generate_all_server_users(list(servers.values()), settings), settings
+    )
+    assert inventory == {}
+
+
+def test_library_type_exception_is_limited_to_its_authorized_edge():
+    settings = make_settings(
+        {"a": ["c"], "b": [], "c": ["b"]},
+        blacklist_library_types=["tvshows"],
+        library_sync_rules=[{"libraries": ["Movies"], "from": "a", "to": "b"}],
+    )
+    servers = make_servers(settings)
+    for name, server in servers.items():
+        server.users = {"alice": "alice-id"}
+        server.get_user_libraries = Mock(
+            return_value={"Movies": "tvshows" if name == "a" else "movies"}
+        )
+        server.get_watched = Mock(
+            return_value=history(movie()) if name == "a" else history()
+        )
+    inventory = generate_sync_inventory(
+        generate_all_server_users(list(servers.values()), settings), settings
+    )
+    # c is fetched through c -> b; it must not acquire an a -> c edge simply
+    # because the a -> b exception retained a's globally filtered type.
+    assert set(inventory) == set(servers.values())
+    fetched = fetch_watched_inventory(inventory)
+    assert fetched[servers["a"]]["alice"].libraries["Movies"].library_type == "tvshows"
+    plan = generate_watched_plan(fetched, settings, 0)
+    assert set(plan) == {servers["b"]}
+
+
+def test_reverse_user_exceptions_propagate_between_three_servers():
+    settings = make_settings(
+        {"plex": ["jellyfin", "emby"], "jellyfin": [], "emby": []},
+        user_sync_rules=[
+            {"users": ["luigi311"], "from": name, "to": "plex"}
+            for name in ("jellyfin", "emby")
+        ],
+    )
+    servers = make_servers(settings)
+    watched = {}
+    for name, server in servers.items():
+        watched[server] = {
+            **history(*([movie()] if name == "jellyfin" else []), user="luigi311"),
+            **history(*([movie("bob-only")] if name == "jellyfin" else []), user="bob"),
+        }
+    plan = generate_watched_plan(watched, settings, 0)
+    assert set(plan) == {servers["plex"], servers["emby"]}
+    for target in plan:
+        assert movies_for(plan, target) == [movie()]
+        assert {update.target_user for update in updates_for(plan, target)} == {
+            "luigi311"
+        }
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_additive_plan_does_not_enable_unmatched_fetched_pairs(reverse):
+    source, target = ("b", "a") if reverse else ("a", "b")
+    settings = make_settings(
+        {source: [], target: []},
+        user_sync_rules=[{"users": ["alice"], "from": source, "to": target}],
+        library_sync_rules=[{"libraries": ["Movies"], "from": source, "to": target}],
+        blacklist_users=["alice"],
+        blacklist_libraries=["Movies"],
+    )
+    servers = make_servers(settings)
+    watched = {
+        server: {
+            user: UserData(
+                libraries={
+                    library: LibraryData(
+                        title=library, movies=[movie()] if name == source else []
+                    )
+                    for library in ("Movies", "Shows")
+                }
+            )
+            for user in ("alice", "bob")
+        }
+        for name, server in servers.items()
+    }
+    expected = {("alice", "Movies"), ("alice", "Shows"), ("bob", "Movies")}
+    plan = generate_watched_plan(watched, settings, 0)
+    assert set(plan) == {servers[target]}
+    assert {
+        (update.target_user, update.target_library)
+        for update in updates_for(plan, servers[target])
+    } == expected
+    pending = cleanup_watched(
+        watched[servers[source]],
+        watched[servers[target]],
+        source,
+        target,
+        settings,
+        0,
+        require_destination_scope=True,
+    )
+    assert {
+        (update.target_user, update.target_library) for update in pending
+    } == expected
+
+
+def test_plan_preserves_native_type_of_each_final_incoming_scope(monkeypatch):
+    settings = make_settings(
+        {"a": ["b"], "b": ["c"], "c": []},
+        dryrun=False,
+        blacklist_library_types=["show"],
+        library_sync_rules=[{"libraries": ["Movies"], "from": "a", "to": "b"}],
+    )
+    servers = make_servers(settings)
+    watched = {
+        servers[name]: history(movie()) if name == "a" else history() for name in "abc"
+    }
+    for name in "abc":
+        watched[servers[name]]["alice"].libraries["Movies"].library_type = (
+            "show" if name == "a" else "movies"
+        )
+    plan = generate_watched_plan(watched, settings, 0)
+    assert updates_for(plan, servers["b"])[0].library_data.library_type == "show"
+    # c's write is authorized as b -> c, whose incoming type is movies.
+    assert updates_for(plan, servers["c"])[0].library_data.library_type == "movies"
+    writes, outcomes = apply_jellyfin_plan(
+        monkeypatch,
+        servers["c"],
+        plan,
+        {"Id": "item-id", "Name": "shared", "ProviderIds": {"Imdb": "shared"}},
+    )
+    assert len(writes) == 1
+    assert outcomes[0].status == "applied"

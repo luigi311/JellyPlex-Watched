@@ -75,15 +75,23 @@ def generate_sync_inventory(
         target_user: str,
         source_library: str,
         target_library: str,
+        source_type: str,
+        target_type: str,
     ) -> bool:
         return (
-            settings.should_sync_user(source_user, source, target)
+            settings.should_sync_scope(
+                source_user,
+                source_library,
+                source,
+                target,
+                library_type=source_type,
+                target_library_type=target_type,
+            )
             and target_user
             in {
                 normalize_name(name)
                 for name in settings.sync_targets_for_user(source, source_user, target)
             }
-            and settings.should_sync_library(source_library, source, target)
             and normalize_name(target_library)
             in {
                 normalize_name(name)
@@ -124,6 +132,12 @@ def generate_sync_inventory(
                                     target_user,
                                     source_library,
                                     target_library,
+                                    inventory[source][source_user].libraries[
+                                        source_library
+                                    ],
+                                    inventory[target][target_user].libraries[
+                                        target_library
+                                    ],
                                 )
                                 or permits(
                                     target_name,
@@ -132,6 +146,12 @@ def generate_sync_inventory(
                                     source_user,
                                     target_library,
                                     source_library,
+                                    inventory[target][target_user].libraries[
+                                        target_library
+                                    ],
+                                    inventory[source][source_user].libraries[
+                                        source_library
+                                    ],
                                 )
                             ):
                                 continue
@@ -203,6 +223,22 @@ def fetch_watched_inventory(
                     "Skipping incomplete watched fetch for {}", entry.username
                 )
                 continue
-            watched.update(user_watched)
+            # Retain types for the planner: a library fetched because of an
+            # exception on one edge still needs normal filtering on other edges.
+            library_types = {
+                normalize_name(name): kind for name, kind in entry.libraries.items()
+            }
+            watched[entry.username] = user_data.model_copy(
+                update={
+                    "libraries": {
+                        name: library.model_copy(
+                            update={
+                                "library_type": library_types.get(normalize_name(name))
+                            }
+                        )
+                        for name, library in user_data.libraries.items()
+                    }
+                }
+            )
         servers_watched[server] = watched
     return servers_watched

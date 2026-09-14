@@ -86,7 +86,7 @@ def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
 
 
 @pytest.mark.parametrize("same_direction", [False, True])
-def test_user_and_library_rules_must_allow_same_direction(same_direction):
+def test_user_and_library_rules_can_enable_directions_independently(same_direction):
     settings = settings_override(
         plex=[dict(name="plex-main", baseurl="http://plex", token="x", sync_to=[])],
         jellyfin=[
@@ -113,7 +113,7 @@ def test_user_and_library_rules_must_allow_same_direction(same_direction):
     result = generate_sync_inventory(
         generate_all_server_users(servers, settings), settings
     )
-    assert bool(result) is same_direction
+    assert set(result) == set(servers)
 
 
 def test_jellyfin_library_discovery_is_user_scoped_and_handles_custom_types():

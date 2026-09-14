@@ -33,6 +33,8 @@ type WatchedPlan = dict[Server, dict[str, list[WatchedUpdate]]]
 class _SourceLibrary:
     data: LibraryData
     path: tuple[WatchedScope, ...] = ()
+    # Adapters recheck the final hop, whose native type can differ from origin.
+    incoming_library_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -175,7 +177,12 @@ def _compare_destination(
         incoming_scope = source.path[-2]
         relay_path = source.path if len(source.path) > 2 else ()
         key = (incoming_scope, relay_path)
-        data = libraries.setdefault(key, LibraryData(title=source.data.title))
+        data = libraries.setdefault(
+            key,
+            LibraryData(
+                title=source.data.title, library_type=source.incoming_library_type
+            ),
+        )
         item = winner.item.model_copy(deep=True)
         if winner.series is None:
             data.movies.append(item)
@@ -261,10 +268,6 @@ def generate_watched_plan(
                 edges[source_scope] = []
                 for target, target_user in destinations:
                     target_name = target.server_settings.name
-                    if not settings.should_sync_library(
-                        library_name, source_name, target_name
-                    ):
-                        continue
                     for target_library in find_target_library_keys(
                         settings,
                         source_name,
@@ -272,6 +275,17 @@ def generate_watched_plan(
                         target_name,
                         servers_watched[target][target_user].libraries,
                     ):
+                        if not settings.should_sync_scope(
+                            username,
+                            library_name,
+                            source_name,
+                            target_name,
+                            library_type=data.library_type,
+                            target_library_type=servers_watched[target][target_user]
+                            .libraries[target_library]
+                            .library_type,
+                        ):
+                            continue
                         edges[source_scope].append(
                             WatchedScope(target_name, target_user, target_library)
                         )
@@ -288,7 +302,11 @@ def generate_watched_plan(
                 visited.add(target_scope)
                 target_path = (*path, target_scope)
                 incoming.setdefault(target_scope, []).append(
-                    replace(source, path=target_path)
+                    replace(
+                        source,
+                        path=target_path,
+                        incoming_library_type=sources[path[-1]].data.library_type,
+                    )
                 )
                 pending.append(target_path)
 

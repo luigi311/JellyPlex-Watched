@@ -884,14 +884,10 @@ class Plex:
 
                 library_list = plex_server.library.sections()
                 available_titles = [section.title for section in library_list]
-
-                if not self.app_settings.should_sync_library(
-                    update.source_library, source_server_name, self.server_settings.name
-                ):
-                    logger.debug(
-                        f"Plex: {update.source_library} (from {source_server_name}) skipped"
-                    )
-                    continue
+                library_types = {
+                    section.title: getattr(section, "type", None)
+                    for section in library_list
+                }
 
                 resolved_libraries = [
                     library_name
@@ -910,6 +906,15 @@ class Plex:
                     continue
 
                 for resolved_library in resolved_libraries:
+                    if not self.app_settings.should_sync_scope(
+                        source_user,
+                        update.source_library,
+                        source_server_name,
+                        self.server_settings.name,
+                        library_type=update.library_data.library_type,
+                        target_library_type=library_types.get(resolved_library),
+                    ):
+                        continue
                     try:
                         outcomes = self.update_user_watched(
                             plex_user,
