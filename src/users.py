@@ -8,6 +8,55 @@ from src.plex import Plex
 from src.settings import AppSettings
 
 
+def generate_all_server_users(
+    servers: list[Plex | Jellyfin | Emby],
+    settings: AppSettings,
+) -> dict[Plex | Jellyfin | Emby, list[MyPlexAccount | MyPlexUser | tuple[str, str]]]:
+    """Select existing users participating in at least one permitted sync.
+
+    Connections already fetched their users. Keep both sources and destinations
+    so incoming-only users also have their watched history available.
+    """
+    user_names = {server: generate_user_list(server) for server in servers}
+    relevant_names: dict[Plex | Jellyfin | Emby, set[str]] = {
+        server: set() for server in servers
+    }
+    for index, source in enumerate(servers):
+        for target in servers[index + 1 :]:
+            pairs = combine_user_lists(
+                source.server_settings.name,
+                target.server_settings.name,
+                user_names[source],
+                user_names[target],
+                settings,
+            )
+            relevant_names[source].update(pairs)
+            relevant_names[target].update(
+                name for targets in pairs.values() for name in targets
+            )
+
+    server_users: dict[
+        Plex | Jellyfin | Emby,
+        list[MyPlexAccount | MyPlexUser | tuple[str, str]],
+    ] = {}
+    for server in servers:
+        selected: list[MyPlexAccount | MyPlexUser | tuple[str, str]] = []
+        if isinstance(server, Plex):
+            selected.extend(
+                user
+                for user in server.users
+                if normalize_name(user.username or user.title) in relevant_names[server]
+            )
+        else:
+            selected.extend(
+                (name, user_id)
+                for name, user_id in server.users.items()
+                if normalize_name(name) in relevant_names[server]
+            )
+        server_users[server] = selected
+    return server_users
+
+
 def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
     # generate list of users from a server
     server_users: list[str] = []

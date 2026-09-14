@@ -592,8 +592,8 @@ tv_shows_2_watched_list_1: list[Series] = [
 
 def test_simple_cleanup_watched():
     settings = settings_override()
-    server_1 = "server1"
-    server_2 = "server2"
+    server_1 = "plex-main"
+    server_2 = "jellyfin-main"
     average_time = 0.0
 
     user_watched_list_1: dict[str, UserData] = {

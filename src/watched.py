@@ -138,6 +138,9 @@ def expand_watched_updates(
 ) -> list[WatchedUpdate]:
     """Expand source-shaped watched data into destination-scoped updates.
 
+    Authorize each source scope before fan-in can combine its history with
+    other scopes and discard the original source identity.
+
     This is also used for callers that provide a complete source watched
     dictionary directly to an adapter. A missing destination history is
     represented by an update with the source library data unchanged; the
@@ -145,11 +148,19 @@ def expand_watched_updates(
     """
     updates: list[WatchedUpdate] = []
     for source_user, user_data in watched_list.items():
+        if not settings.should_sync_user(
+            source_user, source_server_name, target_server_name
+        ):
+            continue
         target_users = settings.sync_targets_for_user(
             source_server_name, source_user, target_server_name
         )
         for target_user in target_users:
             for source_library, library_data in user_data.libraries.items():
+                if not settings.should_sync_library(
+                    source_library, source_server_name, target_server_name
+                ):
+                    continue
                 target_libraries = settings.sync_targets_for_library(
                     source_server_name,
                     source_library,
@@ -587,6 +598,8 @@ def cleanup_watched(
     server_2_name: str,
     settings: AppSettings,
     average_time: float,
+    *,
+    require_destination_scope: bool = False,
 ) -> list[WatchedUpdate]:
     """Return pending updates with comparisons scoped to each destination.
 
@@ -608,6 +621,10 @@ def cleanup_watched(
             if target_user_data is not None
             else None
         )
+
+        # Global fetches omit unknown/failed scopes; never treat these as empty.
+        if require_destination_scope and target_library is None:
+            continue
 
         source_library = update.library_data
         target_movies = target_library.movies if target_library else []

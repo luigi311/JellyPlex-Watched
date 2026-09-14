@@ -1,18 +1,16 @@
 import os
 import traceback
+from copy import deepcopy
 from time import perf_counter, sleep
 
 from loguru import logger
 
 from src.connection import generate_server_connections
 from src.functions import configure_logger
-from src.library import setup_libraries
 from src.settings import AppSettings, load_settings
-from src.users import setup_users
-from src.watched import (
-    cleanup_watched,
-    merge_destination_watched,
-)
+from src.users import generate_all_server_users
+from src.sync_inventory import fetch_watched_inventory, generate_sync_inventory
+from src.watched import cleanup_watched, merge_destination_watched
 
 
 def main_loop(settings: AppSettings, average_time: float) -> None:
@@ -36,51 +34,28 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
 
     servers = generate_server_connections(settings)
 
-    for server_1 in servers:
-        # If server is the final server in the list, then we are done with the loop
-        if server_1 == servers[-1]:
-            break
+    # Generate lists of users participating in outgoing or incoming syncs.
+    server_users = generate_all_server_users(servers, settings)
+    logger.debug("Selected users for {} servers", len(server_users))
 
-        # Store a copy of server_1_watched that way it can be used multiple times without having to regather everyones watch history every single time
-        server_1_watched = None
+    # Discover accessible libraries once per user, then filter using cached inventories.
+    server_user_libraries = generate_sync_inventory(server_users, settings)
+    logger.debug("Selected user libraries for {} servers", len(server_user_libraries))
 
-        # Start server_2 at the next server in the list
-        for server_2 in servers[servers.index(server_1) + 1 :]:
-            # Check if server 1 and server 2 are going to be synced in either direction, skip if not
-            if not settings.should_sync_server(
-                server_1.server_settings.name, server_2.server_settings.name
-            ) and not settings.should_sync_server(
-                server_2.server_settings.name, server_1.server_settings.name
-            ):
-                msg = f"Neither {server_1.info()} or {server_2.info()} are syncing towards each other, skipping pair"
-                logger.warning(msg)
-                continue
+    servers_watched = fetch_watched_inventory(server_user_libraries)
+    logger.debug("Fetched watched data for {} servers", len(servers_watched))
 
-            logger.info(f"Server 1: {type(server_1)}: {server_1.info()}")
-            logger.info(f"Server 2: {type(server_2)}: {server_2.info()}")
+    working_watched = dict(servers_watched)
+    fetched_servers = list(servers_watched)
+    for index, server_1 in enumerate(fetched_servers[:-1]):
+        # Preserve the fetched snapshot while incorporating confirmed writes.
+        server_1_watched = deepcopy(working_watched[server_1])
 
-            # Create users list
-            logger.info("Creating users list")
-            server_1_users, server_2_users = setup_users(server_1, server_2, settings)
+        for server_2 in fetched_servers[index + 1 :]:
+            server_2_watched = working_watched[server_2]
 
-            if not server_1_users and not server_2_users:
-                continue
-
-            server_1_libraries, server_2_libraries = setup_libraries(
-                server_1, server_2, settings
-            )
-            logger.info(f"Server 1 syncing libraries: {server_1_libraries}")
-            logger.info(f"Server 2 syncing libraries: {server_2_libraries}")
-
-            logger.info("Creating watched lists")
-            server_1_watched = server_1.get_watched(
-                server_1_users, server_1_libraries, server_1_watched
-            )
-            logger.info("Finished creating watched list server 1")
-
-            server_2_watched = server_2.get_watched(server_2_users, server_2_libraries)
-            logger.info("Finished creating watched list server 2")
-
+            # cleanup_watched applies directional user and library policy,
+            # including rules that enable sync beyond server-level sync_to.
             logger.info("Cleaning Server 1 Watched")
             server_1_watched_filtered = cleanup_watched(
                 server_1_watched,
@@ -89,6 +64,7 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 server_2.server_settings.name,
                 settings,
                 average_time,
+                require_destination_scope=True,
             )
 
             logger.info("Cleaning Server 2 Watched")
@@ -99,6 +75,7 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 server_1.server_settings.name,
                 settings,
                 average_time,
+                require_destination_scope=True,
             )
 
             logger.debug(
@@ -108,9 +85,7 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}",
             )
 
-            if settings.should_sync_server(
-                server_2.server_settings.name, server_1.server_settings.name
-            ):
+            if server_2_watched_filtered:
                 logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
 
                 write_outcomes = server_1.update_watched(
@@ -126,14 +101,21 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                         settings,
                         average_time,
                     )
+                    working_watched[server_1] = server_1_watched
 
-            if settings.should_sync_server(
-                server_1.server_settings.name, server_2.server_settings.name
-            ):
+            if server_1_watched_filtered:
                 logger.info(f"Syncing {server_1.info()} -> {server_2.info()}")
-                server_2.update_watched(
-                    server_1_watched_filtered, server_1.server_settings.name
+                write_outcomes = server_2.update_watched(
+                    server_1_watched_filtered,
+                    server_1.server_settings.name,
                 )
+                if not settings.dryrun and write_outcomes:
+                    working_watched[server_2] = merge_destination_watched(
+                        server_2_watched,
+                        write_outcomes,
+                        settings,
+                        average_time,
+                    )
 
 
 def main() -> None:
