@@ -64,6 +64,7 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 server_2.server_settings.name,
                 settings,
                 average_time,
+                require_destination_scope=True,
             )
 
             logger.info("Cleaning Server 2 Watched")
@@ -74,6 +75,7 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
                 server_1.server_settings.name,
                 settings,
                 average_time,
+                require_destination_scope=True,
             )
 
             logger.debug(

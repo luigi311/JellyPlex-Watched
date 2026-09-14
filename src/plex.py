@@ -262,7 +262,7 @@ class Plex:
 
     def get_user_library_watched(
         self, user_name: str, user_plex: PlexServer, library: MovieSection | ShowSection
-    ) -> LibraryData:
+    ) -> LibraryData | None:
         try:
             logger.info(
                 f"Plex: Generating watched for {user_name} in library {library.title}",
@@ -341,7 +341,7 @@ class Plex:
             logger.error(
                 f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
             )
-            return LibraryData(title=library.title)
+            return None
 
     def get_watched(
         self,
@@ -387,6 +387,9 @@ class Plex:
                     library_data = self.get_user_library_watched(
                         user_name, user_plex, library
                     )
+
+                    if library_data is None:
+                        continue
 
                     users_watched[user_name].libraries[library.title] = library_data
 

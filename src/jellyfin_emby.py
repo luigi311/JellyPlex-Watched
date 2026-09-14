@@ -231,7 +231,13 @@ class JellyfinEmby:
     def get_libraries(self) -> dict[str, str]:
         libraries: dict[str, str] = {}
         for user in self.users.items():
-            libraries.update(self.get_user_libraries(user))
+            try:
+                libraries.update(self.get_user_libraries(user))
+            except Exception as error:
+                logger.warning(
+                    "Skipping library discovery for user {} ({})",
+                    user[0], type(error).__name__,
+                )
         return libraries
 
     def get_user_libraries(self, user: tuple[str, str]) -> dict[str, str]:
@@ -304,7 +310,7 @@ class JellyfinEmby:
         library_type: Literal["movies", "tvshows"],
         library_id: str,
         library_title: str,
-    ) -> LibraryData:
+    ) -> LibraryData | None:
         user_name = normalize_name(user_name)
         try:
             logger.info(
@@ -321,6 +327,9 @@ class JellyfinEmby:
                     "get",
                 )
 
+                if not isinstance(watched_items, dict) or not isinstance(watched_items.get("Items"), list):
+                    return None
+
                 if watched_items and isinstance(watched_items, dict):
                     movie_items += watched_items.get("Items", [])
 
@@ -329,6 +338,9 @@ class JellyfinEmby:
                     + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
                     "get",
                 )
+
+                if not isinstance(in_progress_items, dict) or not isinstance(in_progress_items.get("Items"), list):
+                    return None
 
                 if in_progress_items and isinstance(in_progress_items, dict):
                     movie_items += in_progress_items.get("Items", [])
@@ -365,11 +377,11 @@ class JellyfinEmby:
                     "get",
                 )
 
-                if not all_shows or not isinstance(all_shows, dict):
+                if not isinstance(all_shows, dict) or not isinstance(all_shows.get("Items"), list):
                     logger.debug(
                         f"{self.server_type}: Failed to get shows for {user_name} in {library_title}"
                     )
-                    return watched
+                    return None
 
                 # Fetch series IDs that have resumable (partially watched) episodes
                 resumable_episodes = self.query(
@@ -378,6 +390,9 @@ class JellyfinEmby:
                     "get",
                 )
                 resumable_series_ids = set()
+                if not isinstance(resumable_episodes, dict) or not isinstance(resumable_episodes.get("Items"), list):
+                    return None
+
                 if resumable_episodes and isinstance(resumable_episodes, dict):
                     for ep in resumable_episodes.get("Items", []):
                         series_id = ep.get("SeriesId")
@@ -438,11 +453,11 @@ class JellyfinEmby:
                         "get",
                     )
 
-                    if not show_episodes or not isinstance(show_episodes, dict):
+                    if not isinstance(show_episodes, dict) or not isinstance(show_episodes.get("Items"), list):
                         logger.debug(
                             f"{self.server_type}: Failed to get episodes for {user_name} {library_title} {show_name}"
                         )
-                        continue
+                        return None
 
                     # Iterate through the episodes
                     # Create a list to store the episodes
@@ -490,7 +505,7 @@ class JellyfinEmby:
             )
 
             logger.error(traceback.format_exc())
-            return LibraryData(title=library_title)
+            return None
 
     def get_watched(
         self,
@@ -553,6 +568,9 @@ class JellyfinEmby:
                         library_id,
                         library_title,
                     )
+
+                    if library_data is None:
+                        continue
 
                     if user_key not in users_watched:
                         users_watched[user_key] = UserData()

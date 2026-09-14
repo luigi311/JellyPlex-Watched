@@ -175,17 +175,34 @@ def fetch_watched_inventory(
             if not entry.libraries:
                 continue
             user = entry.user
-            if isinstance(server, Plex) and not isinstance(user, tuple):
-                user_watched = server.get_watched([user], list(entry.libraries))
-            elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
-                username, user_id = cast(tuple[str, str], user)
-                user_watched = server.get_watched(
-                    {username: user_id},
-                    list(entry.libraries),
-                    library_types=entry.libraries,
+            try:
+                if isinstance(server, Plex) and not isinstance(user, tuple):
+                    user_watched = server.get_watched([user], list(entry.libraries))
+                elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
+                    username, user_id = cast(tuple[str, str], user)
+                    user_watched = server.get_watched(
+                        {username: user_id},
+                        list(entry.libraries),
+                        library_types=entry.libraries,
+                    )
+                else:
+                    raise TypeError("User representation does not match server")
+            except Exception as error:
+                logger.warning(
+                    "Skipping watched fetch for {} ({})",
+                    entry.username,
+                    type(error).__name__,
                 )
-            else:
-                raise TypeError("User representation does not match server")
+                continue
+            # Missing data is unknown, not a successfully fetched empty history.
+            user_data = user_watched.get(entry.username)
+            if user_data is None or not {
+                normalize_name(name) for name in entry.libraries
+            }.issubset({normalize_name(name) for name in user_data.libraries}):
+                logger.warning(
+                    "Skipping incomplete watched fetch for {}", entry.username
+                )
+                continue
             watched.update(user_watched)
         servers_watched[server] = watched
     return servers_watched

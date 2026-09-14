@@ -190,3 +190,17 @@ def test_discovery_failure_does_not_discard_healthy_scopes(failure_stage):
     assert len(result[plex]) == 1
     assert result[jf][0].libraries == {"Movies": "movies"}
     jf.get_user_libraries.assert_called_once_with(("healthy", "h"))
+
+
+def test_server_library_discovery_preserves_results_after_user_failure():
+    server = object.__new__(Jellyfin)
+    server.users = {"first": "1", "failed": "2", "last": "3"}
+    server.get_user_libraries = Mock(
+        side_effect=[
+            {"Movies": "movies"},
+            RuntimeError("discovery failed"),
+            {"Shows": "tvshows"},
+        ]
+    )
+    assert server.get_libraries() == {"Movies": "movies", "Shows": "tvshows"}
+    assert server.get_user_libraries.call_count == 3

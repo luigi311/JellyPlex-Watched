@@ -598,6 +598,8 @@ def cleanup_watched(
     server_2_name: str,
     settings: AppSettings,
     average_time: float,
+    *,
+    require_destination_scope: bool = False,
 ) -> list[WatchedUpdate]:
     """Return pending updates with comparisons scoped to each destination.
 
@@ -619,6 +621,10 @@ def cleanup_watched(
             if target_user_data is not None
             else None
         )
+
+        # Global fetches omit unknown/failed scopes; never treat these as empty.
+        if require_destination_scope and target_library is None:
+            continue
 
         source_library = update.library_data
         target_movies = target_library.movies if target_library else []
