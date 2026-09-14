@@ -188,6 +188,25 @@ literal-name matching only when the target name is not explicitly owned by a
 different mapping. A sync write requires both the user and library policy
 checks to allow it.
 
+Each pass compares the fetched histories from all servers before applying any
+updates. For each destination user and library, it selects the best permitted
+movie or episode state using the existing completion, playback-position, and
+viewing-date rules. Competing sources produce one winning update per matching
+item; ties use a stable server/user/library name order. Matching retains alternate
+provider IDs and filenames from permitted histories, even when their watch state
+does not win, so a destination can match any known identifier for the item.
+Missing or failed fetch scopes are excluded, while a successfully fetched empty
+history can receive updates.
+
+Comparisons use the same snapshot in dry-run and normal operation and follow
+permitted paths across servers. With a chain such as A → B → C, A's history is
+considered for both B and C in the same pass, even when B's fetched history is
+empty. Every hop must pass its direction, user, and library rules; missing or
+failed scopes cannot relay history. Cycles are visited once per original source.
+For example, if A has watched 20 minutes of Cars, B has not watched it, and C
+has completed it, both A and B receive the completed state in that pass when
+C has a permitted path to each. This requires no intermediate successful write.
+
 ### Applying configuration changes
 
 Settings are loaded once at startup and their lookup indexes are cached for
