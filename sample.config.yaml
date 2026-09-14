@@ -140,7 +140,8 @@ user_sync_rules:
 # "from" pushes to "to" for the listed libraries. Bidirectional = two rules.
 # libraries may be canonicals (above) or literal library names.
 # Matching rules override library-name filters and both endpoints' type
-# filters. Use libraries: ["*"] to apply the exception to all mapped libraries.
+# filters. Use libraries: ["*"] to apply the exception to all mapped libraries
+# and unmapped runtime libraries.
 # Alone, a library rule permits normally allowed users.
 library_sync_rules:
   # Enable a direction the server-level config alone wouldn't:
