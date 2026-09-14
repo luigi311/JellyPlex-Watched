@@ -170,23 +170,65 @@ behavior.
 ### Rules and filters
 
 Each server's `sync_to` list describes the direction “this server pushes to
-those servers.” Bidirectional sync requires both directions. The
-`user_sync_rules` and `library_sync_rules` fields are additive: they can enable
-a specific direction even
-when `sync_to` does not include it, but they cannot suppress a direction that
-`sync_to` already enables. A wildcard rule uses `users: ["*"]` or
-`libraries: ["*"]` and must contain no other entries; it also applies to
-unmapped runtime identities. To suppress a matching user or library, use the
-corresponding global filters.
+those servers.” It enables sync for users and libraries that pass the normal
+filters. Bidirectional sync requires both directions.
 
-User, library-name, and library-type filters are evaluated before rules. When
-a whitelist is non-empty, only whitelist matches pass and the matching
-blacklist is ignored. Otherwise, blacklist matches are rejected. User filters
-resolve the source server's canonical identity and aliases, so equal usernames
-on unrelated servers stay separate. An unmapped user or library keeps
-literal-name matching only when the target name is not explicitly owned by a
-different mapping. A sync write requires both the user and library policy
-checks to allow it.
+Explicit rules are exceptions for their exact `from` → `to` direction:
+
+- A matching `user_sync_rules` entry allows that user despite user whitelists
+  and blacklists. Library restrictions apply unless a library rule overrides them.
+- A matching `library_sync_rules` entry allows that library despite
+  library-name and library-type filters, including the mapped destination's
+  type. User restrictions apply unless a user rule overrides them.
+- Rules add exceptions to an existing `sync_to` direction; unmatched users
+  and libraries keep the normal server defaults and filters.
+
+For a direction absent from `sync_to`, either kind of rule can enable sync:
+
+| Rules for that direction | Eligible history |
+| --- | --- |
+| User rules only | Matching users, with normally allowed libraries |
+| Library rules only | Matching libraries, with normally allowed users |
+| Both | Both permissions are added; matching exceptions can override both scopes' filters |
+| Neither | No sync |
+
+For example, an Alice user rule and a Movies library rule for the same
+direction allow Alice's normally permitted libraries **plus Movies**, even if
+Movies is otherwise filtered out. Other normally permitted users also sync
+Movies. Their other libraries remain excluded unless another rule or `sync_to`
+enables them. Adding a library rule never narrows the user rule, or vice versa.
+
+Rules for other directions do not restrict this one. A wildcard rule uses
+`users: ["*"]` or `libraries: ["*"]` as its only entry. It also covers unmapped
+runtime identities and overrides the corresponding filters for all matches.
+
+Without a matching exception, a non-empty whitelist takes precedence over its
+blacklist. Otherwise blacklist matches are rejected. User filters resolve the
+source server's canonical identity and aliases. Mappings still resolve actual
+accounts and libraries; unmapped identities use same-name matching only when
+the target name is not owned by another mapping. Rules do not create missing
+accounts or libraries, or enable unsupported media types.
+
+For example, configure Plex with `sync_to: [jellyfin-main, emby-main]` and the
+other two servers with `sync_to: []`. These rules allow `luigi311` to send
+history back to Plex and onward to the other server, while other users retain
+the normal Plex-outbound behavior:
+
+```yaml
+user_sync_rules:
+  - users: [luigi311]
+    from: jellyfin-main
+    to: plex-main
+  - users: [luigi311]
+    from: emby-main
+    to: plex-main
+```
+
+No library rules are needed for that example; normal library filters apply.
+This changes earlier behavior: rules now override their own scope's filters,
+and either rule type can enable a direction without a companion rule. To
+exclude an identity covered by an explicit rule, remove or narrow that rule
+as well as configuring the normal filters.
 
 Each pass compares the fetched histories from all servers before applying any
 updates. For each destination user and library, it selects the best permitted

@@ -16,12 +16,14 @@ Sync direction model:
     the server level (each server in the other's sync_to) or the rule
     level (two rules with from/to swapped).
 
-    Rules are purely additive: a matching rule enables sync for a
-    (user, from, to) or (library, from, to) triple even when the
-    server-level config wouldn't. Rules cannot suppress a direction the
-    server-level config enables — for that, use the global
-    blacklist_users / blacklist_libraries (or whitelist_*) lists, which
-    are checked before any rule or server-level decision.
+    Rules are directional exceptions: a matching user rule overrides user
+    filters, and a matching library rule overrides library-name and type
+    filters. Server-level sync_to remains a broad default for other identities
+    that pass normal filters. Rules add permissions independently: a user rule
+    enables normally allowed libraries for that user, and a library rule
+    enables normally allowed users for that library. Matching both rules can
+    override both scopes' filters. Mappings and supported media types still
+    determine which actual accounts and libraries can sync.
 
 Identity model:
     A user/library "identity" (canonical) carries a list of aliases —
@@ -38,7 +40,7 @@ Identity model:
     syncs to 'test123' on Jellyfin without any explicit config), provided
     that the target name is not explicitly owned by another mapping. Declare
     user_mappings when usernames differ across servers, when one identity fans
-    out to multiple users on a server, or when you need user_sync_rules.
+    out to multiple users on a server, or to name a canonical identity in rules.
 
 Backward compatibility:
     Legacy .env values are parsed on every load and override the YAML.
@@ -376,9 +378,9 @@ class LibraryMapping(BaseModel):
 
 class UserSyncRule(BaseModel):
     """
-    Override the default sync behavior for a specific subset of users
-    on a specific (from -> to) server pair. For bidirectional sync write
-    two rules.
+    Allow specific users on a (from -> to) server pair, overriding user
+    blacklist/whitelist filters. Library policy is evaluated independently.
+    For bidirectional sync write two rules.
 
     Use users=["*"] to apply to all users. Names listed here may either be
     user_mappings.canonical values, or literal usernames that exist on
@@ -411,6 +413,11 @@ class UserSyncRule(BaseModel):
 
 
 class LibrarySyncRule(BaseModel):
+    """Allow libraries in one direction despite name/type filters.
+
+    User policy and actual library mappings still apply independently.
+    """
+
     libraries: list[str] = Field(..., min_length=1)
     from_: str = Field(..., alias="from")
     to: str = Field(...)
@@ -840,13 +847,19 @@ class AppSettings(BaseModel):
         return library_rules
 
     @cached_property
+    def _user_rule_directions(self) -> set[tuple[str, str]]:
+        return {(from_, to) for _, from_, to in self._user_rule_index}
+
+    @cached_property
+    def _library_rule_directions(self) -> set[tuple[str, str]]:
+        return {(from_, to) for _, from_, to in self._library_rule_index}
+
+    @cached_property
     def _rule_directions(self) -> set[tuple[str, str]]:
         # Project rule indexes onto (from, to) so should_sync_server can
         # tell in O(1) whether any user or library rule enables a given
         # direction independently of server-level sync_to.
-        return {
-            (from_, to) for (_, from_, to) in self._user_rule_index
-        } | {(from_, to) for (_, from_, to) in self._library_rule_index}
+        return self._user_rule_directions | self._library_rule_directions
 
     @cached_property
     def _whitelist_users_lc(self) -> set[str]:
@@ -1223,9 +1236,9 @@ class AppSettings(BaseModel):
         This is a coarse "is anything happening here" check, intended for
         the sync engine to skip whole server pairs cheaply. It does NOT
         guarantee any specific user or library will actually sync —
-        callers still need should_sync_user / should_sync_library for
-        per-item decisions, since the global blacklist/whitelist and
-        per-item rule coverage are checked there.
+        discovery uses should_sync_user / should_sync_library, and concrete
+        updates require should_sync_scope to check matching rules and filters
+        together for the source user/library pair.
 
         Returns False if either server name is unknown or if the two
         names are equal.
@@ -1238,6 +1251,28 @@ class AppSettings(BaseModel):
             return True
         return (from_server, to_server) in self._rule_directions
 
+    def _matches_user_rule(
+        self, username: str, from_server: str, to_server: str
+    ) -> bool:
+        username_lc = normalize_name(username)
+        canonical = self._user_index.get((from_server, username_lc))
+        return any(
+            (name, from_server, to_server) in self._user_rule_index
+            for name in (username_lc, canonical, "*")
+            if name is not None
+        )
+
+    def _matches_library_rule(
+        self, library: str, from_server: str, to_server: str
+    ) -> bool:
+        library_lc = normalize_name(library)
+        canonical = self._library_index.get((from_server, library_lc))
+        return any(
+            (name, from_server, to_server) in self._library_rule_index
+            for name in (library_lc, canonical, "*")
+            if name is not None
+        )
+
     def should_sync_user(
         self,
         username: str,
@@ -1245,78 +1280,104 @@ class AppSettings(BaseModel):
         to_server: str,
     ) -> bool:
         """
-        Decide whether `username` (as known on `from_server`) should have
-        their watch state pushed to `to_server`.
+        Decide whether a user can participate in this direction's discovery.
 
-        Logic:
-          1. If the user is filtered out by the blacklist/whitelist, return False.
-          2. If a user_sync_rules entry covers this (user, from, to) — checking
-             both the canonical name (if mapped) and the literal username —
-             return True. Rules are additive: they can enable a direction
-             the server-level config doesn't have, but cannot suppress one
-             it does.
-          3. Otherwise, fall back to the server-level decision: does
-             `from_server.sync_to` include `to_server`?
+        A matching user rule overrides user filters for this direction. Without
+        a match, normal user filters apply, and either server-level sync_to or
+        a library rule must enable the direction. Use should_sync_scope before
+        planning or writing: a concrete library must justify a library-rule
+        permission when this user has no matching user rule or server default.
 
         The user does NOT need to be declared in user_mappings. A user
         named 'test123' on both servers will sync if from_server pushes
         to to_server, with no further configuration.
         """
-        if not self.is_user_allowed(username, from_server):
+        if not self.should_sync_server(from_server, to_server):
             return False
 
-        username_lc = normalize_name(username)
-        canonical = self._user_index.get((from_server, username_lc))
-
-        # Per-user rule check. Match against the canonical name if one
-        # exists, and also against the literal username for the implicit
-        # same-username case (where a rule names a user that isn't in
-        # user_mappings).
-        if canonical is not None and (
-            (canonical, from_server, to_server) in self._user_rule_index
-        ):
-            return True
-        if (username_lc, from_server, to_server) in self._user_rule_index:
-            return True
-        if ("*", from_server, to_server) in self._user_rule_index:
+        if self._matches_user_rule(username, from_server, to_server):
             return True
 
-        # Server-level fallback.
-        fallback = to_server in self._server_sync_to_index.get(from_server, set())
-        return fallback
+        if not self.is_user_allowed(username, from_server):
+            return False
+        return (
+            to_server in self._server_sync_to_index.get(from_server, set())
+            or (from_server, to_server) in self._library_rule_directions
+        )
 
     def should_sync_library(
         self,
         library: str,
         from_server: str,
         to_server: str,
+        *,
+        library_type: str | list[str] | None = None,
+        target_library_type: str | list[str] | None = None,
     ) -> bool:
         """
-        Decide whether items from `library` on `from_server` should be
-        pushed to `to_server`. Same logic shape as should_sync_user:
-        blacklist/whitelist first, then per-library rules (canonical or
-        literal), then server-level sync_to.
+        Decide whether a library can participate in directional discovery.
+        A matching library rule overrides name and type
+        filters for the mapped pair. Otherwise normal filters apply to the
+        source name and both endpoint types, and server-level sync_to or a
+        user rule must enable the direction. Use should_sync_scope to authorize
+        a concrete user/library pair before planning or writing.
         """
-        library_lc = normalize_name(library)
+        if not self.should_sync_server(from_server, to_server):
+            return False
+
+        if self._matches_library_rule(library, from_server, to_server):
+            return True
+
         if not self._is_allowed_by_name_filter(
-            {library_lc},
+            {normalize_name(library)},
             self._whitelist_libraries_lc,
             self._blacklist_libraries_lc,
         ):
             return False
-
-        canonical = self._library_index.get((from_server, library_lc))
-
-        if canonical is not None and (
-            (canonical, from_server, to_server) in self._library_rule_index
+        if any(
+            kind is not None and not self.is_library_type_allowed(kind)
+            for kind in (library_type, target_library_type)
         ):
-            return True
-        if (library_lc, from_server, to_server) in self._library_rule_index:
-            return True
-        if ("*", from_server, to_server) in self._library_rule_index:
-            return True
+            return False
+        return (
+            to_server in self._server_sync_to_index.get(from_server, set())
+            or (from_server, to_server) in self._user_rule_directions
+        )
 
-        return to_server in self._server_sync_to_index.get(from_server, set())
+    def should_sync_scope(
+        self,
+        username: str,
+        library: str,
+        from_server: str,
+        to_server: str,
+        *,
+        library_type: str | list[str] | None = None,
+        target_library_type: str | list[str] | None = None,
+    ) -> bool:
+        """Authorize one source user/library pair for a destination server.
+
+        A server default or a matching rule in either scope enables the pair.
+        Each scope must then pass its normal filters or have its own matching
+        exception. Adding rules never narrows another rule's permission, but
+        unrelated rules cannot enable a pair that neither actually matches.
+        Identity mapping and destination existence are checked by callers.
+        """
+        enabled = (
+            to_server in self._server_sync_to_index.get(from_server, set())
+            or self._matches_user_rule(username, from_server, to_server)
+            or self._matches_library_rule(library, from_server, to_server)
+        )
+        return (
+            enabled
+            and self.should_sync_user(username, from_server, to_server)
+            and self.should_sync_library(
+                library,
+                from_server,
+                to_server,
+                library_type=library_type,
+                target_library_type=target_library_type,
+            )
+        )
 
     def sync_targets_for_user(
         self,

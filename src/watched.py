@@ -54,6 +54,8 @@ class Series(BaseModel):
 
 class LibraryData(BaseModel):
     title: str
+    # Discovery metadata used for directional type filters and rule exceptions.
+    library_type: str | None = None
     movies: list[MediaItem] = Field(default_factory=list)
     series: list[Series] = Field(default_factory=list)
 
@@ -175,8 +177,12 @@ def expand_watched_updates(
         )
         for target_user in target_users:
             for source_library, library_data in user_data.libraries.items():
-                if not settings.should_sync_library(
-                    source_library, source_server_name, target_server_name
+                if not settings.should_sync_scope(
+                    source_user,
+                    source_library,
+                    source_server_name,
+                    target_server_name,
+                    library_type=library_data.library_type,
                 ):
                     continue
                 target_libraries = settings.sync_targets_for_library(
@@ -676,6 +682,7 @@ def filter_library_watched(
 
     return LibraryData(
         title=source_library.title,
+        library_type=source_library.library_type,
         movies=filtered_movies,
         series=filtered_series_list,
     )
@@ -714,6 +721,16 @@ def cleanup_watched(
 
         # Global fetches omit unknown/failed scopes; never treat these as empty.
         if require_destination_scope and target_library is None:
+            continue
+
+        if not settings.should_sync_scope(
+            update.source_user,
+            update.source_library,
+            server_1_name,
+            server_2_name,
+            library_type=update.library_data.library_type,
+            target_library_type=target_library.library_type if target_library else None,
+        ):
             continue
 
         filtered = filter_library_watched(

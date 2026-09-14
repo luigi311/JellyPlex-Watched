@@ -51,6 +51,16 @@ def test_sample_configuration_validates_without_server_connections() -> None:
         "jellyfin-main",
         "emby-main",
     ]
+    # The sample's Alice and Movies rules add permissions independently.
+    assert settings.should_sync_scope(
+        "alice", "TV Shows", "plex-readonly", "jellyfin-main"
+    )
+    assert settings.should_sync_scope(
+        "family_shared", "Movies", "plex-readonly", "jellyfin-main"
+    )
+    assert not settings.should_sync_scope(
+        "family_shared", "TV Shows", "plex-readonly", "jellyfin-main"
+    )
 
 
 def test_readme_legacy_configuration_snippet_is_supported() -> None:

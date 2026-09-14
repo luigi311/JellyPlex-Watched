@@ -34,11 +34,8 @@ def combine_library_lists(
     library names.
 
     Filtering is fully delegated to the settings model:
-      - settings.is_library_type_allowed handles the library-type
-        blacklist/whitelist (movie/show), which is non-directional.
-      - settings.should_sync_library handles the library-name
-        blacklist/whitelist, library_sync_rules, and the server-level
-        sync_to fallback for a given direction.
+      - settings.should_sync_library handles name and endpoint type filters,
+        explicit library exceptions, and default eligibility for each direction.
       - settings.sync_targets_for_library resolves the target library name(s)
         on the other server (explicit library_mappings aliases plus the
         implicit same-name fallback).
@@ -47,33 +44,10 @@ def combine_library_lists(
     relationships declared on either side, and targets discovered from each
     direction are merged rather than overwritten.
     """
-    def filter_library_types(
-        libraries: dict[str, str],
-    ) -> dict[str, str]:
-        filtered: dict[str, str] = {}
-        for library, library_type in libraries.items():
-            if settings.is_library_type_allowed(library_type):
-                filtered[library] = library_type
-            else:
-                logger.info(
-                    f"Skipping library {library}: type '{library_type}' is filtered out"
-                )
-        return filtered
-
-    # Type filters apply to each server's inventory before matching. A
-    # disallowed target must not become reachable through the opposite
-    # direction merely because the source reports a permitted type.
-    filtered_server_1_libraries = filter_library_types(server_1_libraries)
-    filtered_server_2_libraries = filter_library_types(server_2_libraries)
-
     # Accumulate into sets to dedupe targets discovered from both directions.
     accumulator: dict[str, set[str]] = {}
-    server_1_by_name = {
-        normalize_name(name): name for name in filtered_server_1_libraries
-    }
-    server_2_by_name = {
-        normalize_name(name): name for name in filtered_server_2_libraries
-    }
+    server_1_by_name = {normalize_name(name): name for name in server_1_libraries}
+    server_2_by_name = {normalize_name(name): name for name in server_2_libraries}
     legacy_conflicts = settings.legacy_library_conflicts(
         server_1_name, server_1_libraries
     ) | settings.legacy_library_conflicts(server_2_name, server_2_libraries)
@@ -90,31 +64,39 @@ def combine_library_lists(
         accumulator.setdefault(s1_library, set()).add(s2_library)
 
     # server_1 -> server_2
-    for s1_library in filtered_server_1_libraries:
+    for s1_library, s1_type in server_1_libraries.items():
         canonical = settings.lookup_library(server_1_name, s1_library)
         if canonical is not None and canonical in legacy_conflicts:
-            continue
-        if not settings.should_sync_library(s1_library, server_1_name, server_2_name):
             continue
         for target in settings.sync_targets_for_library(
             server_1_name, s1_library, server_2_name
         ):
             target_name = server_2_by_name.get(normalize_name(target))
-            if target_name is not None:
+            if target_name is not None and settings.should_sync_library(
+                s1_library,
+                server_1_name,
+                server_2_name,
+                library_type=s1_type,
+                target_library_type=server_2_libraries[target_name],
+            ):
                 add(s1_library, target_name)
 
     # server_2 -> server_1 (fills in relationships declared the other way)
-    for s2_library in filtered_server_2_libraries:
+    for s2_library, s2_type in server_2_libraries.items():
         canonical = settings.lookup_library(server_2_name, s2_library)
         if canonical is not None and canonical in legacy_conflicts:
-            continue
-        if not settings.should_sync_library(s2_library, server_2_name, server_1_name):
             continue
         for target in settings.sync_targets_for_library(
             server_2_name, s2_library, server_1_name
         ):
             target_name = server_1_by_name.get(normalize_name(target))
-            if target_name is not None:
+            if target_name is not None and settings.should_sync_library(
+                s2_library,
+                server_2_name,
+                server_1_name,
+                library_type=s2_type,
+                target_library_type=server_1_libraries[target_name],
+            ):
                 # key is always the server_1-side library name
                 add(target_name, s2_library)
 

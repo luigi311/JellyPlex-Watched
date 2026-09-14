@@ -834,8 +834,12 @@ class Plex:
 
         for update in pending_updates:
             source_user = update.source_user
-            if not self.app_settings.should_sync_user(
-                source_user, source_server_name, self.server_settings.name
+            if not self.app_settings.should_sync_scope(
+                source_user,
+                update.source_library,
+                source_server_name,
+                self.server_settings.name,
+                library_type=update.library_data.library_type,
             ):
                 logger.debug(f"Plex: {source_user} (from {source_server_name}) skipped")
                 continue
@@ -884,14 +888,6 @@ class Plex:
 
                 library_list = plex_server.library.sections()
                 available_titles = [section.title for section in library_list]
-
-                if not self.app_settings.should_sync_library(
-                    update.source_library, source_server_name, self.server_settings.name
-                ):
-                    logger.debug(
-                        f"Plex: {update.source_library} (from {source_server_name}) skipped"
-                    )
-                    continue
 
                 resolved_libraries = [
                     library_name

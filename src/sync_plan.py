@@ -261,8 +261,12 @@ def generate_watched_plan(
                 edges[source_scope] = []
                 for target, target_user in destinations:
                     target_name = target.server_settings.name
-                    if not settings.should_sync_library(
-                        library_name, source_name, target_name
+                    if not settings.should_sync_scope(
+                        username,
+                        library_name,
+                        source_name,
+                        target_name,
+                        library_type=data.library_type,
                     ):
                         continue
                     for target_library in find_target_library_keys(
@@ -272,6 +276,17 @@ def generate_watched_plan(
                         target_name,
                         servers_watched[target][target_user].libraries,
                     ):
+                        if not settings.should_sync_scope(
+                            username,
+                            library_name,
+                            source_name,
+                            target_name,
+                            library_type=data.library_type,
+                            target_library_type=servers_watched[target][target_user]
+                            .libraries[target_library]
+                            .library_type,
+                        ):
+                            continue
                         edges[source_scope].append(
                             WatchedScope(target_name, target_user, target_library)
                         )
