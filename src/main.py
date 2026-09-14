@@ -1,6 +1,5 @@
 import os
 import traceback
-from copy import deepcopy
 from time import perf_counter, sleep
 
 from loguru import logger
@@ -10,7 +9,7 @@ from src.functions import configure_logger
 from src.settings import AppSettings, load_settings
 from src.users import generate_all_server_users
 from src.sync_inventory import fetch_watched_inventory, generate_sync_inventory
-from src.watched import cleanup_watched, merge_destination_watched
+from src.sync_plan import generate_watched_plan
 
 
 def main_loop(settings: AppSettings, average_time: float) -> None:
@@ -45,77 +44,15 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
     servers_watched = fetch_watched_inventory(server_user_libraries)
     logger.debug("Fetched watched data for {} servers", len(servers_watched))
 
-    working_watched = dict(servers_watched)
-    fetched_servers = list(servers_watched)
-    for index, server_1 in enumerate(fetched_servers[:-1]):
-        # Preserve the fetched snapshot while incorporating confirmed writes.
-        server_1_watched = deepcopy(working_watched[server_1])
+    watched_plan = generate_watched_plan(servers_watched, settings, average_time)
+    logger.debug("Planned watched updates for {} servers", len(watched_plan))
 
-        for server_2 in fetched_servers[index + 1 :]:
-            server_2_watched = working_watched[server_2]
-
-            # cleanup_watched applies directional user and library policy,
-            # including rules that enable sync beyond server-level sync_to.
-            logger.info("Cleaning Server 1 Watched")
-            server_1_watched_filtered = cleanup_watched(
-                server_1_watched,
-                server_2_watched,
-                server_1.server_settings.name,
-                server_2.server_settings.name,
-                settings,
-                average_time,
-                require_destination_scope=True,
-            )
-
-            logger.info("Cleaning Server 2 Watched")
-            server_2_watched_filtered = cleanup_watched(
-                server_2_watched,
-                server_1_watched,
-                server_2.server_settings.name,
-                server_1.server_settings.name,
-                settings,
-                average_time,
-                require_destination_scope=True,
-            )
-
-            logger.debug(
-                f"server 1 watched that needs to be synced to server 2:\n{server_1_watched_filtered}",
-            )
-            logger.debug(
-                f"server 2 watched that needs to be synced to server 1:\n{server_2_watched_filtered}",
-            )
-
-            if server_2_watched_filtered:
-                logger.info(f"Syncing {server_2.info()} -> {server_1.info()}")
-
-                write_outcomes = server_1.update_watched(
-                    server_2_watched_filtered, server_2.server_settings.name
-                )
-
-                # Keep the cached target history current for the next server
-                # pair using only confirmed, destination-native write results.
-                if not settings.dryrun and write_outcomes:
-                    server_1_watched = merge_destination_watched(
-                        server_1_watched,
-                        write_outcomes,
-                        settings,
-                        average_time,
-                    )
-                    working_watched[server_1] = server_1_watched
-
-            if server_1_watched_filtered:
-                logger.info(f"Syncing {server_1.info()} -> {server_2.info()}")
-                write_outcomes = server_2.update_watched(
-                    server_1_watched_filtered,
-                    server_1.server_settings.name,
-                )
-                if not settings.dryrun and write_outcomes:
-                    working_watched[server_2] = merge_destination_watched(
-                        server_2_watched,
-                        write_outcomes,
-                        settings,
-                        average_time,
-                    )
+    for destination, source_batches in watched_plan.items():
+        logger.info("Applying watched plan to {}", destination.info())
+        for source_name, updates in source_batches.items():
+            # For relayed winners this is the final authorized hop; each
+            # update's relay_path retains the original source and full route.
+            destination.update_watched(updates, source_name)
 
 
 def main() -> None:

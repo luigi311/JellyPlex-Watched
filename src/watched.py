@@ -57,15 +57,28 @@ class UserData(BaseModel):
     libraries: dict[str, LibraryData] = Field(default_factory=dict)
 
 
+@dataclass(frozen=True, order=True)
+class WatchedScope:
+    """One server-native user/library scope along an authorized sync path."""
+
+    server_name: str
+    username: str
+    library_name: str
+
+
 @dataclass(frozen=True)
 class WatchedUpdate:
-    """One pending library update for one concrete destination pair."""
+    """One pending library update from a source scope to a concrete destination."""
 
     source_user: str
     target_user: str
     source_library: str
     target_library: str
     library_data: LibraryData
+    # Indirect plans retain the original source and every hop, including the
+    # destination. source_user/source_library describe the final incoming hop
+    # so adapters can resolve its aliases without inventing a direct mapping.
+    relay_path: tuple[WatchedScope, ...] = ()
 
 
 WriteOutcomeStatus = Literal[
@@ -591,6 +604,78 @@ def check_remove_entry(
     )
 
 
+def filter_library_watched(
+    source_library: LibraryData,
+    target_library: LibraryData | None,
+    settings: AppSettings,
+    average_time: float,
+) -> LibraryData:
+    """Copy source items whose state is better than the matching destination."""
+    target_movies = target_library.movies if target_library else []
+    target_series_list = target_library.series if target_library else []
+
+    filtered_movies = []
+    for movie in source_library.movies:
+        if any(
+            check_remove_entry(movie, target_movie, settings, average_time)
+            for target_movie in target_movies
+        ):
+            logger.trace(
+                f"Removing movie '{movie.identifiers.title}' for "
+                f"library {target_library.title if target_library else source_library.title}"
+            )
+        else:
+            filtered_movies.append(copy.deepcopy(movie))
+
+    filtered_series_list: list[Series] = []
+    for source_series in source_library.series:
+        matching_episodes: list[MediaItem] = []
+        for target_series in target_series_list:
+            if check_same_identifiers(
+                source_series.identifiers, target_series.identifiers
+            ):
+                matching_episodes.extend(target_series.episodes)
+
+        if not matching_episodes:
+            filtered_series_list.append(copy.deepcopy(source_series))
+            continue
+
+        filtered_episodes = []
+        for source_episode in source_series.episodes:
+            if any(
+                check_remove_entry(
+                    source_episode,
+                    target_episode,
+                    settings,
+                    average_time,
+                )
+                for target_episode in matching_episodes
+            ):
+                logger.trace(
+                    f"Removing episode '{source_episode.identifiers.title}' "
+                    f"from show '{source_series.identifiers.title}' for "
+                    f"library {target_library.title if target_library else source_library.title}"
+                )
+            else:
+                filtered_episodes.append(copy.deepcopy(source_episode))
+
+        if filtered_episodes:
+            filtered_series = copy.deepcopy(source_series)
+            filtered_series.episodes = filtered_episodes
+            filtered_series_list.append(filtered_series)
+        else:
+            logger.trace(
+                f"Removing entire show '{source_series.identifiers.title}' "
+                f"in library {target_library.title if target_library else source_library.title}"
+            )
+
+    return LibraryData(
+        title=source_library.title,
+        movies=filtered_movies,
+        series=filtered_series_list,
+    )
+
+
 def cleanup_watched(
     watched_list_1: dict[str, UserData],
     watched_list_2: dict[str, UserData],
@@ -626,77 +711,17 @@ def cleanup_watched(
         if require_destination_scope and target_library is None:
             continue
 
-        source_library = update.library_data
-        target_movies = target_library.movies if target_library else []
-        target_series_list = target_library.series if target_library else []
-
-        filtered_movies = []
-        for movie in source_library.movies:
-            if any(
-                check_remove_entry(movie, target_movie, settings, average_time)
-                for target_movie in target_movies
-            ):
-                logger.trace(
-                    f"Removing movie '{movie.identifiers.title}' for "
-                    f"{update.target_user} in {update.target_library}"
-                )
-            else:
-                filtered_movies.append(copy.deepcopy(movie))
-
-        filtered_series_list: list[Series] = []
-        for source_series in source_library.series:
-            matching_episodes: list[MediaItem] = []
-            for target_series in target_series_list:
-                if check_same_identifiers(
-                    source_series.identifiers, target_series.identifiers
-                ):
-                    matching_episodes.extend(target_series.episodes)
-
-            if not matching_episodes:
-                filtered_series_list.append(copy.deepcopy(source_series))
-                continue
-
-            filtered_episodes = []
-            for source_episode in source_series.episodes:
-                if any(
-                    check_remove_entry(
-                        source_episode,
-                        target_episode,
-                        settings,
-                        average_time,
-                    )
-                    for target_episode in matching_episodes
-                ):
-                    logger.trace(
-                        f"Removing episode '{source_episode.identifiers.title}' "
-                        f"from show '{source_series.identifiers.title}' for "
-                        f"{update.target_user} in {update.target_library}"
-                    )
-                else:
-                    filtered_episodes.append(copy.deepcopy(source_episode))
-
-            if filtered_episodes:
-                filtered_series = copy.deepcopy(source_series)
-                filtered_series.episodes = filtered_episodes
-                filtered_series_list.append(filtered_series)
-            else:
-                logger.trace(
-                    f"Removing entire show '{source_series.identifiers.title}' "
-                    f"for {update.target_user} in {update.target_library}"
-                )
-
-        if filtered_movies or filtered_series_list:
+        filtered = filter_library_watched(
+            update.library_data, target_library, settings, average_time
+        )
+        if filtered.movies or filtered.series:
             pending_updates.append(
                 WatchedUpdate(
                     source_user=update.source_user,
                     target_user=update.target_user,
                     source_library=update.source_library,
                     target_library=update.target_library,
-                    library_data=LibraryData(
-                        title=source_library.title,
-                        movies=filtered_movies,
-                        series=filtered_series_list,
-                    ),
+                    library_data=filtered,
                 )
             )
 
