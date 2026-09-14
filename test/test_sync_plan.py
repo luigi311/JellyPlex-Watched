@@ -667,3 +667,208 @@ def test_shortest_relay_route_is_deterministic_across_diamond():
     assert [
         scope.server_name for scope in updates_for(plan, servers["d"])[0].relay_path
     ] == ["a", "b", "d"]
+
+
+def apply_jellyfin_plan(monkeypatch, target, plan, item, show=None):
+    """Exercise real adapter matching and writes against a fake destination."""
+    monkeypatch.setattr("src.jellyfin_emby.log_marked", lambda *args, **kwargs: None)
+    target.server_name = target.server_settings.name
+    target.users = {"alice": "user-id"}
+    target.update_partial = True
+    writes = []
+
+    def query(path, method, **kwargs):
+        if method == "post":
+            writes.append((path, kwargs["json"]))
+            return {}
+        if path.endswith("/Views"):
+            return {"Items": [{"Name": "Movies", "Id": "library-id"}]}
+        if "IncludeItemTypes=Series" in path:
+            assert show is not None
+            return {"Items": [show]}
+        return {"Items": [item]}
+
+    target.query = Mock(side_effect=query)
+    outcomes = []
+    for source, updates in plan.get(target, {}).items():
+        outcomes.extend(Jellyfin.update_watched(target, updates, source))
+    return writes, outcomes
+
+
+@pytest.mark.parametrize("kind", ["movie", "episode"])
+@pytest.mark.parametrize("order", list(permutations("abc")))
+def test_identifier_bridges_produce_one_completed_write(monkeypatch, kind, order):
+    settings = make_settings(
+        {"a": ["d"], "b": ["d"], "c": ["d"], "d": []}, dryrun=False
+    )
+    servers = make_servers(settings)
+    # The bridge can arrive before, between, or after the two separate IDs.
+    identifiers = [
+        MediaIdentifiers(imdb_id="shared"),
+        MediaIdentifiers(imdb_id="shared", tmdb_id="123"),
+        MediaIdentifiers(tmdb_id="123"),
+    ]
+    watched = {servers["d"]: history()}
+    for name, index in zip(order, range(3)):
+        item = movie(time=index * 30_000, completed=index == 0)
+        item.identifiers = identifiers[index]
+        if kind == "movie":
+            watched[servers[name]] = history(item)
+        else:
+            watched[servers[name]] = history(
+                series=[Series(identifiers=identifiers[index], episodes=[item])]
+            )
+    before = deepcopy(list(watched.values()))
+    plan = generate_watched_plan(watched, settings, 0)
+    target = servers["d"]
+    assert set(plan[target]) == {order[0]}
+    item = {
+        "Id": "item-id",
+        "Name": "shared",
+        "ProviderIds": {"Imdb": "shared", "Tmdb": "123"},
+    }
+    show = {"Id": "show-id", "Name": "show", "ProviderIds": item["ProviderIds"]}
+    writes, outcomes = apply_jellyfin_plan(monkeypatch, target, plan, item, show)
+    assert len(writes) == 1
+    assert writes[0][1]["Played"] is True
+    assert [(outcome.status, outcome.target_item_id) for outcome in outcomes] == [
+        ("applied", "item-id")
+    ]
+    assert list(watched.values()) == before
+
+
+@pytest.mark.parametrize("kind", ["movie", "episode"])
+@pytest.mark.parametrize("match_by", ["filename", "provider"])
+def test_tied_source_keeps_alternate_identifiers_for_adapter(
+    monkeypatch, kind, match_by
+):
+    settings = make_settings({"a": ["c"], "b": ["c"], "c": []}, dryrun=False)
+    servers = make_servers(settings)
+    watched = {servers["c"]: history()}
+    for name in "ab":
+        item = movie(locations=(f"{name}.mkv",))
+        show_ids = MediaIdentifiers(tvdb_id="show", locations=(f"show-{name}",))
+        if match_by == "provider":
+            # Different IDs from the same provider, linked by a common path.
+            item.identifiers = MediaIdentifiers(imdb_id=name, locations=("shared.mkv",))
+            show_ids = MediaIdentifiers(tvdb_id=name, locations=("show",))
+        if kind == "movie":
+            watched[servers[name]] = history(item)
+        else:
+            watched[servers[name]] = history(
+                series=[
+                    Series(
+                        identifiers=show_ids,
+                        episodes=[item],
+                    )
+                ]
+            )
+    plan = generate_watched_plan(watched, settings, 0)
+    assert set(plan[servers["c"]]) == {"a"}
+    item_data = {"Path": "/media/b.mkv"}
+    show_data = {"Path": "/media/show-b"}
+    if match_by == "provider":
+        item_data = {"ProviderIds": {"Imdb": "b"}}
+        show_data = {"ProviderIds": {"Tvdb": "b"}}
+    writes, outcomes = apply_jellyfin_plan(
+        monkeypatch,
+        servers["c"],
+        plan,
+        {"Id": "item-id", "Name": "shared", **item_data},
+        {"Id": "show-id", "Name": "show", **show_data},
+    )
+    assert len(writes) == 1
+    assert writes[0][1]["Played"] is True
+    assert outcomes[0].status == "applied"
+
+
+@pytest.mark.parametrize("kind", ["movie", "episode"])
+def test_baseline_suppressed_bridge_still_links_other_candidates(kind):
+    settings = make_settings({"a": ["d"], "b": ["d"], "c": ["d"], "d": []})
+    servers = make_servers(settings)
+    watched = {}
+    for name, identifiers, time in [
+        ("a", MediaIdentifiers(imdb_id="shared"), 40_000),
+        ("b", MediaIdentifiers(imdb_id="shared", tmdb_id="123"), 30_000),
+        ("c", MediaIdentifiers(tmdb_id="123"), 35_000),
+        ("d", MediaIdentifiers(tmdb_id="123"), 20_000),
+    ]:
+        item = movie(time=time, completed=False)
+        item.identifiers = identifiers
+        watched[servers[name]] = (
+            history(item)
+            if kind == "movie"
+            else history(series=[Series(identifiers=identifiers, episodes=[item])])
+        )
+    # b ties with the baseline and cannot win, but remains identity evidence.
+    plan = generate_watched_plan(watched, settings, 0)
+    assert set(plan[servers["d"]]) == {"a"}
+    update = updates_for(plan, servers["d"])[0]
+    item = (
+        update.library_data.movies[0]
+        if kind == "movie"
+        else update.library_data.series[0].episodes[0]
+    )
+    assert item.status.time == 40_000
+
+
+def test_destination_history_can_link_source_identifiers():
+    settings = make_settings({"a": ["c"], "b": ["c"], "c": []})
+    servers = make_servers(settings)
+    first = movie()
+    second = movie(time=60_000, completed=False)
+    second.identifiers = MediaIdentifiers(tmdb_id="123")
+    baseline = movie(tmdb_id="123", time=30_000, completed=False)
+    plan = generate_watched_plan(
+        {
+            servers["a"]: history(first),
+            servers["b"]: history(second),
+            servers["c"]: history(baseline),
+        },
+        settings,
+        0,
+    )
+    assert set(plan[servers["c"]]) == {"a"}
+    assert len(movies_for(plan, servers["c"])) == 1
+
+
+def test_unreachable_source_cannot_contribute_matching_identifiers():
+    settings = make_settings({"a": ["d"], "b": [], "c": ["d"], "d": []})
+    servers = make_servers(settings)
+    first = movie()
+    excluded_bridge = movie(tmdb_id="123")
+    second = movie(time=60_000, completed=False)
+    second.identifiers = MediaIdentifiers(tmdb_id="123")
+    plan = generate_watched_plan(
+        {
+            servers["a"]: history(first),
+            servers["b"]: history(excluded_bridge),
+            servers["c"]: history(second),
+            servers["d"]: history(),
+        },
+        settings,
+        0,
+    )
+    assert set(plan[servers["d"]]) == {"a", "c"}
+    assert movies_for(plan, servers["d"]) == [first, second]
+
+
+def test_indirect_baseline_match_prevents_stale_write():
+    settings = make_settings({"a": ["c"], "b": ["c"], "c": []})
+    servers = make_servers(settings)
+    stale = movie(time=30_000, completed=False)
+    bridge = movie(tmdb_id="123")
+    baseline = movie()
+    baseline.identifiers = MediaIdentifiers(tmdb_id="123")
+    assert (
+        generate_watched_plan(
+            {
+                servers["a"]: history(stale),
+                servers["b"]: history(bridge),
+                servers["c"]: history(baseline),
+            },
+            settings,
+            0,
+        )
+        == {}
+    )

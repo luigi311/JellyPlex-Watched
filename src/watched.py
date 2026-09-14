@@ -30,6 +30,11 @@ class MediaIdentifiers(BaseModel):
     tvdb_id: str | None = None
     tmdb_id: str | None = None
 
+    # A planned winner keeps its native identifiers above. These additional
+    # (namespace, value) pairs retain matches learned from permitted histories,
+    # including multiple IDs from the same provider or alternate filenames.
+    matching_aliases: frozenset[tuple[str, str]] = frozenset()
+
 
 class WatchedStatus(BaseModel):
     completed: bool
@@ -567,21 +572,21 @@ def merge_server_watched(
     return merged_watched
 
 
-def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> bool:
-    # Check for duplicate based on file locations:
-    if item1.locations and item2.locations:
-        if set(item1.locations) & set(item2.locations):
-            return True
-
-    # Check for duplicate based on GUIDs:
-    if (
-        (item1.imdb_id and item2.imdb_id and item1.imdb_id == item2.imdb_id)
-        or (item1.tvdb_id and item2.tvdb_id and item1.tvdb_id == item2.tvdb_id)
-        or (item1.tmdb_id and item2.tmdb_id and item1.tmdb_id == item2.tmdb_id)
+def media_identifier_keys(item: MediaIdentifiers) -> frozenset[tuple[str, str]]:
+    """Return namespaced matching keys; titles are never identity evidence."""
+    keys = {("location", location) for location in item.locations}
+    for provider, value in (
+        ("imdb", item.imdb_id),
+        ("tvdb", item.tvdb_id),
+        ("tmdb", item.tmdb_id),
     ):
-        return True
+        if value:
+            keys.add((provider, value))
+    return frozenset(keys) | item.matching_aliases
 
-    return False
+
+def check_same_identifiers(item1: MediaIdentifiers, item2: MediaIdentifiers) -> bool:
+    return not media_identifier_keys(item1).isdisjoint(media_identifier_keys(item2))
 
 
 def check_remove_entry(

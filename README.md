@@ -192,9 +192,11 @@ Each pass compares the fetched histories from all servers before applying any
 updates. For each destination user and library, it selects the best permitted
 movie or episode state using the existing completion, playback-position, and
 viewing-date rules. Competing sources produce one winning update per matching
-item; ties use a stable server/user/library name order. Missing or failed fetch
-scopes are excluded, while a successfully fetched empty history can receive
-updates.
+item; ties use a stable server/user/library name order. Matching retains alternate
+provider IDs and filenames from permitted histories, even when their watch state
+does not win, so a destination can match any known identifier for the item.
+Missing or failed fetch scopes are excluded, while a successfully fetched empty
+history can receive updates.
 
 Comparisons use the same snapshot in dry-run and normal operation and follow
 permitted paths across servers. With a chain such as A → B → C, A's history is

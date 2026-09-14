@@ -1,7 +1,8 @@
 """Compare a fetched snapshot and plan updates across all servers."""
 
 from collections import deque
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 from src.functions import normalize_name
 from src.settings import AppSettings
@@ -17,9 +18,9 @@ from src.watched import (
     WatchedUpdate,
     check_same_identifiers,
     compare_media_items,
-    filter_library_watched,
     find_target_library_keys,
     find_target_user_keys,
+    media_identifier_keys,
 )
 
 
@@ -36,32 +37,96 @@ class _SourceLibrary:
 
 @dataclass(frozen=True)
 class _Candidate:
-    source: _SourceLibrary
+    # None identifies an item from the fetched destination baseline.
+    source: _SourceLibrary | None
     item: MediaItem
     series: MediaIdentifiers | None = None
 
 
-@dataclass
-class _SeriesCandidates:
-    identifiers: MediaIdentifiers
-    episodes: list[_Candidate] = field(default_factory=list)
+def _group_by_identity[T](
+    entries: list[T], identifiers: Callable[[T], MediaIdentifiers]
+) -> list[list[T]]:
+    """Group connected identities, retaining entry order for state tie breaks."""
+    parents = list(range(len(entries)))
+    seen: dict[tuple[str, str], int] = {}
+
+    def root(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    for index, entry in enumerate(entries):
+        for key in media_identifier_keys(identifiers(entry)):
+            previous = seen.setdefault(key, index)
+            parents[root(previous)] = root(index)
+
+    groups: dict[int, list[T]] = {}
+    for index, entry in enumerate(entries):
+        groups.setdefault(root(index), []).append(entry)
+    return list(groups.values())
 
 
-def _select_candidate(
-    winners: list[_Candidate],
-    candidate: _Candidate,
+def _with_matching_aliases(
+    winner: MediaIdentifiers, identities: list[MediaIdentifiers]
+) -> MediaIdentifiers:
+    keys = frozenset().union(*(media_identifier_keys(item) for item in identities))
+    return winner.model_copy(
+        deep=True,
+        update={
+            "matching_aliases": winner.matching_aliases
+            | (keys - media_identifier_keys(winner))
+        },
+    )
+
+
+def _select_candidates(
+    candidates: list[_Candidate],
     settings: AppSettings,
     average_time: float,
-) -> None:
-    for index, winner in enumerate(winners):
-        if check_same_identifiers(winner.item.identifiers, candidate.item.identifiers):
+) -> list[_Candidate]:
+    winners = []
+    for group in _group_by_identity(
+        candidates, lambda candidate: candidate.item.identifiers
+    ):
+        baseline = [candidate.item for candidate in group if candidate.source is None]
+        winner = None
+        for candidate in group:
+            if candidate.source is None:
+                continue
+            # Keep baseline filtering before state reduction: timestamp and
+            # timeline tolerances do not form a transitive ordering. Suppressed
+            # candidates still contribute identity evidence to the group.
+            if any(
+                compare_media_items(candidate.item, item, settings, average_time)
+                != Ord.A_BETTER
+                for item in baseline
+            ):
+                continue
             if (
-                compare_media_items(winner.item, candidate.item, settings, average_time)
+                winner is None
+                or compare_media_items(
+                    winner.item, candidate.item, settings, average_time
+                )
                 == Ord.B_BETTER
             ):
-                winners[index] = candidate
-            return
-    winners.append(candidate)
+                winner = candidate
+        if winner is not None:
+            winners.append(
+                replace(
+                    winner,
+                    item=winner.item.model_copy(
+                        deep=True,
+                        update={
+                            "identifiers": _with_matching_aliases(
+                                winner.item.identifiers,
+                                [entry.item.identifiers for entry in group],
+                            )
+                        },
+                    ),
+                )
+            )
+    return winners
 
 
 def _compare_destination(
@@ -73,41 +138,40 @@ def _compare_destination(
     average_time: float,
 ) -> dict[str, list[WatchedUpdate]]:
     movies: list[_Candidate] = []
-    series: list[_SeriesCandidates] = []
-    for source in sources:
-        # Compare every candidate against the fetched destination first. The
-        # timestamp/timeline tolerances are not a transitive ordering, so a
-        # candidate suppressed by the baseline must not displace a valid one.
-        pending = filter_library_watched(source.data, baseline, settings, average_time)
-        for movie in pending.movies:
-            _select_candidate(movies, _Candidate(source, movie), settings, average_time)
-        for show in pending.series:
-            matching = next(
-                (
-                    existing
-                    for existing in series
-                    if check_same_identifiers(existing.identifiers, show.identifiers)
-                ),
-                None,
-            )
-            if matching is None:
-                matching = _SeriesCandidates(show.identifiers)
-                series.append(matching)
-            for episode in show.episodes:
-                _select_candidate(
-                    matching.episodes,
-                    _Candidate(source, episode, show.identifiers),
-                    settings,
-                    average_time,
+    series: list[tuple[_SourceLibrary | None, Series]] = []
+    histories: list[tuple[_SourceLibrary | None, LibraryData]] = [
+        (source, source.data) for source in sources
+    ]
+    histories.append((None, baseline))
+    for source, data in histories:
+        movies.extend(_Candidate(source, movie) for movie in data.movies)
+        series.extend((source, show) for show in data.series)
+
+    winners = _select_candidates(movies, settings, average_time)
+    for shows in _group_by_identity(series, lambda entry: entry[1].identifiers):
+        episodes = [
+            _Candidate(source, episode, show.identifiers)
+            for source, show in shows
+            for episode in show.episodes
+        ]
+        for winner in _select_candidates(episodes, settings, average_time):
+            assert winner.series is not None
+            winners.append(
+                replace(
+                    winner,
+                    series=_with_matching_aliases(
+                        winner.series, [show.identifiers for _, show in shows]
+                    ),
                 )
+            )
 
     # Existing adapters route using the final edge. Preserve the complete path
     # separately rather than claiming the original server has a direct mapping
     # to this destination or that an intermediate write has already succeeded.
     libraries: dict[tuple[WatchedScope, tuple[WatchedScope, ...]], LibraryData] = {}
-    winners = movies + [episode for show in series for episode in show.episodes]
     for winner in winners:
         source = winner.source
+        assert source is not None
         incoming_scope = source.path[-2]
         relay_path = source.path if len(source.path) > 2 else ()
         key = (incoming_scope, relay_path)
