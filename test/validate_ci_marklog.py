@@ -77,6 +77,8 @@ def check_marklog(lines, expected_values):
 
     return True
 
+def unique_list(orig: list[str]) -> list[str]:
+    return list(dict.fromkeys(orig))
 
 def main():
     args = parse_args()
@@ -137,12 +139,13 @@ def main():
         "Emby/Emby-Server/jellyplex_watched/Custom Movies/Movie One",
     ]
 
-    expected_locations = expected_emby + expected_plex + expected_jellyfin
+    # Unique list
+    expected_locations = unique_list(expected_emby + expected_plex + expected_jellyfin)
     # Remove Custom Movies/TV Shows as they should not have guids
-    expected_guids = [item for item in expected_locations if "Custom" not in item]
+    expected_guids = unique_list([item for item in expected_locations if "Custom" not in item])
 
     # Write is expected to be a unique list of values, there should not be any duplicate writes
-    expected_write = list(set(expected_emby + expected_plex + expected_jellyfin))
+    expected_write = unique_list(expected_emby + expected_plex + expected_jellyfin)
 
     # Determine which expected values to use based on the command-line flag
     if args.guids:
