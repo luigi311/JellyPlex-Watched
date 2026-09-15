@@ -43,9 +43,21 @@ def main_loop(settings: AppSettings, average_time: float) -> None:
 
     servers_watched = fetch_watched_inventory(server_user_libraries)
     logger.debug("Fetched watched data for {} servers", len(servers_watched))
+    logger.bind(
+        data={
+            server.server_settings.name: watched
+            for server, watched in servers_watched.items()
+        }
+    ).trace("Fetched watched history")
 
     watched_plan = generate_watched_plan(servers_watched, settings, average_time)
     logger.debug("Planned watched updates for {} servers", len(watched_plan))
+    logger.bind(
+        data={
+            server.server_settings.name: batches
+            for server, batches in watched_plan.items()
+        }
+    ).trace("Planned watched updates")
 
     for destination, source_batches in watched_plan.items():
         logger.info("Applying watched plan to {}", destination.info())

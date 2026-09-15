@@ -15,6 +15,8 @@ from pydantic import BaseModel
 
 
 def _json_default(o):
+    if isinstance(o, BaseModel):
+        return o.model_dump(mode="json")
     # dataclasses
     if is_dataclass(o):
         return asdict(o)

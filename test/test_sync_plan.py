@@ -1,12 +1,15 @@
+import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from itertools import permutations
 from unittest.mock import Mock
 
 import pytest
+from loguru import logger
 
 from conftest import settings_override
 from src import main
+from src.functions import formatter
 from src.jellyfin import Jellyfin
 from src.settings import AppSettings
 from src.sync_inventory import fetch_watched_inventory, generate_sync_inventory
@@ -435,6 +438,67 @@ def test_main_plans_chain_without_waiting_for_intermediate_receipts(
     )
     fetch.assert_called_once()
     assert watched == before
+
+
+def test_main_trace_serializes_watched_history_and_relay_plan(monkeypatch):
+    settings = make_settings(
+        {"a": ["b"], "b": ["c"], "c": []}, debug_level="TRACE"
+    )
+    servers = make_servers(settings)
+    item = movie(time=30_000, completed=False)
+    watched = {
+        servers["a"]: history(item),
+        servers["b"]: history(),
+        servers["c"]: history(),
+    }
+    monkeypatch.setattr(
+        main, "generate_server_connections", Mock(return_value=list(servers.values()))
+    )
+    monkeypatch.setattr(main, "generate_all_server_users", Mock(return_value={}))
+    monkeypatch.setattr(main, "generate_sync_inventory", Mock(return_value={}))
+    monkeypatch.setattr(main, "fetch_watched_inventory", Mock(return_value=watched))
+    for server in servers.values():
+        server.update_watched = Mock(return_value=[])
+
+    messages = []
+    sink = logger.add(
+        messages.append,
+        level="TRACE",
+        format=formatter,
+        filter=lambda record: record["name"] == "src.main",
+        catch=False,
+    )
+    try:
+        main.main_loop(settings, 0)
+    finally:
+        logger.remove(sink)
+
+    traces = {
+        message.record["message"]: json.loads(
+            message.record["extra"]["formatted_data"]
+        )
+        for message in messages
+        if message.record["level"].name == "TRACE"
+    }
+    fetched = traces["Fetched watched history"]
+    assert set(fetched) == {"a", "b", "c"}
+    assert fetched["a"]["alice"]["libraries"]["Movies"]["movies"] == [
+        item.model_dump(mode="json")
+    ]
+    plan = traces["Planned watched updates"]
+    assert set(plan) == {"b", "c"}
+    update = plan["c"]["b"][0]
+    assert update["source_user"] == update["target_user"] == "alice"
+    assert update["source_library"] == update["target_library"] == "Movies"
+    assert update["library_data"]["movies"][0]["status"] == item.status.model_dump(
+        mode="json"
+    )
+    assert update["relay_path"] == [
+        {"server_name": name, "username": "alice", "library_name": "Movies"}
+        for name in "abc"
+    ]
+    servers["b"].update_watched.assert_called_once()
+    servers["c"].update_watched.assert_called_once()
 
 
 def test_two_server_plan_matches_existing_cleanup():
