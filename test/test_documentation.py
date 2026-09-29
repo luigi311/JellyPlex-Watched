@@ -50,6 +50,7 @@ def test_sample_configuration_validates_without_server_connections() -> None:
         "plex-readonly",
         "jellyfin-main",
         "emby-main",
+        "trimmedia-main",
     ]
     # The sample's Alice and Movies rules add permissions independently.
     assert settings.should_sync_scope(

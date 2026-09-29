@@ -116,6 +116,10 @@ _SERVER_TOKENS_ENV_NAME = "SERVER_TOKENS"
 _SERVER_TOKEN_OVERRIDES_KEY = "_server_token_overrides"
 _LEGACY_PLEX_TOKEN_OVERRIDE_KEY = "_legacy_plex_token_override"
 
+# Client API key shipped with the 飞牛影视 web client, used to sign native API
+# requests. Exposed as configuration because it is visible to administrators.
+TRIMMEDIA_DEFAULT_API_KEY = "16CCEB3D-AB42-077D-36A1-F355324E4237"
+
 
 def _find_prefixed_env_value(
     env_vars: Mapping[str, str | None],
@@ -186,7 +190,7 @@ def _patch_server_credentials(
 
     server_lists = {
         field_name: _server_entries_for_override(data, field_name)
-        for field_name in ("plex", "jellyfin", "emby")
+        for field_name in ("plex", "jellyfin", "emby", "trimmedia")
     }
     matches: dict[str, tuple[str, dict[str, Any]]] = {}
     for field_name, entries in server_lists.items():
@@ -204,6 +208,11 @@ def _patch_server_credentials(
 
     for name, token in overrides.items():
         field_name, entry = matches[name]
+        if field_name == "trimmedia":
+            # 飞牛影视 has no server-wide token; the replacement credential is
+            # the account password.
+            entry["password"] = token
+            continue
         entry["token"] = token
         if field_name == "plex":
             for auth_field in ("username", "password", "servername"):
@@ -305,6 +314,39 @@ class JellyfinSettings(_ServerBase):
 
 class EmbySettings(_ServerBase):
     token: SecretStr = Field(...)
+
+
+class TrimMediaSettings(_ServerBase):
+    """飞牛影视 (fnOS TrimMedia) authentication.
+
+    The native API authenticates per account with a username/password pair;
+    there is no server-wide API key. An administrator account is required to
+    enumerate users and to read other users' watch state. Writes always apply
+    to the authenticated account, so ``user_credentials`` may list extra
+    accounts that should also receive updates.
+    """
+
+    username: str = Field(..., description="飞牛影视 account used for sync.")
+    password: SecretStr = Field(..., description="Password of that account.")
+    api_key: str = Field(
+        default=TRIMMEDIA_DEFAULT_API_KEY,
+        description=(
+            "Client API key used for request signing. Defaults to the value "
+            "shipped with the 飞牛影视 web client."
+        ),
+    )
+    access_code: SecretStr | None = Field(
+        default=None,
+        description="NAS access code, when the device has one enabled.",
+    )
+    user_credentials: dict[str, SecretStr] = Field(
+        default_factory=dict,
+        description=(
+            "Additional 飞牛影视 accounts to write to, keyed by username. "
+            "Writes always apply to the authenticated account, so each extra "
+            "destination user needs its own credentials."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -729,6 +771,7 @@ class AppSettings(BaseModel):
     plex: list[PlexSettings] = []
     jellyfin: list[JellyfinSettings] = []
     emby: list[EmbySettings] = []
+    trimmedia: list[TrimMediaSettings] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -764,7 +807,7 @@ class AppSettings(BaseModel):
 
     @cached_property
     def _all_servers(self) -> list[_ServerBase]:
-        return [*self.plex, *self.jellyfin, *self.emby]
+        return [*self.plex, *self.jellyfin, *self.emby, *self.trimmedia]
 
     @cached_property
     def _server_names(self) -> set[str]:
@@ -893,7 +936,7 @@ class AppSettings(BaseModel):
     # ------------------------------------------------------------------ #
 
     def _collect_servers(self) -> list[_ServerBase]:
-        return [*self.plex, *self.jellyfin, *self.emby]
+        return [*self.plex, *self.jellyfin, *self.emby, *self.trimmedia]
 
     def _collect_server_names(self) -> set[str]:
         return {s.name for s in self._collect_servers()}
@@ -904,7 +947,7 @@ class AppSettings(BaseModel):
         dupes = {n for n, c in Counter(names).items() if c > 1}
         if dupes:
             raise ValueError(
-                f"Duplicate server names across plex/jellyfin/emby: {sorted(dupes)}. "
+                f"Duplicate server names across plex/jellyfin/emby/trimmedia: {sorted(dupes)}. "
                 "Each server entry needs a unique 'name'."
             )
 
@@ -1122,7 +1165,7 @@ class AppSettings(BaseModel):
     @property
     def all_servers(self) -> tuple[_ServerBase, ...]:
         """
-        Every configured server (plex + jellyfin + emby), in declaration
+        Every configured server (plex + jellyfin + emby + trimmedia), in declaration
         order. Returned as a tuple so callers can't mutate the underlying
         index.
         """

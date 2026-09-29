@@ -52,6 +52,12 @@ LEGACY_ENV_VARS = {
     # emby servers
     "EMBY_BASEURL",
     "EMBY_TOKEN",
+    # trimmedia (飞牛影视) servers
+    "TRIMMEDIA_BASEURL",
+    "TRIMMEDIA_USERNAME",
+    "TRIMMEDIA_PASSWORD",
+    "TRIMMEDIA_API_KEY",
+    "TRIMMEDIA_ACCESS_CODE",
     # mappings
     "USER_MAPPING",
     "LIBRARY_MAPPING",
@@ -65,6 +71,13 @@ LEGACY_ENV_VARS = {
     "SYNC_FROM_EMBY_TO_PLEX",
     "SYNC_FROM_EMBY_TO_JELLYFIN",
     "SYNC_FROM_EMBY_TO_EMBY",
+    "SYNC_FROM_TRIMMEDIA_TO_PLEX",
+    "SYNC_FROM_TRIMMEDIA_TO_JELLYFIN",
+    "SYNC_FROM_TRIMMEDIA_TO_EMBY",
+    "SYNC_FROM_TRIMMEDIA_TO_TRIMMEDIA",
+    "SYNC_FROM_PLEX_TO_TRIMMEDIA",
+    "SYNC_FROM_JELLYFIN_TO_TRIMMEDIA",
+    "SYNC_FROM_EMBY_TO_TRIMMEDIA",
 }
 
 # Keep alias order aligned with the preference used by the translator below.
@@ -75,6 +88,33 @@ _LEGACY_ALIAS_GROUPS: tuple[tuple[str, ...], ...] = (
     ("MARK_FILE", "MARKFILE"),
     ("DEBUG_LEVEL", "DEBUG"),
 )
+
+
+_LEGACY_ENV_NAMES_CASEFOLD = {name.casefold() for name in LEGACY_ENV_VARS}
+
+
+def _warn_unrecognized_sync_flags(*sources: Mapping[str, str | None]) -> None:
+    """Warn about sync direction variables the translator cannot read.
+
+    Unknown names are otherwise ignored silently, which looks exactly like a
+    configured direction that never fires.
+    """
+    unknown = sorted(
+        {
+            key
+            for source in sources
+            for key in source
+            if key.casefold().startswith("sync_from_")
+            and key.casefold() not in _LEGACY_ENV_NAMES_CASEFOLD
+        }
+    )
+    if unknown:
+        logger.warning(
+            "Ignoring unrecognized sync direction variable(s): {}. "
+            "Recognized flags use the PLEX/JELLYFIN/EMBY/TRIMMEDIA tokens, "
+            "for example SYNC_FROM_EMBY_TO_TRIMMEDIA.",
+            ", ".join(unknown),
+        )
 
 
 def resolve_legacy_env(
@@ -91,6 +131,7 @@ def resolve_legacy_env(
     precedence decision; they never fall back to the lower-priority file value.
     """
     process_values = os.environ if process_env is None else process_env
+    _warn_unrecognized_sync_flags(process_values, file_env)
     resolved: dict[str, str | None] = {}
 
     grouped_keys: set[str] = set()
@@ -305,11 +346,54 @@ def _build_token_servers(
     return servers
 
 
+def _build_trimmedia_servers(env: dict[str, str | None]) -> list[dict[str, Any]]:
+    """Build 飞牛影视 server entries (username/password auth)."""
+    baseurls = _env_as_indexed_list(env.get("TRIMMEDIA_BASEURL"))
+    server_count = sum(bool(baseurl) for baseurl in baseurls)
+    if not server_count:
+        return []
+    usernames = _env_as_indexed_list(env.get("TRIMMEDIA_USERNAME"))
+    passwords = _env_as_indexed_list(env.get("TRIMMEDIA_PASSWORD"))
+    api_keys = _env_as_indexed_list(env.get("TRIMMEDIA_API_KEY"))
+    access_codes = _env_as_indexed_list(env.get("TRIMMEDIA_ACCESS_CODE"))
+
+    servers: list[dict[str, Any]] = []
+    for i, baseurl in enumerate(baseurls):
+        if not baseurl:
+            continue
+        username = usernames[i] if i < len(usernames) else None
+        password = passwords[i] if i < len(passwords) else None
+        if not username or not password:
+            logger.warning(
+                "TRIMMEDIA_BASEURL has an entry without both "
+                "TRIMMEDIA_USERNAME and TRIMMEDIA_PASSWORD at position {}. "
+                "Server #{} skipped.",
+                i + 1,
+                i + 1,
+            )
+            continue
+        entry: dict[str, Any] = {
+            "name": (
+                f"trimmedia-{i + 1}" if server_count > 1 else "trimmedia-main"
+            ),
+            "baseurl": baseurl,
+            "username": username,
+            "password": password,
+        }
+        if i < len(api_keys) and api_keys[i]:
+            entry["api_key"] = api_keys[i]
+        if i < len(access_codes) and access_codes[i]:
+            entry["access_code"] = access_codes[i]
+        servers.append(entry)
+    return servers
+
+
 def _build_sync_to(
     env: dict[str, str | None],
     plex_names: list[str],
     jellyfin_names: list[str],
     emby_names: list[str],
+    trimmedia_names: list[str] | None = None,
 ) -> dict[str, list[str]]:
     """
     Translate legacy SYNC_FROM_X_TO_Y flags into per-server sync_to lists
@@ -319,6 +403,7 @@ def _build_sync_to(
         "plex": plex_names,
         "jellyfin": jellyfin_names,
         "emby": emby_names,
+        "trimmedia": trimmedia_names or [],
     }
 
     def is_set(src: str, dst: str) -> bool:
@@ -326,7 +411,7 @@ def _build_sync_to(
         return bool(_env_as_bool(env.get(flag), flag))
 
     result: dict[str, list[str]] = {}
-    type_order = ["plex", "jellyfin", "emby"]
+    type_order = ["plex", "jellyfin", "emby", "trimmedia"]
 
     for src_type in type_order:
         for dst_type in type_order:
@@ -434,23 +519,29 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
         env, "JELLYFIN_BASEURL", "JELLYFIN_TOKEN", "jellyfin"
     )
     emby_servers = _build_token_servers(env, "EMBY_BASEURL", "EMBY_TOKEN", "emby")
+    trimmedia_servers = _build_trimmedia_servers(env)
 
     plex_names = [s["name"] for s in plex_servers]
     jf_names = [s["name"] for s in jellyfin_servers]
     emby_names = [s["name"] for s in emby_servers]
-    all_names = plex_names + jf_names + emby_names
+    trimmedia_names = [s["name"] for s in trimmedia_servers]
+    all_names = plex_names + jf_names + emby_names + trimmedia_names
 
     sync_flags_present = any(
         env.get(k) for k in LEGACY_ENV_VARS if k.startswith("SYNC_FROM_")
     )
     if sync_flags_present:
-        sync_to_by_server = _build_sync_to(env, plex_names, jf_names, emby_names)
+        sync_to_by_server = _build_sync_to(
+            env, plex_names, jf_names, emby_names, trimmedia_names
+        )
     else:
         sync_to_by_server = {
             src: [dst for dst in all_names if dst != src] for src in all_names
         }
 
-    for server in plex_servers + jellyfin_servers + emby_servers:
+    for server in (
+        plex_servers + jellyfin_servers + emby_servers + trimmedia_servers
+    ):
         targets = sync_to_by_server.get(server["name"])
         if targets:
             server["sync_to"] = targets
@@ -466,6 +557,8 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
         out["jellyfin"] = jellyfin_servers
     if emby_servers:
         out["emby"] = emby_servers
+    if trimmedia_servers:
+        out["trimmedia"] = trimmedia_servers
 
     user_pairs = _parse_dict_mapping(env.get("USER_MAPPING"))
     user_mappings = _build_legacy_mappings(user_pairs, all_names, "username")

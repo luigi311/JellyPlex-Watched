@@ -3,11 +3,20 @@ from loguru import logger
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
-from src.settings import AppSettings, EmbySettings, JellyfinSettings, PlexSettings
+from src.settings import (
+    AppSettings,
+    EmbySettings,
+    JellyfinSettings,
+    PlexSettings,
+    TrimMediaSettings,
+)
+from src.trimmedia import TrimMedia
 
 
-def generate_server_connections(settings: AppSettings) -> list[Plex | Jellyfin | Emby]:
-    servers: list[Plex | Jellyfin | Emby] = []
+def generate_server_connections(
+    settings: AppSettings,
+) -> list[Plex | Jellyfin | Emby | TrimMedia]:
+    servers: list[Plex | Jellyfin | Emby | TrimMedia] = []
 
     for server in settings.all_servers:
         if isinstance(server, PlexSettings):
@@ -37,6 +46,15 @@ def generate_server_connections(settings: AppSettings) -> list[Plex | Jellyfin |
                 f"Emby Server info: {emby_server.server_name}: {emby_server.server_version}"
             )
             servers.append(emby_server)
+        elif isinstance(server, TrimMediaSettings):
+            trimmedia_server = TrimMedia(
+                app_settings=settings,
+                server_settings=server,
+            )
+            logger.debug(
+                f"TrimMedia Server info: {trimmedia_server.server_name}: {trimmedia_server.server_version}"
+            )
+            servers.append(trimmedia_server)
         else:
             msg = f"Invalid server type: {type(server)}"
             raise Exception(msg)

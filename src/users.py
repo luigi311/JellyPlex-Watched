@@ -6,19 +6,25 @@ from src.functions import normalize_name
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.settings import AppSettings
+from src.trimmedia import TrimMedia
 
 
 def generate_all_server_users(
-    servers: list[Plex | Jellyfin | Emby],
+    servers: list[Plex | Jellyfin | Emby | TrimMedia],
     settings: AppSettings,
-) -> dict[Plex | Jellyfin | Emby, list[MyPlexAccount | MyPlexUser | tuple[str, str]]]:
+) -> dict[
+        Plex | Jellyfin | Emby | TrimMedia,
+        list[MyPlexAccount | MyPlexUser | tuple[str, str]],
+    ]:
     """Select existing users participating in at least one permitted sync.
 
     Connections already fetched their users. Keep both sources and destinations
     so incoming-only users also have their watched history available.
     """
     user_names = {server: generate_user_list(server) for server in servers}
-    relevant_names: dict[Plex | Jellyfin | Emby, set[str]] = {
+    relevant_names: dict[
+        Plex | Jellyfin | Emby | TrimMedia, set[str]
+    ] = {
         server: set() for server in servers
     }
     for index, source in enumerate(servers):
@@ -36,7 +42,7 @@ def generate_all_server_users(
             )
 
     server_users: dict[
-        Plex | Jellyfin | Emby,
+        Plex | Jellyfin | Emby | TrimMedia,
         list[MyPlexAccount | MyPlexUser | tuple[str, str]],
     ] = {}
     for server in servers:
@@ -57,7 +63,7 @@ def generate_all_server_users(
     return server_users
 
 
-def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
+def generate_user_list(server: Plex | Jellyfin | Emby | TrimMedia) -> list[str]:
     # generate list of users from a server
     server_users: list[str] = []
     if isinstance(server, Plex):
@@ -66,7 +72,7 @@ def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
                 normalize_name(user.username if user.username else user.title)
             )
 
-    elif isinstance(server, (Jellyfin, Emby)):
+    elif isinstance(server, (Jellyfin, Emby, TrimMedia)):
         server_users = [normalize_name(key) for key in server.users.keys()]
 
     return server_users
@@ -157,7 +163,7 @@ def combine_user_lists(
 
 
 def generate_server_users(
-    server: Plex | Jellyfin | Emby,
+    server: Plex | Jellyfin | Emby | TrimMedia,
     users: dict[str, list[str]],
 ) -> list[MyPlexAccount | MyPlexUser] | dict[str, str] | None:
     # Flatten the fan-out map into the full set of usernames relevant to
@@ -179,7 +185,7 @@ def generate_server_users(
                 plex_server_users.append(plex_user)
 
         return plex_server_users
-    elif isinstance(server, (Jellyfin, Emby)):
+    elif isinstance(server, (Jellyfin, Emby, TrimMedia)):
         jelly_emby_server_users: dict[str, str] = {}
         for jellyfin_user, jellyfin_id in server.users.items():
             if normalize_name(jellyfin_user) in all_names:
@@ -191,8 +197,8 @@ def generate_server_users(
 
 
 def setup_users(
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1: Plex | Jellyfin | Emby | TrimMedia,
+    server_2: Plex | Jellyfin | Emby | TrimMedia,
     settings: AppSettings,
 ) -> tuple[
     list[MyPlexAccount | MyPlexUser] | dict[str, str] | None,

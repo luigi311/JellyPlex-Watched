@@ -12,11 +12,12 @@ from src.jellyfin import Jellyfin
 from src.library import combine_library_lists
 from src.plex import Plex
 from src.settings import AppSettings
+from src.trimmedia import TrimMedia
 from src.users import combine_user_lists
 from src.watched import UserData
 
 
-type Server = Plex | Jellyfin | Emby
+type Server = Plex | Jellyfin | Emby | TrimMedia
 type ServerUser = MyPlexAccount | MyPlexUser | tuple[str, str]
 
 
@@ -48,7 +49,9 @@ def generate_sync_inventory(
             try:
                 if isinstance(server, Plex) and not isinstance(user, tuple):
                     libraries = server.get_user_libraries(user)
-                elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
+                elif isinstance(
+                    server, (Jellyfin, Emby, TrimMedia)
+                ) and isinstance(user, tuple):
                     libraries = server.get_user_libraries(cast(tuple[str, str], user))
                 else:
                     raise TypeError("User representation does not match server")
@@ -198,7 +201,9 @@ def fetch_watched_inventory(
             try:
                 if isinstance(server, Plex) and not isinstance(user, tuple):
                     user_watched = server.get_watched([user], list(entry.libraries))
-                elif isinstance(server, (Jellyfin, Emby)) and isinstance(user, tuple):
+                elif isinstance(
+                    server, (Jellyfin, Emby, TrimMedia)
+                ) and isinstance(user, tuple):
                     username, user_id = cast(tuple[str, str], user)
                     user_watched = server.get_watched(
                         {username: user_id},

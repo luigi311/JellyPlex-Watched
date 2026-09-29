@@ -45,6 +45,28 @@ Keep in sync all your users watched history between jellyfin, plex and emby serv
 - \[x] Sync view dates
 
 
+### 飞牛影视 (fnOS TrimMedia)
+
+Uses the native 飞牛影视 HTTP API (`<baseurl>/v/api/v1`). The API has no
+server-wide key, so each server entry authenticates one account:
+
+- \[x] Match via filenames
+- \[x] Match via provider ids (TMDB/IMDb for movies and series)
+- \[x] Map usernames
+- \[ ] Use single login — writes always apply to the authenticated account,
+      so any additional user that should receive updates needs its own
+      credentials in `user_credentials`
+- \[x] One way/multi way sync
+- \[x] Sync watched
+- \[x] Sync in progress
+- \[ ] Sync view dates — 飞牛影视 exposes no last-played timestamp
+
+An administrator account is required to enumerate users and to read the
+history of every user; a non-administrator credential can only see and update
+its own account. Episodes carry no episode-level provider ids, so episode
+matching uses file names (keep `generate_locations` enabled).
+
+
 ## Configuration
 
 Use [`sample.config.yaml`](sample.config.yaml) as the primary configuration
@@ -76,6 +98,22 @@ SYNC_FROM_PLEX_TO_JELLYFIN=true
 
 The YAML template is the recommended starting point for new installations;
 legacy dotenv values remain supported for existing deployments and migration.
+
+飞牛影视 servers have a legacy spelling of their own (indexed lists, like the
+other server families):
+
+```dotenv
+# Legacy compatibility example (飞牛影视)
+TRIMMEDIA_BASEURL=http://fnos.example.com:5666
+TRIMMEDIA_USERNAME=fnos-admin
+TRIMMEDIA_PASSWORD=replace-with-the-account-password
+JELLYFIN_BASEURL=http://jellyfin.example.com:8096
+JELLYFIN_TOKEN=replace-with-a-jellyfin-token
+SYNC_FROM_TRIMMEDIA_TO_JELLYFIN=true
+```
+
+Unrecognized `SYNC_FROM_*` variable names are ignored with a warning instead of
+failing silently.
 
 ### Source-backed environment overrides
 
@@ -161,6 +199,10 @@ credential in the error.
 
 The highest-priority `JPW_SERVER_TOKENS` map replaces lower-priority maps as a
 whole before its entries are applied to the effective server list.
+
+A 飞牛影视 (`trimmedia`) entry has no token field, so its `JPW_SERVER_TOKENS`
+value replaces the account `password` instead. The `username` and any
+`user_credentials` keep their configured values.
 
 A legacy `PLEX_TOKEN` without `PLEX_BASEURL` is a token-only override only when
 exactly one Plex server is already configured by a higher-priority source. A

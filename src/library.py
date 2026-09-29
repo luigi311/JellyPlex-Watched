@@ -7,9 +7,10 @@ from src.functions import normalize_name
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.settings import AppSettings
+from src.trimmedia import TrimMedia
 
 
-def generate_library_list(server: Plex | Jellyfin | Emby) -> dict[str, str]:
+def generate_library_list(server: Plex | Jellyfin | Emby | TrimMedia) -> dict[str, str]:
     """
     Return the server's libraries as {library_name: library_type}.
     """
@@ -105,7 +106,7 @@ def combine_library_lists(
 
 
 def generate_server_libraries(
-    server: Plex | Jellyfin | Emby,
+    server: Plex | Jellyfin | Emby | TrimMedia,
     library_names: Iterable[str],
 ) -> list[str]:
     """
@@ -122,8 +123,8 @@ def generate_server_libraries(
 
 
 def setup_libraries(
-    server_1: Plex | Jellyfin | Emby,
-    server_2: Plex | Jellyfin | Emby,
+    server_1: Plex | Jellyfin | Emby | TrimMedia,
+    server_2: Plex | Jellyfin | Emby | TrimMedia,
     settings: AppSettings,
 ) -> tuple[list[str], list[str]]:
     server_1_libraries = generate_library_list(server_1)

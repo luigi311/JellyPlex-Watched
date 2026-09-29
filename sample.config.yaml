@@ -81,6 +81,21 @@ emby:
     sync_to: [plex-main] # completes bidirectional sync with plex-main
     token: "EMBY_API_KEY_HERE"
 
+trimmedia:
+  # 飞牛影视 (fnOS TrimMedia). The native HTTP API has no server-wide key:
+  # one account logs in per server entry. Prefer an administrator account,
+  # which is required to enumerate users and to read every user's history.
+  - name: trimmedia-main
+    baseurl: https://trimmedia.example.com # e.g. http://fnos.lan:5666
+    sync_to: [] # read-only source until a rule or sync_to enables a direction
+    username: fnos-admin
+    password: "FNOS_PASSWORD_HERE"
+    # api_key: 16CCEB3D-AB42-077D-36A1-F355324E4237   # client signing key
+    # access_code: "123456"                           # NAS access code, if enabled
+    # user_credentials:                               # accounts that may receive writes
+    #   alice: "alice-fnos-password"                  # writes always apply to the
+    #                                                 # authenticated account
+
 # --- user mappings ----------------------------------------------------------
 # Only needed when usernames DIFFER across servers, when one identity fans
 # out to multiple users on a server, or to use a canonical name in rules.
