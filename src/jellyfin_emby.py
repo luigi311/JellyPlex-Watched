@@ -323,7 +323,7 @@ class JellyfinEmby:
                 movie_items = []
                 watched_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
+                    + f"?ParentId={library_id}&Filters=IsPlayed&IncludeItemTypes=Movie&CollapseBoxSetItems=false&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -335,7 +335,7 @@ class JellyfinEmby:
 
                 in_progress_items = self.query(
                     f"/Users/{user_id}/Items"
-                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
+                    + f"?ParentId={library_id}&Filters=IsResumable&IncludeItemTypes=Movie&CollapseBoxSetItems=false&Recursive=True&Fields=ItemCounts,ProviderIds,Path,UserDataLastPlayedDate",
                     "get",
                 )
 
@@ -643,7 +643,7 @@ class JellyfinEmby:
                 jellyfin_search = self.query(
                     f"/Users/{user_id}/Items"
                     + f"?SortBy=SortName&SortOrder=Ascending&Recursive=True&ParentId={library_id}"
-                    + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Movie",
+                    + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Movie&CollapseBoxSetItems=false",
                     "get",
                 )
             except Exception as error:
