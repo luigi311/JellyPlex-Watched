@@ -323,7 +323,9 @@ def _build_sync_to(
 
     def is_set(src: str, dst: str) -> bool:
         flag = f"SYNC_FROM_{src.upper()}_TO_{dst.upper()}"
-        return bool(_env_as_bool(env.get(flag), flag))
+        # Legacy directions defaulted to enabled independently. Setting one
+        # flag must not disable every other, omitted direction.
+        return _env_as_bool(env.get(flag), flag) is not False
 
     result: dict[str, list[str]] = {}
     type_order = ["plex", "jellyfin", "emby"]
@@ -440,15 +442,7 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
     emby_names = [s["name"] for s in emby_servers]
     all_names = plex_names + jf_names + emby_names
 
-    sync_flags_present = any(
-        env.get(k) for k in LEGACY_ENV_VARS if k.startswith("SYNC_FROM_")
-    )
-    if sync_flags_present:
-        sync_to_by_server = _build_sync_to(env, plex_names, jf_names, emby_names)
-    else:
-        sync_to_by_server = {
-            src: [dst for dst in all_names if dst != src] for src in all_names
-        }
+    sync_to_by_server = _build_sync_to(env, plex_names, jf_names, emby_names)
 
     for server in plex_servers + jellyfin_servers + emby_servers:
         targets = sync_to_by_server.get(server["name"])

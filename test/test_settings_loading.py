@@ -186,6 +186,14 @@ LEGACY_MULTI_SERVER_ENV = {
     "USER_MAPPING": '{"alice": "alice-jellyfin"}',
     "LIBRARY_MAPPING": '{"TV Shows": "Shows"}',
     "SYNC_FROM_PLEX_TO_JELLYFIN": "true",
+    "SYNC_FROM_PLEX_TO_PLEX": "false",
+    "SYNC_FROM_PLEX_TO_EMBY": "false",
+    "SYNC_FROM_JELLYFIN_TO_PLEX": "false",
+    "SYNC_FROM_JELLYFIN_TO_JELLYFIN": "false",
+    "SYNC_FROM_JELLYFIN_TO_EMBY": "false",
+    "SYNC_FROM_EMBY_TO_PLEX": "false",
+    "SYNC_FROM_EMBY_TO_JELLYFIN": "false",
+    "SYNC_FROM_EMBY_TO_EMBY": "false",
 }
 
 LEGACY_PLEX_ACCOUNT_ENV = {
@@ -585,6 +593,74 @@ def test_legacy_fixture_covers_all_server_types_and_multiple_entries(
     assert settings.plex[0].sync_to == ["jellyfin-1", "jellyfin-2"]
     assert settings.whitelist_users == ["alice"]
     assert settings.whitelist_libraries == ["Movies"]
+
+
+@pytest.mark.parametrize(
+    "flag", sorted(name for name in LEGACY_ENV_VARS if name.startswith("SYNC_FROM_"))
+)
+@pytest.mark.parametrize("raw", ["true", "false", "", None])
+def test_legacy_sync_flags_preserve_other_direction_defaults(
+    flag: str, raw: str | None
+) -> None:
+    env = {
+        key: value
+        for key, value in LEGACY_MULTI_SERVER_ENV.items()
+        if key.endswith(("_BASEURL", "_TOKEN"))
+    }
+    translated = legacy_env_to_field_dict({**env, flag: raw})
+    settings = settings_override(**translated)
+    _, _, from_type, _, to_type = flag.lower().split("_")
+
+    for source in settings.all_servers:
+        for target in settings.all_servers:
+            if source.name == target.name:
+                continue
+            disabled = (
+                raw == "false"
+                and source.name.startswith(f"{from_type}-")
+                and target.name.startswith(f"{to_type}-")
+            )
+            assert settings.should_sync_server(source.name, target.name) is not disabled
+
+
+@pytest.mark.parametrize("process_flag", [False, True])
+@pytest.mark.parametrize("auto_migrate", [False, True])
+def test_legacy_partial_sync_flags_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    process_flag: bool,
+    auto_migrate: bool,
+) -> None:
+    env = {
+        "PLEX_BASEURL": "http://plex",
+        "PLEX_TOKEN": "plex-token",
+        "JELLYFIN_BASEURL": "http://jellyfin",
+        "JELLYFIN_TOKEN": "jellyfin-token",
+    }
+    flag = "SYNC_FROM_PLEX_TO_JELLYFIN"
+    if process_flag:
+        monkeypatch.setenv(flag, "false")
+    else:
+        env[flag] = "false"
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env),
+        yaml_file=yaml_path,
+        auto_migrate=auto_migrate,
+    )
+
+    assert not settings.should_sync_server("plex-main", "jellyfin-main")
+    assert settings.should_sync_server("jellyfin-main", "plex-main")
+    if auto_migrate:
+        monkeypatch.delenv(flag, raising=False)
+        migrated = load_settings(
+            env_file=tmp_path / "absent.env",
+            yaml_file=yaml_path,
+            auto_migrate=False,
+        )
+        assert not migrated.should_sync_server("plex-main", "jellyfin-main")
+        assert migrated.should_sync_server("jellyfin-main", "plex-main")
 
 
 def test_legacy_indexed_credentials_preserve_empty_slots() -> None:

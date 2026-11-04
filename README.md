@@ -141,6 +141,11 @@ file. Legacy loading remains supported. Prefixing new variables and changing
 legacy process/file precedence do not deprecate or remove the legacy runtime
 path.
 
+Legacy `SYNC_FROM_*_TO_*` flags default to enabled independently. Setting one
+flag leaves omitted, empty, and valueless flags enabled; explicitly set each
+direction you want to disable to `false`. YAML `sync_to` lists remain explicit:
+an omitted or empty list enables no outgoing directions for that server.
+
 Legacy `USER_MAPPING` and `LIBRARY_MAPPING` entries are expanded onto every
 configured server because the old format does not identify the owning server.
 Generated migration entries carry `legacy: true`; if both names from one pair

@@ -4,6 +4,9 @@
 # Direction model: "X pushes to Y."
 #   - Each server lists `sync_to: [names]` — the servers it pushes watch
 #     state TO. Bidirectional sync = list the relationship both ways.
+#     An omitted/empty sync_to enables no outgoing server directions.
+#   - Legacy SYNC_FROM_*_TO_* flags each default to enabled; set unwanted
+#     legacy directions to false explicitly when migrating from .env.
 #   - user_sync_rules override user blacklist/whitelist filters for their
 #     from -> to direction. library_sync_rules override library name/type
 #     filters for their direction. Each exception affects only its own scope.
