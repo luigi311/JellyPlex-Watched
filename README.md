@@ -159,6 +159,15 @@ finite, non-negative fractional seconds; invalid durations fail validation.
 Malformed legacy `REQUEST_TIMEOUT` and `MAX_THREADS` values are rejected
 instead of silently using defaults.
 
+Dry-run now defaults to `true` for all installations, including a legacy file
+without `DRYRUN`. Set `DRYRUN=false` or `dryrun: false` to apply watched updates.
+
+`DEBUG` is a supported boolean alias added with the settings migration. If
+your shell uses it for another tool (for example `DEBUG=app:*`), unset it or
+set process `DEBUG_LEVEL=INFO` explicitly. A process `DEBUG` takes precedence
+over a dotenv `DEBUG_LEVEL`, and invalid boolean values fail configuration
+loading rather than being ignored.
+
 Legacy mapping pairs that differ only by case produce one alias per server.
 
 ### Credentials and named overrides
@@ -191,6 +200,8 @@ A legacy `PLEX_TOKEN` without `PLEX_BASEURL` is a token-only override only when
 exactly one Plex server is already configured by a higher-priority source. A
 complete legacy base URL/token configuration retains its indexed server-list
 behavior.
+If no Plex server is configured, remove a stale `PLEX_TOKEN`; it now reports
+a configuration error instead of being ignored.
 
 ### Rules and filters
 

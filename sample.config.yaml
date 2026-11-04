@@ -24,7 +24,7 @@
 # ===========================================================================
 
 # --- operational knobs -----------------------------------------------------
-dryrun: true # true = log what would happen, change nothing
+dryrun: true # default for YAML and legacy env; set false to apply watched updates
 debug_level: INFO # INFO | DEBUG | TRACE
 run_only_once: false # true = run a single pass and exit
 sleep_duration: 3600 # seconds between passes; fractional seconds also accepted
