@@ -34,12 +34,11 @@ else
     PGID=$(id -g)
 fi
 
-# Copy sample config yaml to the config dir for the user to have a template
+# Offer the optional template when the config directory is writable.
 CONF_DIR="/app/config"
-if [ -n "$CONF_DIR" ]; then
-    mkdir -p "$CONF_DIR"
+if mkdir -p "$CONF_DIR" 2>/dev/null; then
+    cp /app/sample.config.yaml "${CONF_DIR}/sample.config.yaml" 2>/dev/null || true
 fi
-cp /app/sample.config.yaml "${CONF_DIR}/sample.config.yaml"
 
 # Resolve YAML and environment settings before dropping privileges. The helper
 # prints only the effective log and mark file paths, so the shell never needs

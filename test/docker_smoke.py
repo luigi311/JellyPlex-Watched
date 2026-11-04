@@ -108,6 +108,59 @@ def _check_startup_paths(image: str) -> None:
             raise RuntimeError(legacy_result.stderr)
 
 
+def _check_non_root_startup(image: str) -> None:
+    container_uid = os.getuid() or 1000
+    container_gid = os.getgid() if os.getuid() else 1000
+    values = {
+        "PLEX_BASEURL": "http://plex.invalid",
+        "PLEX_TOKEN": "synthetic-plex-token",
+        "JELLYFIN_BASEURL": "http://jellyfin.invalid",
+        "JELLYFIN_TOKEN": "synthetic-jellyfin-token",
+        "LOG_FILE": "/tmp/jpw-non-root/log.log",
+        "MARK_FILE": "/tmp/jpw-non-root/mark.log",
+    }
+    startup_check = "\n".join([
+        "import os",
+        "from pathlib import Path",
+        "from src.settings import load_settings",
+        "settings = load_settings()",
+        f"assert os.geteuid() == {container_uid}",
+        "assert len(settings.all_servers) == 2",
+        "assert not Path('/app/config/config.yaml').exists()",
+    ])
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".env") as env:
+        env.write("".join(f"{name}={value}\n" for name, value in values.items()))
+        env.flush()
+        os.chmod(env.name, 0o600)
+        if os.getuid() == 0:
+            os.chown(env.name, container_uid, container_gid)
+        for source in ("environment", "dotenv"):
+            for read_only in (False, True):
+                arguments = [
+                    "run", "--rm", "--user", f"{container_uid}:{container_gid}",
+                    "--tmpfs", "/tmp:rw,mode=1777",
+                    "--env", "YAML_FILE=/app/config/config.yaml",
+                ]
+                if read_only:
+                    arguments.append("--read-only")
+                if source == "environment":
+                    arguments.extend(["--env", "ENV_FILE=/app/missing.env"])
+                    for name, value in values.items():
+                        arguments.extend(["--env", f"{name}={value}"])
+                else:
+                    arguments.extend([
+                        "--env", "ENV_FILE=/app/.env",
+                        "--volume", f"{env.name}:/app/.env:ro",
+                    ])
+                arguments.extend([image, "python", "-c", startup_check])
+                result = _docker(arguments, capture_output=True)
+                if result.returncode:
+                    raise RuntimeError(
+                        f"non-root startup failed ({source}, read_only={read_only}):\n"
+                        + result.stdout + result.stderr
+                    )
+
+
 def _check_invalid_configuration(image: str) -> None:
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -159,6 +212,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     _check_startup_paths(args.image)
+    _check_non_root_startup(args.image)
     _check_invalid_configuration(args.image)
     return 0
 
