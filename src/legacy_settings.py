@@ -15,6 +15,8 @@ from loguru import logger
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
+from src.functions import normalize_name
+
 LegacyEnvPath = Path | str | Sequence[Path | str] | None
 
 LEGACY_ENV_VARS = {
@@ -394,9 +396,12 @@ def _build_legacy_mappings(
 
     out: list[dict[str, Any]] = []
     for left, right in pairs.items():
+        alias_values = [left]
+        if normalize_name(left) != normalize_name(right):
+            alias_values.append(right)
         aliases: list[dict[str, Any]] = []
         for server in server_names:
-            for alias_value in (left, right):
+            for alias_value in alias_values:
                 aliases.append({"server": server, name_field: alias_value})
         out.append({"canonical": left, "aliases": aliases, "legacy": True})
     return out

@@ -769,6 +769,41 @@ def test_legacy_credential_warnings_render_skipped_server() -> None:
     assert all("%s" not in message and "%d" not in message for message in messages)
 
 
+@pytest.mark.parametrize("mapping_key", ["USER_MAPPING", "LIBRARY_MAPPING"])
+@pytest.mark.parametrize("pair", [("Alice", "alice"), ("Straße", "STRASSE")])
+def test_legacy_case_equal_mapping_aliases_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    mapping_key: str,
+    pair: tuple[str, str],
+) -> None:
+    left, right = pair
+    env = {
+        **LEGACY_PLEX_ACCOUNT_ENV,
+        mapping_key: f'{{"{left}":"{right}","Bob":"robert"}}',
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    for loaded in (settings, migrated):
+        mappings = (
+            loaded.user_mappings if mapping_key == "USER_MAPPING"
+            else loaded.library_mappings
+        )
+        assert len(mappings) == 2
+        assert len(mappings[0].aliases) == 2
+        lookup = (
+            loaded.lookup_user if mapping_key == "USER_MAPPING"
+            else loaded.lookup_library
+        )
+        assert lookup("plex-main", right) == left.casefold()
+        assert lookup("jellyfin-main", "robert") == "bob"
+
+
 @pytest.mark.parametrize(
     "mapping_key",
     ["USER_MAPPING", "LIBRARY_MAPPING"],

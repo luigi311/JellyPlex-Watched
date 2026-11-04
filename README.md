@@ -153,6 +153,8 @@ are discovered on a server, that mapping is skipped and a warning identifies
 the configuration to review. Replace the entry with server-scoped YAML aliases
 before syncing those accounts or libraries.
 
+Legacy mapping pairs that differ only by case produce one alias per server.
+
 ### Credentials and named overrides
 
 Plex token authentication requires a `baseurl`. Account authentication uses
