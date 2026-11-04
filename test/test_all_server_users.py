@@ -1,40 +1,43 @@
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
 from conftest import settings_override
+from plexapi.myplex import MyPlexUser
+
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
+from src.settings import EmbySettings
 from src.users import generate_all_server_users
 
 
 @pytest.mark.parametrize('reverse', [False, True])
 def test_selects_both_ends_of_one_way_fanout(reverse):
     settings = settings_override(
-        plex=[dict(name='plex-main', baseurl='http://plex', token='x',
-                   sync_to=['jellyfin-main'] if not reverse else [])],
-        jellyfin=[dict(name='jellyfin-main', baseurl='http://jellyfin', token='x',
-                      sync_to=['plex-main'] if reverse else [])],
-        user_mappings=[dict(canonical='family', aliases=[
-            dict(server='plex-main', username='Family'),
-            dict(server='jellyfin-main', username='Alice'),
-            dict(server='jellyfin-main', username='Bob'),
-            dict(server='jellyfin-main', username='Absent'),
-        ])],
+        plex=[{'name': 'plex-main', 'baseurl': 'http://plex', 'token': 'x',
+                   'sync_to': ['jellyfin-main'] if not reverse else []}],
+        jellyfin=[{'name': 'jellyfin-main', 'baseurl': 'http://jellyfin', 'token': 'x',
+                      'sync_to': ['plex-main'] if reverse else []}],
+        user_mappings=[{'canonical': 'family', 'aliases': [
+            {'server': 'plex-main', 'username': 'Family'},
+            {'server': 'jellyfin-main', 'username': 'Alice'},
+            {'server': 'jellyfin-main', 'username': 'Bob'},
+            {'server': 'jellyfin-main', 'username': 'Absent'},
+        ]}],
         blacklist_users=['blocked'],
     )
     plex = object.__new__(Plex)
     plex.server_settings = settings.plex[0]
-    family = SimpleNamespace(username=None, title='FAMILY')
-    plex.users = [family, SimpleNamespace(username='unmatched'),
-                  SimpleNamespace(username='blocked')]
+    family = Mock(spec=MyPlexUser, username=None, title='FAMILY')
+    plex.users = [family, Mock(spec=MyPlexUser, username='unmatched'),
+                  Mock(spec=MyPlexUser, username='blocked')]
     jellyfin = object.__new__(Jellyfin)
     jellyfin.server_settings = settings.jellyfin[0]
     jellyfin.users = {'ALICE': 'a', 'Bob': 'b', 'blocked': 'c', 'unrelated': 'd'}
     emby = object.__new__(Emby)
-    emby.server_settings = SimpleNamespace(name='disconnected')
+    emby.server_settings = EmbySettings.model_validate(
+        {'name': 'disconnected', 'baseurl': 'http://disconnected', 'token': 'synthetic'}
+    )
     emby.users = {'FAMILY': 'e'}
     for server in [plex, jellyfin, emby]:
         server.get_users = Mock(side_effect=AssertionError('Users already fetched'))

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from math import floor
 
 import requests
@@ -25,11 +25,11 @@ from src.watched import (
     Series,
     UserData,
     WatchedStatus,
-    check_same_identifiers,
-    expand_watched_updates,
     WatchedUpdate,
     WatchedWriteOutcome,
     WriteOutcomeStatus,
+    check_same_identifiers,
+    expand_watched_updates,
     resulting_media_item,
 )
 
@@ -73,20 +73,18 @@ def extract_identifiers_from_item(
     locations = (
         tuple([filename_from_any_path(loc) for loc in item.locations])
         if generate_locations
-        else tuple()
+        else ()
     )
 
-    if generate_guids:
-        if not guids:
-            logger.debug(
-                f"Plex: {item.title} has no guids{f', locations: {" ".join(item.locations)}' if generate_locations else ''}",
-            )
+    if generate_guids and not guids:
+        logger.debug(
+            f"Plex: {item.title} has no guids{f', locations: {" ".join(item.locations)}' if generate_locations else ''}",
+        )
 
-    if generate_locations:
-        if not locations:
-            logger.debug(
-                f"Plex: {item.title} has no locations{f', guids: {guids}' if generate_guids else ''}",
-            )
+    if generate_locations and not locations:
+        logger.debug(
+            f"Plex: {item.title} has no locations{f', guids: {guids}' if generate_guids else ''}",
+        )
 
     return MediaIdentifiers(
         title=item.title,
@@ -104,13 +102,13 @@ def get_mediaitem(
     generate_locations: bool = True,
 ) -> MediaItem:
     last_viewed_at = item.lastViewedAt
-    viewed_date = datetime.today()
+    viewed_date = datetime.now(UTC)
 
     if last_viewed_at:
         # PlexAPI returns naive datetime in local system timezone
         # Get the local timezone and convert to UTC for consistent comparison
         local_tz = datetime.now().astimezone().tzinfo
-        viewed_date = last_viewed_at.replace(tzinfo=local_tz).astimezone(timezone.utc)
+        viewed_date = last_viewed_at.replace(tzinfo=local_tz).astimezone(UTC)
 
     # Plex does not remove completion status if a user has watched it before but then rewatches but does not finish.
     # So if the item is marked as complete but the view status is not less than 60 seconds, we will consider it as not completed.
@@ -189,7 +187,7 @@ class Plex:
                 account = MyPlexAccount(user_name, password)
                 plex = account.resource(server_name).connect()
             else:
-                raise Exception("No complete plex credentials provided")
+                raise ValueError("No complete plex credentials provided")
 
             return plex
         except Exception as e:
@@ -198,7 +196,7 @@ class Plex:
                 logger.error(f"Plex: Failed to login, {msg}, Error: {e}")
             else:
                 logger.error(f"Plex: Failed to login, Error: {e}")
-            raise Exception(e)
+            raise
 
     def info(self) -> str:
         return f"Plex {self.plex.friendlyName}: {self.plex.version}"
@@ -213,7 +211,7 @@ class Plex:
             return users
         except Exception as e:
             logger.error(f"Plex: Failed to get users, Error: {e}")
-            raise Exception(e)
+            raise
 
     def get_libraries(self) -> dict[str, str]:
         try:
@@ -239,7 +237,7 @@ class Plex:
             return output
         except Exception as e:
             logger.error(f"Plex: Failed to get libraries, Error: {e}")
-            raise Exception(e)
+            raise
 
     def get_user_libraries(
         self, user: MyPlexUser | MyPlexAccount,
@@ -325,7 +323,7 @@ class Plex:
                                             ]
                                         )
                                         if self.app_settings.generate_locations
-                                        else tuple()
+                                        else ()
                                     ),
                                     imdb_id=show_guids.get("imdb"),
                                     tvdb_id=show_guids.get("tvdb"),
@@ -337,7 +335,7 @@ class Plex:
 
             return watched
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - A failed library fetch must remain unknown.
             logger.error(
                 f"Plex: Failed to get watched for {user_name} in library {library.title}, Error: {e}",
             )
@@ -357,7 +355,7 @@ class Plex:
             for user in users:
                 if self.admin_user == user:
                     user_plex = self.plex
-                else:
+                elif isinstance(user, MyPlexUser):
                     token = user.get_token(self.plex.machineIdentifier)
                     if token:
                         user_plex = self.login(self.base_url, token, None, None, None)
@@ -366,6 +364,9 @@ class Plex:
                             f"Plex: Failed to get token for {user.title}, skipping",
                         )
                         continue
+                else:
+                    logger.warning("Plex: Skipping non-admin account {}", user.title)
+                    continue
 
                 user_name = normalize_name(user.username if user.username else user.title)
 
@@ -394,7 +395,7 @@ class Plex:
                     users_watched[user_name].libraries[library.title] = library_data
 
             return users_watched
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Keep SDK fetch failures isolated from other users and servers.
             logger.error(f"Plex: Failed to get users watched, Error: {e}")
             return {}
 
@@ -474,7 +475,7 @@ class Plex:
             # Search for Plex movies that are currently marked as unwatched.
             try:
                 plex_movies = library_section.search()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                 logger.error(
                     f"Plex: Failed to find movies for {user.title} in {library_name}, Error: {error}"
                 )
@@ -503,7 +504,7 @@ class Plex:
                             if not dryrun:
                                 try:
                                     plex_movie.markWatched()
-                                except Exception as e:
+                                except Exception as e:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                     logger.error(
                                         f"Plex: Failed to mark {plex_movie.title} as watched, Error: {e}"
                                     )
@@ -541,7 +542,7 @@ class Plex:
                                 try:
                                     plex_movie.markUnwatched()  # Unmark as watched first so completed status is set to false
                                     plex_movie.updateTimeline(stored_movie.status.time)
-                                except Exception as e:
+                                except Exception as e:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                     logger.error(
                                         f"Plex: Failed to update {plex_movie.title} timeline, Error: {e}"
                                     )
@@ -584,7 +585,7 @@ class Plex:
             # For each Plex show in the library section:
             try:
                 plex_shows = library_section.search()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                 logger.error(
                     f"Plex: Failed to find shows for {user.title} in {library_name}, Error: {error}"
                 )
@@ -616,7 +617,7 @@ class Plex:
                         # Get the list of Plex episodes for this show.
                         try:
                             plex_episodes = plex_show.episodes()
-                        except Exception as error:
+                        except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                             logger.error(
                                 f"Plex: Failed to find episodes for {user.title} in {library_name} {plex_show.title}, Error: {error}"
                             )
@@ -653,7 +654,7 @@ class Plex:
                                         if not dryrun:
                                             try:
                                                 plex_episode.markWatched()
-                                            except Exception as e:
+                                            except Exception as e:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                                 logger.error(
                                                     f"Plex: Failed to mark {plex_show.title} {plex_episode.title} as watched, Error: {e}"
                                                 )
@@ -695,7 +696,7 @@ class Plex:
                                                 plex_episode.updateTimeline(
                                                     stored_ep.status.time
                                                 )
-                                            except Exception as e:
+                                            except Exception as e:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                                 logger.error(
                                                     f"Plex: Failed to update {plex_show.title} {plex_episode.title} timeline, Error: {e}"
                                                 )
@@ -926,7 +927,7 @@ class Plex:
                         if outcomes:
                             write_outcomes.extend(outcomes)
 
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - Keep an SDK failure isolated to this destination scope.
                         logger.error(
                             f"Plex: Failed to update watched for {plex_user.title} in {resolved_library}, Error: {e}",
                         )

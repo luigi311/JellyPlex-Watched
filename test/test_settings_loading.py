@@ -8,11 +8,11 @@ from unittest.mock import Mock
 
 import pytest
 import yaml
+from conftest import settings_override
 from loguru import logger
 from pydantic import SecretStr, ValidationError
 from pydantic_settings import SettingsError
 
-from conftest import settings_override
 from src.legacy_settings import (
     LEGACY_ENV_VARS,
     legacy_env_to_field_dict,
@@ -25,13 +25,12 @@ from src.settings import (
     EmbySettings,
     JellyfinSettings,
     PlexSettings,
-    _ServerBase,
-    _SettingsLoader,
     _dump_for_yaml,
     _migrate_env_to_yaml,
+    _ServerBase,
+    _SettingsLoader,
     load_settings,
 )
-
 
 _CONFIGURATION_ENV_NAMES = {
     *AppSettings.model_fields,

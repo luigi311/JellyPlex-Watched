@@ -101,8 +101,8 @@ from pydantic_settings import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     PydanticBaseSettingsSource,
-    SettingsError,
     SettingsConfigDict,
+    SettingsError,
     YamlConfigSettingsSource,
 )
 
@@ -172,7 +172,8 @@ def _server_entries_for_override(data: dict[str, Any], field_name: str) -> list[
     if entries is None:
         return []
     if not isinstance(entries, (list, tuple)):
-        raise ValueError(f"{field_name} must be a list of server objects")
+        # Pydantic wraps ValueError into a redacted ValidationError, not TypeError.
+        raise ValueError(f"{field_name} must be a list of server objects")  # noqa: TRY004
     return [_server_entry_dict(entry) for entry in entries]
 
 
@@ -240,14 +241,14 @@ def _patch_legacy_plex_token(data: dict[str, Any], tokens: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-class _ServerBase(BaseModel):
+class _ServerBase[BaseURL: str | None](BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
     name: str = Field(
         ...,
         description="User-defined identifier, unique across all servers.",
     )
-    baseurl: str | None = Field(
+    baseurl: BaseURL = Field(
         ..., description="Server base URL, e.g. http://plex.lan:32400"
     )
     sync_to: list[str] = Field(
@@ -266,7 +267,7 @@ class _ServerBase(BaseModel):
         return v.rstrip("/") if v is not None else None
 
 
-class PlexSettings(_ServerBase):
+class PlexSettings(_ServerBase[str | None]):
     """
     Plex authentication: either a token (preferred) OR a username/password/
     servername triple. Validators ensure exactly one path is fully populated.
@@ -283,7 +284,7 @@ class PlexSettings(_ServerBase):
     ssl_bypass: bool = False
 
     @model_validator(mode="after")
-    def _require_some_auth(self) -> "PlexSettings":
+    def _require_some_auth(self) -> PlexSettings:
         has_token = self.token is not None
         has_userpass = (
             self.username is not None
@@ -309,14 +310,15 @@ class PlexSettings(_ServerBase):
         return self
 
 
-class JellyfinSettings(_ServerBase):
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+class JellyfinSettings(_ServerBase[str]):
     token: SecretStr = Field(...)
 
 
-class EmbySettings(_ServerBase):
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+class EmbySettings(_ServerBase[str]):
     token: SecretStr = Field(...)
+
+
+type ServerSettings = PlexSettings | JellyfinSettings | EmbySettings
 
 
 # ---------------------------------------------------------------------------
@@ -701,13 +703,8 @@ def _env_source_options(source: EnvSettingsSource) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class AppSettings(BaseModel):
+class AppSettings(BaseModel, extra="forbid", hide_input_in_errors=True):
     """Validated configuration data independent of environment sources."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        hide_input_in_errors=True,
-    )
 
     # --- operational knobs --------------------------------------------------
     dryrun: bool = True
@@ -775,7 +772,7 @@ class AppSettings(BaseModel):
     # ------------------------------------------------------------------ #
 
     @cached_property
-    def _all_servers(self) -> list[_ServerBase]:
+    def _all_servers(self) -> list[ServerSettings]:
         return [*self.plex, *self.jellyfin, *self.emby]
 
     @cached_property
@@ -904,14 +901,14 @@ class AppSettings(BaseModel):
     # remain available only after successful model validation.
     # ------------------------------------------------------------------ #
 
-    def _collect_servers(self) -> list[_ServerBase]:
+    def _collect_servers(self) -> list[ServerSettings]:
         return [*self.plex, *self.jellyfin, *self.emby]
 
     def _collect_server_names(self) -> set[str]:
         return {s.name for s in self._collect_servers()}
 
     @model_validator(mode="after")
-    def _validate_unique_names(self) -> "AppSettings":
+    def _validate_unique_names(self) -> AppSettings:
         names = [s.name for s in self._collect_servers()]
         dupes = {n for n, c in Counter(names).items() if c > 1}
         if dupes:
@@ -937,7 +934,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_server_level_sync_to(self) -> "AppSettings":
+    def _validate_server_level_sync_to(self) -> AppSettings:
         names = self._collect_server_names()
         for server in self._collect_servers():
             seen: set[str] = set()
@@ -958,7 +955,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_user_aliases(self) -> "AppSettings":
+    def _validate_user_aliases(self) -> AppSettings:
         _validate_alias_ownership(
             self.user_mappings,
             self._collect_server_names(),
@@ -969,7 +966,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_library_aliases(self) -> "AppSettings":
+    def _validate_library_aliases(self) -> AppSettings:
         _validate_alias_ownership(
             self.library_mappings,
             self._collect_server_names(),
@@ -980,7 +977,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_user_sync_rules(self) -> "AppSettings":
+    def _validate_user_sync_rules(self) -> AppSettings:
         names = self._collect_server_names()
         canonicals = {normalize_name(u.canonical) for u in self.user_mappings}
         alias_servers = _alias_servers_by_canonical(self.user_mappings)
@@ -1041,7 +1038,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_library_sync_rules(self) -> "AppSettings":
+    def _validate_library_sync_rules(self) -> AppSettings:
         names = self._collect_server_names()
         lib_canonicals = {
             normalize_name(lib.canonical) for lib in self.library_mappings
@@ -1100,7 +1097,7 @@ class AppSettings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_minimum_topology(self) -> "AppSettings":
+    def _validate_minimum_topology(self) -> AppSettings:
         servers = self._collect_servers()
         if len(servers) < 2:
             raise ValueError(
@@ -1132,7 +1129,7 @@ class AppSettings(BaseModel):
         return names.isdisjoint(blacklist)
 
     @property
-    def all_servers(self) -> tuple[_ServerBase, ...]:
+    def all_servers(self) -> tuple[ServerSettings, ...]:
         """
         Every configured server (plex + jellyfin + emby), in declaration
         order. Returned as a tuple so callers can't mutate the underlying
@@ -1703,7 +1700,7 @@ def _migrate_env_to_yaml(env_path: Path, yaml_path: Path) -> bool:
         _write_migration_yaml(yaml_path, data)
 
         return True
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - Optional migration must not prevent legacy startup.
         logger.warning(
             "Auto-migration failed safely; your existing legacy environment "
             f"config still works. {_format_migration_error(error)}.",
@@ -1751,13 +1748,17 @@ def load_settings(
     yaml_p = Path(yaml_file)
     env_p = Path(env_file)
 
-    if auto_migrate and not yaml_p.exists() and env_p.exists():
-        if _migrate_env_to_yaml(env_p, yaml_p):
-            logger.warning(
-                f"Generated {yaml_p} from your existing {env_p}. Your .env still works "
-                "and overrides matching YAML values; delete it once you're "
-                "ready to fully switch to the new config format.",
-            )
+    if (
+        auto_migrate
+        and not yaml_p.exists()
+        and env_p.exists()
+        and _migrate_env_to_yaml(env_p, yaml_p)
+    ):
+        logger.warning(
+            f"Generated {yaml_p} from your existing {env_p}. Your .env still works "
+            "and overrides matching YAML values; delete it once you're "
+            "ready to fully switch to the new config format.",
+        )
 
     class _ConfiguredSettingsLoader(_SettingsLoader):
         # pydantic-settings exposes the dotenv path as a constructor option but

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 from conftest import settings_override
 
@@ -16,7 +16,7 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.watched import (  # noqa: E402
+from src.watched import (
     LibraryData,
     MediaIdentifiers,
     MediaItem,
@@ -26,7 +26,7 @@ from src.watched import (  # noqa: E402
     cleanup_watched,
 )
 
-viewed_date = datetime.today()
+viewed_date = datetime.now(UTC)
 
 tv_shows_watched_list_1: list[Series] = [
     Series(

@@ -4,7 +4,7 @@ import copy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -23,7 +23,7 @@ class MediaIdentifiers(BaseModel):
     title: str | None = None
 
     # File information, will be folder for series and media file for episode/movie
-    locations: tuple[str, ...] = tuple()
+    locations: tuple[str, ...] = ()
 
     # Guids
     imdb_id: str | None = None
@@ -133,12 +133,9 @@ def resulting_media_item(
     )
 
 
-_WatchedData = TypeVar("_WatchedData")
-
-
-def _lookup_named(
-    values: dict[str, _WatchedData], name: str
-) -> _WatchedData | None:
+def _lookup_named[WatchedData](
+    values: dict[str, WatchedData], name: str
+) -> WatchedData | None:
     """Find a watched-data entry using the same case-folded lookup as settings."""
     if name in values:
         return values[name]

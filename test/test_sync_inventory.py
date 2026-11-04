@@ -2,12 +2,14 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from plexapi.myplex import MyPlexUser
-
 from conftest import settings_override
+from plexapi.myplex import MyPlexAccount, MyPlexUser
+from plexapi.server import PlexServer
+
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
+from src.settings import EmbySettings
 from src.sync_inventory import generate_sync_inventory
 from src.users import generate_all_server_users
 
@@ -16,46 +18,46 @@ from src.users import generate_all_server_users
 def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
     settings = settings_override(
         plex=[
-            dict(
-                name="plex-main",
-                baseurl="http://plex",
-                token="x",
-                sync_to=[] if reverse else ["jellyfin-main"],
-            )
+            {
+                "name": "plex-main",
+                "baseurl": "http://plex",
+                "token": "x",
+                "sync_to": [] if reverse else ["jellyfin-main"],
+            }
         ],
         jellyfin=[
-            dict(
-                name="jellyfin-main",
-                baseurl="http://jf",
-                token="x",
-                sync_to=["plex-main"] if reverse else [],
-            )
+            {
+                "name": "jellyfin-main",
+                "baseurl": "http://jf",
+                "token": "x",
+                "sync_to": ["plex-main"] if reverse else [],
+            }
         ],
         user_mappings=[
-            dict(
-                canonical="family",
-                aliases=[
-                    dict(server="plex-main", username="Family"),
-                    dict(server="jellyfin-main", username="Alice"),
-                    dict(server="jellyfin-main", username="Bob"),
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": "plex-main", "username": "Family"},
+                    {"server": "jellyfin-main", "username": "Alice"},
+                    {"server": "jellyfin-main", "username": "Bob"},
                 ],
-            )
+            }
         ],
         library_mappings=[
-            dict(
-                canonical="shows",
-                aliases=[
-                    dict(server="plex-main", library="TV"),
-                    dict(server="jellyfin-main", library="Shows"),
-                    dict(server="jellyfin-main", library="Archive"),
+            {
+                "canonical": "shows",
+                "aliases": [
+                    {"server": "plex-main", "library": "TV"},
+                    {"server": "jellyfin-main", "library": "Shows"},
+                    {"server": "jellyfin-main", "library": "Archive"},
                 ],
-            )
+            }
         ],
         blacklist_libraries=["Blocked"],
     )
     plex = object.__new__(Plex)
     plex.server_settings = settings.plex[0]
-    user = SimpleNamespace(username=None, title="FAMILY")
+    user = Mock(spec=MyPlexUser, username=None, title="FAMILY")
     plex.users = [user]
     plex.get_user_libraries = Mock(return_value={"TV": "show", "Blocked": "movie"})
     jf = object.__new__(Jellyfin)
@@ -68,7 +70,9 @@ def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
         ]
     )
     empty = object.__new__(Emby)
-    empty.server_settings = SimpleNamespace(name="empty")
+    empty.server_settings = EmbySettings.model_validate(
+        {"name": "empty", "baseurl": "http://empty", "token": "synthetic"}
+    )
     empty.users = {}
     empty.get_user_libraries = Mock()
     result = generate_sync_inventory(
@@ -88,9 +92,9 @@ def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
 @pytest.mark.parametrize("same_direction", [False, True])
 def test_user_and_library_rules_can_enable_directions_independently(same_direction):
     settings = settings_override(
-        plex=[dict(name="plex-main", baseurl="http://plex", token="x", sync_to=[])],
+        plex=[{"name": "plex-main", "baseurl": "http://plex", "token": "x", "sync_to": []}],
         jellyfin=[
-            dict(name="jellyfin-main", baseurl="http://jf", token="x", sync_to=[])
+            {"name": "jellyfin-main", "baseurl": "http://jf", "token": "x", "sync_to": []}
         ],
         user_sync_rules=[
             {"users": ["alice"], "from": "plex-main", "to": "jellyfin-main"}
@@ -106,7 +110,7 @@ def test_user_and_library_rules_can_enable_directions_independently(same_directi
     servers = []
     for name in ["plex-main", "jellyfin-main"]:
         server = object.__new__(Jellyfin)
-        server.server_settings = SimpleNamespace(name=name)
+        server.server_settings = settings.jellyfin[0].model_copy(update={"name": name})
         server.users = {"alice": "a"}
         server.get_user_libraries = Mock(return_value={"Movies": "movies"})
         servers.append(server)
@@ -141,8 +145,8 @@ def test_jellyfin_library_discovery_is_user_scoped_and_handles_custom_types():
 
 def test_plex_library_discovery_uses_shared_user_access():
     server = object.__new__(Plex)
-    server.admin_user = object()
-    server.plex = SimpleNamespace(machineIdentifier="server")
+    server.admin_user = Mock(spec=MyPlexAccount)
+    server.plex = Mock(spec=PlexServer, machineIdentifier="server")
     server.base_url = "http://plex"
     user = Mock(spec=MyPlexUser)
     user.get_token.return_value = "test-token"
@@ -161,8 +165,8 @@ def test_discovery_failure_does_not_discard_healthy_scopes(failure_stage):
     settings = settings_override()
     plex = object.__new__(Plex)
     plex.server_settings = settings.plex[0]
-    plex.admin_user = object()
-    plex.plex = SimpleNamespace(machineIdentifier="server")
+    plex.admin_user = Mock(spec=MyPlexAccount)
+    plex.plex = Mock(spec=PlexServer, machineIdentifier="server")
     plex.base_url = "http://plex"
     failed = Mock(spec=MyPlexUser, username="failed")
     healthy = Mock(spec=MyPlexUser, username="healthy")

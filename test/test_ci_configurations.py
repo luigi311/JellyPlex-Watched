@@ -9,7 +9,6 @@ from pydantic import SecretStr
 from src.legacy_settings import LEGACY_ENV_VARS
 from src.settings import AppSettings, load_settings
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 _SCENARIOS = {

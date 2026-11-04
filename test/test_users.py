@@ -1,9 +1,12 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import Mock, create_autospec
 
 from conftest import settings_override
+from plexapi.myplex import MyPlexAccount, MyPlexUser
+from plexapi.server import PlexServer
 
 # getting the name of the directory
 # where the this file is present.
@@ -17,10 +20,10 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.users import combine_user_lists  # noqa: E402
-from src.jellyfin_emby import JellyfinEmby  # noqa: E402
-from src.plex import Plex  # noqa: E402
-from src.watched import (  # noqa: E402
+from src.jellyfin_emby import JellyfinEmby
+from src.plex import Plex
+from src.users import combine_user_lists
+from src.watched import (
     LibraryData,
     MediaIdentifiers,
     MediaItem,
@@ -194,10 +197,12 @@ def test_adapter_resolvers_return_all_user_and_library_fanout_targets():
 
     plex_adapter = object.__new__(Plex)
     plex_adapter.app_settings = settings
-    plex_adapter.server_settings = SimpleNamespace(name="jellyfin-main")
+    plex_adapter.server_settings = settings.plex[0].model_copy(
+        update={"name": "jellyfin-main"}
+    )
     plex_adapter.users = [
-        SimpleNamespace(username="alice", title="Alice"),
-        SimpleNamespace(username="bob", title="Bob"),
+        Mock(spec=MyPlexUser, username="alice", title="Alice"),
+        Mock(spec=MyPlexUser, username="bob", title="Bob"),
     ]
 
     assert [
@@ -210,7 +215,7 @@ def test_adapter_resolvers_return_all_user_and_library_fanout_targets():
 
     jellyfin_adapter = object.__new__(JellyfinEmby)
     jellyfin_adapter.app_settings = settings
-    jellyfin_adapter.server_settings = SimpleNamespace(name="jellyfin-main")
+    jellyfin_adapter.server_settings = settings.jellyfin[0]
     jellyfin_adapter.users = {"alice": "alice-id", "bob": "bob-id"}
 
     assert jellyfin_adapter._resolve_local_users("plex-main", "family") == [
@@ -227,7 +232,7 @@ def test_adapter_resolvers_return_all_user_and_library_fanout_targets():
     ) == [("Shows", "shows-id"), ("Shows Archive", "archive-id")]
 
 
-def test_adapters_write_cleanup_pending_fanout_targets():
+def test_adapters_write_cleanup_pending_fanout_targets(monkeypatch):
     """Cleanup keeps updates for targets with different watched histories."""
     settings = settings_override(
         user_mappings=[
@@ -259,7 +264,7 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         status=WatchedStatus(
             completed=True,
             time=0,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
     watched = {
@@ -299,15 +304,15 @@ def test_adapters_write_cleanup_pending_fanout_targets():
 
     jellyfin_adapter = object.__new__(JellyfinEmby)
     jellyfin_adapter.app_settings = settings
-    jellyfin_adapter.server_settings = SimpleNamespace(name="jellyfin-main")
+    jellyfin_adapter.server_settings = settings.jellyfin[0]
     jellyfin_adapter.server_type = "Jellyfin"
     jellyfin_adapter.users = {"alice": "alice-id", "bob": "bob-id"}
-    jellyfin_adapter.query = lambda _path, _method: {
+    jellyfin_adapter.query = Mock(return_value={
         "Items": [
             {"Name": "Shows", "Id": "shows-id"},
             {"Name": "Shows Archive", "Id": "archive-id"},
         ]
-    }
+    })
     jellyfin_calls: list[tuple[str, str, str]] = []
 
     def record_jellyfin_write(
@@ -316,7 +321,7 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         library_data: LibraryData,
         library_name: str,
         library_id: str,
-        _dryrun: bool,
+        dryrun: bool,
     ) -> list[WatchedWriteOutcome]:
         jellyfin_calls.append((user_name, user_id, library_name))
         return [
@@ -330,7 +335,9 @@ def test_adapters_write_cleanup_pending_fanout_targets():
             )
         ]
 
-    jellyfin_adapter.update_user_watched = record_jellyfin_write
+    jellyfin_adapter.update_user_watched = create_autospec(
+        jellyfin_adapter.update_user_watched, side_effect=record_jellyfin_write
+    )
     jellyfin_updated = jellyfin_adapter.update_watched(pending, "plex-main")
 
     assert sorted(jellyfin_calls) == [
@@ -348,46 +355,52 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         ("bob", "Shows Archive"),
     ]
 
-    class _EveryUserIsAdmin:
-        def __eq__(self, _other: object) -> bool:
-            return True
-
     plex_adapter = object.__new__(Plex)
     plex_adapter.app_settings = settings
-    plex_adapter.server_settings = SimpleNamespace(name="jellyfin-main")
-    plex_adapter.admin_user = _EveryUserIsAdmin()
-    plex_adapter.plex = SimpleNamespace(
-        library=SimpleNamespace(
-            sections=lambda: [
-                SimpleNamespace(title="Shows"),
-                SimpleNamespace(title="Shows Archive"),
-            ]
-        )
+    plex_adapter.server_settings = settings.plex[0].model_copy(
+        update={"name": "jellyfin-main"}
     )
+    plex_adapter.admin_user = Mock(spec=MyPlexAccount)
+    plex_adapter.plex = Mock(spec=PlexServer, machineIdentifier="server")
+    plex_adapter.plex.library = Mock()
+    plex_adapter.plex.library.sections.return_value = [
+        SimpleNamespace(title="Shows"), SimpleNamespace(title="Shows Archive")
+    ]
+    plex_adapter.base_url = "http://plex"
+    plex_adapter.session = None
+    monkeypatch.setattr("src.plex.PlexServer", Mock(return_value=plex_adapter.plex))
     plex_adapter.users = [
-        SimpleNamespace(username="alice", title="Alice"),
-        SimpleNamespace(username="bob", title="Bob"),
+        Mock(
+            spec=MyPlexUser, username="alice", title="Alice",
+            get_token=Mock(return_value="synthetic-token"),
+        ),
+        Mock(
+            spec=MyPlexUser, username="bob", title="Bob",
+            get_token=Mock(return_value="synthetic-token"),
+        ),
     ]
     plex_calls: list[tuple[str, str]] = []
 
     def record_plex_write(
-        plex_user: SimpleNamespace,
-        _plex_server: SimpleNamespace,
+        user: MyPlexAccount | MyPlexUser,
+        plex_server: PlexServer,
         library_data: LibraryData,
         library_name: str,
-        _dryrun: bool,
+        dryrun: bool,
     ) -> list[WatchedWriteOutcome]:
-        plex_calls.append((plex_user.username, library_name))
+        plex_calls.append((user.username, library_name))
         return [
             WatchedWriteOutcome(
                 status="applied",
-                target_user=plex_user.username,
+                target_user=user.username,
                 target_library=library_name,
                 media_item=library_data.movies[0],
             )
         ]
 
-    plex_adapter.update_user_watched = record_plex_write
+    plex_adapter.update_user_watched = create_autospec(
+        plex_adapter.update_user_watched, side_effect=record_plex_write
+    )
     plex_updated = plex_adapter.update_watched(pending, "plex-main")
 
     assert sorted(plex_calls) == [
@@ -424,7 +437,7 @@ def test_jellyfin_receipt_contains_only_confirmed_item_writes(tmp_path):
             status=WatchedStatus(
                 completed=completed,
                 time=300_000 if not completed else 0,
-                viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
             ),
         )
 
@@ -466,16 +479,16 @@ def test_jellyfin_receipt_contains_only_confirmed_item_writes(tmp_path):
     ]
     posted_ids: list[str] = []
 
-    def query(path: str, query_type: str, **_kwargs):
+    def query(query: str, query_type: str, **_kwargs):
         if query_type == "get":
             return {"Items": destination_items}
-        item_id = path.split("/Items/", 1)[1].split("/", 1)[0]
+        item_id = query.split("/Items/", 1)[1].split("/", 1)[0]
         if item_id == "failed-id":
             raise RuntimeError("simulated write failure")
         posted_ids.append(item_id)
         return None
 
-    adapter.query = query
+    adapter.query = create_autospec(adapter.query, side_effect=query)
     outcomes = adapter.update_user_watched(
         "alice",
         "alice-id",
@@ -542,7 +555,7 @@ def test_destination_receipts_do_not_remap_crossed_identities():
         status=WatchedStatus(
             completed=True,
             time=0,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
     cache = {
@@ -617,25 +630,28 @@ def test_adapter_requires_library_authorization_for_each_write():
     settings = settings_override(blacklist_libraries=["TV Shows"])
     adapter = object.__new__(JellyfinEmby)
     adapter.app_settings = settings
-    adapter.server_settings = SimpleNamespace(name="jellyfin-main")
+    adapter.server_settings = settings.jellyfin[0]
     adapter.server_type = "Jellyfin"
     adapter.users = {"alice": "alice-id"}
-    adapter.query = lambda _path, _method: {
+    adapter.query = Mock(return_value={
         "Items": [{"Name": "TV Shows", "Id": "tv-id"}]
-    }
+    })
     writes: list[str] = []
 
     def record_write(
-        _user_name: str,
-        _user_id: str,
-        _library_data: LibraryData,
+        user_name: str,
+        user_id: str,
+        library_data: LibraryData,
         library_name: str,
-        _library_id: str,
-        _dryrun: bool,
-    ) -> None:
+        library_id: str,
+        dryrun: bool,
+    ) -> list[WatchedWriteOutcome]:
         writes.append(library_name)
+        return []
 
-    adapter.update_user_watched = record_write
+    adapter.update_user_watched = create_autospec(
+        adapter.update_user_watched, side_effect=record_write
+    )
 
     updated = adapter.update_watched(
         {
@@ -681,7 +697,7 @@ def test_jellyfin_watched_includes_played_series_with_zero_aggregate_count():
             },
         ]
     )
-    adapter.query = lambda _path, _method: next(responses)
+    adapter.query = Mock(side_effect=responses)
 
     watched = adapter.get_user_library_watched(
         "JellyUser",
@@ -691,6 +707,7 @@ def test_jellyfin_watched_includes_played_series_with_zero_aggregate_count():
         "Custom TV Shows",
     )
 
+    assert watched is not None
     assert [episode.identifiers.title for episode in watched.series[0].episodes] == [
         "S01E02"
     ]

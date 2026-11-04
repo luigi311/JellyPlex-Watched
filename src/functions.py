@@ -2,12 +2,13 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, Callable
+from typing import Any
 
 from loguru import logger
 from loguru._defaults import LOGURU_FORMAT
@@ -69,7 +70,7 @@ def configure_logger(
     if debug_level not in ["INFO", "DEBUG", "TRACE"]:
         logger.add(sys.stdout)
         msg = f"Invalid DEBUG_LEVEL {debug_level}, please choose between INFO, DEBUG, TRACE"
-        raise Exception(msg)
+        raise ValueError(msg)
 
     # Add a sink for file logging and the console.
     logger.add(sink=log_file, level=debug_level, mode="w", format=formatter)
@@ -144,11 +145,7 @@ def future_thread_executor(
             futures_list.append(executor.submit(*arg))
 
         for out in futures_list:
-            try:
-                result = out.result()
-                results.append(result)
-            except Exception as e:
-                raise Exception(e)
+            results.append(out.result())
 
     return results
 
@@ -169,5 +166,5 @@ def to_aware_utc(dt: datetime | None) -> datetime | None:
         return None
     # If naive, decide what it *means* in your app. Here we treat naive as UTC.
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)

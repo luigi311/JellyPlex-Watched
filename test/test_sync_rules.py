@@ -2,13 +2,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from conftest import settings_override
 from plexapi.myplex import MyPlexAccount
 
-from conftest import settings_override
+from src.emby import Emby
+from src.jellyfin import Jellyfin
 from src.library import combine_library_lists
 from src.plex import Plex
-from src.jellyfin import Jellyfin
-from src.emby import Emby
 from src.users import combine_user_lists
 from src.watched import LibraryData, UserData, WatchedUpdate
 
@@ -17,15 +17,15 @@ def policy_settings(source="a", target="b", *, server_direction=False, **overrid
     return settings_override(
         plex=[],
         jellyfin=[
-            dict(
-                name=source,
-                baseurl="http://source",
-                token="x",
-                sync_to=[target] if server_direction else [],
-            ),
-            dict(name=target, baseurl="http://target", token="x", sync_to=[]),
+            {
+                "name": source,
+                "baseurl": "http://source",
+                "token": "x",
+                "sync_to": [target] if server_direction else [],
+            },
+            {"name": target, "baseurl": "http://target", "token": "x", "sync_to": []},
             # Keep the configuration valid even when the tested pair is disabled.
-            dict(name="c", baseurl="http://third", token="x", sync_to=[target]),
+            {"name": "c", "baseurl": "http://third", "token": "x", "sync_to": [target]},
         ],
         **overrides,
     )
