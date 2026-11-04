@@ -4,6 +4,7 @@ import os
 import stat
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -17,8 +18,10 @@ from src.legacy_settings import (
     legacy_env_to_field_dict,
     resolve_legacy_env,
 )
+from src.plex import Plex
 from src.settings import (
     AppSettings,
+    PlexSettings,
     _SettingsLoader,
     _dump_for_yaml,
     _migrate_env_to_yaml,
@@ -668,9 +671,9 @@ def test_legacy_indexed_credentials_preserve_empty_slots() -> None:
         {
             "PLEX_BASEURL": "http://plex-1,http://plex-2,http://plex-3",
             "PLEX_TOKEN": "plex-token-1,,plex-token-3",
-            "PLEX_USERNAME": "plex-user-1,plex-user-2,plex-user-3",
-            "PLEX_PASSWORD": "plex-password-1,plex-password-2,plex-password-3",
-            "PLEX_SERVERNAME": "Plex 1,Plex 2,Plex 3",
+            "PLEX_USERNAME": ",plex-user-2,",
+            "PLEX_PASSWORD": ",plex-password-2,",
+            "PLEX_SERVERNAME": ",Plex 2,",
             "JELLYFIN_BASEURL": "http://jellyfin-1,http://jellyfin-2,http://jellyfin-3",
             "JELLYFIN_TOKEN": "jellyfin-token-1,,jellyfin-token-3",
         }
@@ -1053,6 +1056,137 @@ def test_legacy_fixture_covers_plex_username_password_auth(
     assert settings.plex[0].password is not None
     assert settings.plex[0].password.get_secret_value() == "plex-password"
     assert settings.plex[0].servername == "Plex Account Server"
+
+
+@pytest.mark.parametrize("auto_migrate", [False, True])
+def test_legacy_plex_account_discovery_without_baseurl(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    auto_migrate: bool,
+) -> None:
+    env = {
+        key: value
+        for key, value in LEGACY_PLEX_ACCOUNT_ENV.items()
+        if key != "PLEX_BASEURL"
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env),
+        yaml_file=yaml_path,
+        auto_migrate=auto_migrate,
+    )
+    assert settings.plex[0].baseurl is None
+    assert settings.should_sync_server("plex-main", "jellyfin-main")
+    if auto_migrate:
+        settings = load_settings(
+            env_file=tmp_path / "missing.env",
+            yaml_file=yaml_path,
+            auto_migrate=False,
+        )
+        assert settings.plex[0].baseurl is None
+
+    server = Mock(_baseurl="http://discovered-plex")
+    server.myPlexAccount.return_value.users.return_value = []
+    account = Mock()
+    account.resource.return_value.connect.return_value = server
+    login = Mock(return_value=account)
+    monkeypatch.setattr("src.plex.MyPlexAccount", login)
+    direct_login = Mock(side_effect=AssertionError("Expected account discovery"))
+    monkeypatch.setattr("src.plex.PlexServer", direct_login)
+
+    plex = Plex(settings, settings.plex[0])
+
+    login.assert_called_once_with("plex-user", "plex-password")
+    account.resource.assert_called_once_with("Plex Account Server")
+    assert plex.base_url == "http://discovered-plex"
+
+
+@pytest.mark.parametrize("process_values", [False, True])
+@pytest.mark.parametrize("include_jellyfin", [False, True])
+def test_legacy_independent_plex_auth_lists_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    process_values: bool,
+    include_jellyfin: bool,
+) -> None:
+    env = {
+        "PLEX_BASEURL": "http://direct-plex",
+        "PLEX_TOKEN": "direct-token",
+        "PLEX_USERNAME": "plex-user",
+        "PLEX_PASSWORD": "plex-password",
+        "PLEX_SERVERNAME": "Discovered Server",
+    }
+    if include_jellyfin:
+        env.update(JELLYFIN_BASEURL="http://jellyfin", JELLYFIN_TOKEN="jellyfin-token")
+    if process_values:
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, {} if process_values else env),
+        yaml_file=yaml_path,
+    )
+    for name in env:
+        monkeypatch.delenv(name, raising=False)
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    assert _effective_settings(settings) == _effective_settings(migrated)
+    for loaded in (settings, migrated):
+        assert [server.name for server in loaded.plex] == ["plex-1", "plex-2"]
+        assert loaded.plex[0].token is not None
+        assert loaded.plex[0].token.get_secret_value() == "direct-token"
+        assert loaded.plex[1].baseurl is None
+        assert loaded.plex[1].username == "plex-user"
+        assert loaded.should_sync_server("plex-1", "plex-2")
+        assert loaded.should_sync_server("plex-2", "plex-1")
+
+    direct_server = Mock(_baseurl="http://direct-plex")
+    account_server = Mock(_baseurl="http://discovered-plex")
+    for server in (direct_server, account_server):
+        server.myPlexAccount.return_value.users.return_value = []
+    direct_login = Mock(return_value=direct_server)
+    monkeypatch.setattr("src.plex.PlexServer", direct_login)
+    account = Mock()
+    account.resource.return_value.connect.return_value = account_server
+    account_login = Mock(return_value=account)
+    monkeypatch.setattr("src.plex.MyPlexAccount", account_login)
+
+    connections = [Plex(settings, config) for config in settings.plex]
+
+    assert [server.base_url for server in connections] == [
+        "http://direct-plex", "http://discovered-plex"
+    ]
+    direct_login.assert_called_once_with("http://direct-plex", "direct-token", session=None)
+    account_login.assert_called_once_with("plex-user", "plex-password")
+    account.resource.assert_called_once_with("Discovered Server")
+
+
+def test_legacy_plex_account_and_token_slots_keep_their_indexes() -> None:
+    translated = legacy_env_to_field_dict(
+        {
+            "PLEX_BASEURL": "http://direct-plex,",
+            "PLEX_TOKEN": "direct-token,",
+            "PLEX_USERNAME": ",plex-user",
+            "PLEX_PASSWORD": ",plex-password",
+            "PLEX_SERVERNAME": ",Discovered Server",
+        }
+    )
+    settings = settings_override(jellyfin=[], **translated)
+    assert [server.name for server in settings.plex] == ["plex-1", "plex-2"]
+    assert settings.plex[0].baseurl == "http://direct-plex"
+    assert settings.plex[0].token is not None
+    assert settings.plex[1].baseurl is None
+    assert settings.plex[1].token is None
+    assert settings.plex[1].username == "plex-user"
+
+
+@pytest.mark.parametrize("baseurl", [None, ""])
+def test_plex_token_auth_requires_baseurl(baseurl: str | None) -> None:
+    with pytest.raises(ValidationError, match="baseurl"):
+        PlexSettings(name="plex-main", baseurl=baseurl, token=SecretStr("synthetic-token"))
 
 
 @pytest.mark.parametrize(

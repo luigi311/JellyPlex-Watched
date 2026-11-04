@@ -7,6 +7,7 @@
 #     An omitted/empty sync_to enables no outgoing server directions.
 #   - Legacy SYNC_FROM_*_TO_* flags each default to enabled; set unwanted
 #     legacy directions to false explicitly when migrating from .env.
+#     Legacy token and account auth lists each create their own Plex servers.
 #   - user_sync_rules override user blacklist/whitelist filters for their
 #     from -> to direction. library_sync_rules override library name/type
 #     filters for their direction. Each exception affects only its own scope.
@@ -65,7 +66,7 @@ plex:
     ssl_bypass: false
 
   - name: plex-readonly # auth via username/password/servername triple
-    baseurl: https://plex.example.com:32400
+    # baseurl is optional here: account login discovers the named server.
     sync_to: [] # no default outbound sync; a user_sync_rule can enable pushes
     username: myplexuser
     password: "myplexpassword"

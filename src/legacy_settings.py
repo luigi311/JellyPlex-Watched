@@ -217,38 +217,59 @@ def _build_plex_servers(env: dict[str, str | None]) -> list[dict[str, Any]]:
     """
     Build Plex server entries from comma-separated legacy vars.
 
-    Servers are paired by index across PLEX_BASEURL / PLEX_TOKEN /
-    PLEX_USERNAME / PLEX_PASSWORD / PLEX_SERVERNAME. Each baseurl produces
-    one entry; auth fields are taken from the same index when present.
+    PLEX_BASEURL / PLEX_TOKEN and the PLEX_USERNAME / PLEX_PASSWORD /
+    PLEX_SERVERNAME triple are independent indexed lists. Configuring both
+    authentication modes creates both sets of servers.
     """
     baseurls = _env_as_indexed_list(env.get("PLEX_BASEURL"))
-    server_count = sum(bool(baseurl) for baseurl in baseurls)
-    if not server_count:
-        return []
-
     tokens = _env_as_indexed_list(env.get("PLEX_TOKEN"))
     usernames = _env_as_indexed_list(env.get("PLEX_USERNAME"))
     passwords = _env_as_indexed_list(env.get("PLEX_PASSWORD"))
     servernames = _env_as_indexed_list(env.get("PLEX_SERVERNAME"))
     ssl_bypass = _env_as_bool(env.get("SSL_BYPASS"), "SSL_BYPASS")
+    account_fields = (usernames, passwords, servernames)
+    account_indexes = [
+        i
+        for i in range(max(map(len, account_fields)))
+        if any(i < len(values) and values[i] for values in account_fields)
+    ]
 
-    servers: list[dict[str, Any]] = []
+    indexed_servers: list[tuple[int, dict[str, Any]]] = []
     for i, baseurl in enumerate(baseurls):
         if not baseurl:
             continue
-        entry: dict[str, Any] = {
-            "name": f"plex-{i + 1}" if server_count > 1 else "plex-main",
-            "baseurl": baseurl,
-        }
-        if i < len(tokens) and tokens[i]:
+        has_token = i < len(tokens) and bool(tokens[i])
+        if not has_token and i in account_indexes:
+            continue
+        entry: dict[str, Any] = {"baseurl": baseurl}
+        if has_token:
             entry["token"] = tokens[i]
-        else:
-            if i < len(usernames) and usernames[i]:
-                entry["username"] = usernames[i]
-            if i < len(passwords) and passwords[i]:
-                entry["password"] = passwords[i]
-            if i < len(servernames) and servernames[i]:
-                entry["servername"] = servernames[i]
+        indexed_servers.append((i, entry))
+
+    for i in account_indexes:
+        entry = {}
+        baseurl = baseurls[i] if i < len(baseurls) else ""
+        if baseurl and not (i < len(tokens) and tokens[i]):
+            # Retain an account entry's optional URL when that slot does not
+            # belong to a separate direct-token connection.
+            entry["baseurl"] = baseurl
+        for field_name, values in zip(
+            ("username", "password", "servername"), account_fields
+        ):
+            if i < len(values) and values[i]:
+                entry[field_name] = values[i]
+        indexed_servers.append((i, entry))
+
+    indexes = [i for i, _ in indexed_servers]
+    overlapping_indexes = len(indexes) != len(set(indexes))
+    if not overlapping_indexes:
+        indexed_servers.sort(key=lambda item: item[0])
+    servers: list[dict[str, Any]] = []
+    for position, (i, entry) in enumerate(indexed_servers):
+        # Independent auth lists can share positions. Number the combined
+        # list in that case; otherwise preserve existing names and gaps.
+        number = position + 1 if overlapping_indexes else i + 1
+        entry["name"] = f"plex-{number}" if len(indexed_servers) > 1 else "plex-main"
         if ssl_bypass is not None:
             entry["ssl_bypass"] = ssl_bypass
         servers.append(entry)

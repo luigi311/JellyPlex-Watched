@@ -155,6 +155,18 @@ before syncing those accounts or libraries.
 
 ### Credentials and named overrides
 
+Plex token authentication requires a `baseurl`. Account authentication uses
+the `username`, `password`, and `servername` triple and discovers the server
+through the Plex account, so `baseurl` may be omitted. Legacy account variables
+`PLEX_USERNAME`, `PLEX_PASSWORD`, and `PLEX_SERVERNAME` work without
+`PLEX_BASEURL` as well.
+
+Legacy URL/token lists and username/password/server-name lists are independent.
+If both authentication modes are configured, both sets of Plex connections are
+created; no padding is required between the two modes. With multiple servers,
+generated names are numbered `plex-1`, `plex-2`, and so on. Review generated
+names before referring to them in YAML mappings, rules, or token overrides.
+
 `JPW_SERVER_TOKENS` is a JSON object whose keys are exact configured server
 names and whose values are non-empty replacement credentials. It patches the
 effective YAML or environment server definitions in place, preserving each

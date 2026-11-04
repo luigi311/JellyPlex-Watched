@@ -260,8 +260,8 @@ class _ServerBase(BaseModel):
 
     @field_validator("baseurl")
     @classmethod
-    def _strip_trailing_slash(cls, v: str) -> str:
-        return v.rstrip("/")
+    def _strip_trailing_slash(cls, v: str | None) -> str | None:
+        return v.rstrip("/") if v is not None else None
 
 
 class PlexSettings(_ServerBase):
@@ -270,6 +270,10 @@ class PlexSettings(_ServerBase):
     servername triple. Validators ensure exactly one path is fully populated.
     """
 
+    baseurl: str | None = Field(
+        default=None,
+        description="Required for token authentication; optional for account discovery.",
+    )
     token: SecretStr | None = None
     username: str | None = None
     password: SecretStr | None = None
@@ -295,6 +299,10 @@ class PlexSettings(_ServerBase):
             raise ValueError(
                 f"Plex server '{self.name}' needs either a 'token' or "
                 "the 'username'/'password'/'servername' triple."
+            )
+        if has_token and not self.baseurl:
+            raise ValueError(
+                f"Plex server '{self.name}' needs a 'baseurl' for token authentication."
             )
         return self
 
