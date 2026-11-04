@@ -77,6 +77,18 @@ SYNC_FROM_PLEX_TO_JELLYFIN=true
 The YAML template is the recommended starting point for new installations;
 legacy dotenv values remain supported for existing deployments and migration.
 
+When a legacy `.env` exists and no YAML file is present, a starter YAML file
+is generated without modifying `.env`. Generation is optional: if it cannot
+be written, the application continues loading the legacy configuration.
+
+The generated YAML remains a lower-priority configuration source. Removing
+or blanking a legacy setting does not erase its saved YAML value; this also
+applies to mappings and removed servers. If you continue managing only `.env`,
+delete the generated YAML after such removals and restart to regenerate it
+from the current `.env`. Preserve any manual YAML-only changes before doing
+so. Process-environment-only deployments without a dotenv file do not
+auto-generate YAML.
+
 ### Source-backed environment overrides
 
 The normal entry point is `load_settings()`. New-style environment variables
@@ -335,6 +347,12 @@ environment values; the regular loop does not live-reload configuration.
   ```bash
   docker pull luigi311/jellyplex-watched:latest
   ```
+
+When starting directly as a non-root user with `--user` or Compose `user:`,
+set both `LOG_FILE` and `MARK_FILE` to writable paths, such as files in a
+mounted runtime directory. Their defaults under `/app` are not writable by
+that user. For a read-only container filesystem, provide a writable volume
+or tmpfs for both paths.
 
 #### With a YAML configuration
 
