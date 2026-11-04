@@ -19,6 +19,7 @@ from src.legacy_settings import (
     resolve_legacy_env,
 )
 from src.plex import Plex
+from src.runtime_paths import main as runtime_paths_main
 from src.settings import (
     AppSettings,
     PlexSettings,
@@ -1252,6 +1253,64 @@ def test_legacy_plex_account_and_token_slots_keep_their_indexes() -> None:
 def test_plex_token_auth_requires_baseurl(baseurl: str | None) -> None:
     with pytest.raises(ValidationError, match="baseurl"):
         PlexSettings(name="plex-main", baseurl=baseurl, token=SecretStr("synthetic-token"))
+
+
+@pytest.mark.parametrize("raw", ["30.0", "0.5"])
+@pytest.mark.parametrize("process_value", [False, True])
+def test_legacy_decimal_sleep_duration_survives_migration(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+    process_value: bool,
+) -> None:
+    env = dict(LEGACY_PLEX_ACCOUNT_ENV)
+    if process_value:
+        monkeypatch.setenv("SLEEP_DURATION", raw)
+    else:
+        env["SLEEP_DURATION"] = raw
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    assert settings.sleep_duration == float(raw)
+    monkeypatch.delenv("SLEEP_DURATION", raising=False)
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    assert migrated.sleep_duration == float(raw)
+
+
+@pytest.mark.parametrize("raw", ["invalid", "nan", "inf", "-1"])
+def test_invalid_legacy_sleep_duration_is_rejected(raw: str) -> None:
+    with pytest.raises((ValueError, ValidationError)):
+        settings_override(**legacy_env_to_field_dict({"SLEEP_DURATION": raw}))
+
+
+@pytest.mark.parametrize("field_name", ["REQUEST_TIMEOUT", "MAX_THREADS"])
+def test_invalid_legacy_integer_is_rejected(field_name: str) -> None:
+    with pytest.raises(SettingsError, match=field_name) as error:
+        legacy_env_to_field_dict({field_name: "synthetic-invalid-value"})
+    assert "synthetic-invalid-value" not in str(error.value)
+
+
+@pytest.mark.parametrize("field_name", ["DRYRUN", "REQUEST_TIMEOUT", "SLEEP_DURATION"])
+def test_runtime_preflight_identifies_invalid_legacy_configuration(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    field_name: str,
+) -> None:
+    monkeypatch.setenv("ENV_FILE", str(tmp_path / "absent.env"))
+    monkeypatch.setenv("YAML_FILE", str(_write_yaml(tmp_path, _base_yaml())))
+    monkeypatch.setenv(field_name, "synthetic-invalid-value")
+
+    assert runtime_paths_main() == 1
+    message = capsys.readouterr().err
+    assert "configuration source error" in message
+    assert "runtime file path" not in message
+    assert "synthetic-invalid-value" not in message
 
 
 @pytest.mark.parametrize(

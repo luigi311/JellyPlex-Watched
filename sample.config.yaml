@@ -27,7 +27,7 @@
 dryrun: true # true = log what would happen, change nothing
 debug_level: INFO # INFO | DEBUG | TRACE
 run_only_once: false # true = run a single pass and exit
-sleep_duration: 3600 # seconds between passes (when run_only_once=false)
+sleep_duration: 3600 # seconds between passes; fractional seconds also accepted
 log_file: log.log
 mark_file: mark.log
 request_timeout: 300 # per-request timeout in seconds

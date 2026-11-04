@@ -13,7 +13,7 @@ from typing import Any
 from dotenv import dotenv_values
 from loguru import logger
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsError
 
 from src.functions import normalize_name
 
@@ -133,16 +133,25 @@ def _env_as_bool(v: str | None, field_name: str) -> bool | None:
         return True
     if normalized in _FALSE_BOOLEAN_VALUES:
         return False
-    raise ValueError(f"invalid boolean value for {field_name}")
+    raise SettingsError(f"invalid boolean value for {field_name}")
 
 
-def _env_as_int(v: str | None) -> int | None:
+def _env_as_int(v: str | None, field_name: str) -> int | None:
     if v is None or v == "":
         return None
     try:
         return int(v)
     except ValueError:
+        raise SettingsError(f"invalid integer value for {field_name}") from None
+
+
+def _env_as_float(v: str | None, field_name: str) -> float | None:
+    if v is None or v == "":
         return None
+    try:
+        return float(v)
+    except ValueError:
+        raise SettingsError(f"invalid numeric value for {field_name}") from None
 
 
 def _env_as_list(v: str | None) -> list[str]:
@@ -424,11 +433,11 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
             out[dst_key] = parsed
 
     for src_key, dst_key, parser in [
-        ("SLEEP_DURATION", "sleep_duration", _env_as_int),
+        ("SLEEP_DURATION", "sleep_duration", _env_as_float),
         ("REQUEST_TIMEOUT", "request_timeout", _env_as_int),
         ("MAX_THREADS", "max_threads", _env_as_int),
     ]:
-        parsed = parser(env.get(src_key))
+        parsed = parser(env.get(src_key), src_key)
         if parsed is not None:
             out[dst_key] = parsed
 

@@ -709,7 +709,7 @@ class AppSettings(BaseModel):
     dryrun: bool = True
     debug_level: Literal["INFO", "DEBUG", "TRACE"] = "INFO"
     run_only_once: bool = False
-    sleep_duration: int = 3600
+    sleep_duration: Annotated[float, Field(ge=0, allow_inf_nan=False)] = 3600
     log_file: Path = Path("log.log")
     mark_file: Path = Path("mark.log")
     request_timeout: int = 300

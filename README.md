@@ -153,6 +153,12 @@ are discovered on a server, that mapping is skipped and a warning identifies
 the configuration to review. Replace the entry with server-scoped YAML aliases
 before syncing those accounts or libraries.
 
+Legacy decimal `SLEEP_DURATION` values such as `30.0` or `0.5` retain their
+interval in seconds. YAML `sleep_duration` and `JPW_SLEEP_DURATION` also accept
+finite, non-negative fractional seconds; invalid durations fail validation.
+Malformed legacy `REQUEST_TIMEOUT` and `MAX_THREADS` values are rejected
+instead of silently using defaults.
+
 Legacy mapping pairs that differ only by case produce one alias per server.
 
 ### Credentials and named overrides
