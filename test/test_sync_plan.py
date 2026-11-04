@@ -1,13 +1,13 @@
 import json
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from itertools import permutations
 from unittest.mock import Mock
 
 import pytest
+from conftest import settings_override
 from loguru import logger
 
-from conftest import settings_override
 from src import main
 from src.functions import formatter
 from src.jellyfin import Jellyfin
@@ -36,7 +36,7 @@ def make_settings(directions=None, **overrides):
     return settings_override(
         plex=[],
         jellyfin=[
-            dict(name=name, baseurl=f"http://{name}", token="x", sync_to=targets)
+            {"name": name, "baseurl": f"http://{name}", "token": "x", "sync_to": targets}
             for name, targets in directions.items()
         ],
         **overrides,
@@ -65,7 +65,7 @@ def movie(name="shared", *, time=0, completed=True, date=0, **identifiers):
         status=WatchedStatus(
             completed=completed,
             time=time,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc)
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC)
             + timedelta(seconds=date),
         ),
     )
@@ -309,24 +309,24 @@ def test_user_and_library_fanout_respects_each_destinations_history(reverse):
     settings = make_settings(
         {source: [target], target: [], "c": []},
         user_mappings=[
-            dict(
-                canonical="family",
-                aliases=[
-                    dict(server=source, username="Family"),
-                    dict(server=target, username="Alice"),
-                    dict(server=target, username="Bob"),
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": source, "username": "Family"},
+                    {"server": target, "username": "Alice"},
+                    {"server": target, "username": "Bob"},
                 ],
-            )
+            }
         ],
         library_mappings=[
-            dict(
-                canonical="films",
-                aliases=[
-                    dict(server=source, library="Films"),
-                    dict(server=target, library="Movies"),
-                    dict(server=target, library="Archive"),
+            {
+                "canonical": "films",
+                "aliases": [
+                    {"server": source, "library": "Films"},
+                    {"server": target, "library": "Movies"},
+                    {"server": target, "library": "Archive"},
                 ],
-            )
+            }
         ],
     )
     servers = make_servers(settings)
@@ -372,15 +372,15 @@ def test_policy_is_applied_before_global_fanin(scope):
         {"a": [], "b": ["c"], "c": []},
         **{
             f"{scope}_mappings": [
-                dict(
-                    canonical="combined",
-                    aliases=[
+                {
+                    "canonical": "combined",
+                    "aliases": [
                         {"server": "b", field: "Allowed"},
                         {"server": "b", field: "Restricted"},
                         {"server": "a", field: "Merged"},
                         {"server": "c", field: "Merged"},
                     ],
-                )
+                }
             ],
             f"{scope}_sync_rules": [{plural: ["Allowed"], "from": "b", "to": "a"}],
         },
@@ -583,24 +583,24 @@ def test_existing_adapter_receives_each_winner_with_its_own_source_mapping():
     settings = make_settings(
         {"a": ["c"], "b": ["c"], "c": []},
         user_mappings=[
-            dict(
-                canonical="family",
-                aliases=[
-                    dict(server="a", username="First"),
-                    dict(server="b", username="Second"),
-                    dict(server="c", username="Destination"),
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": "a", "username": "First"},
+                    {"server": "b", "username": "Second"},
+                    {"server": "c", "username": "Destination"},
                 ],
-            )
+            }
         ],
         library_mappings=[
-            dict(
-                canonical="films",
-                aliases=[
-                    dict(server="a", library="First Library"),
-                    dict(server="b", library="Second Library"),
-                    dict(server="c", library="Destination Library"),
+            {
+                "canonical": "films",
+                "aliases": [
+                    {"server": "a", "library": "First Library"},
+                    {"server": "b", "library": "Second Library"},
+                    {"server": "c", "library": "Destination Library"},
                 ],
-            )
+            }
         ],
     )
     servers = make_servers(settings)
@@ -716,16 +716,16 @@ def test_relay_preserves_episode_origin_and_resolves_final_hop_aliases():
     settings = make_settings(
         {"a": ["b"], "b": ["c"], "c": []},
         user_mappings=[
-            dict(
-                canonical="family",
-                aliases=[dict(server=name, username=f"User {name}") for name in "abc"],
-            )
+            {
+                "canonical": "family",
+                "aliases": [{"server": name, "username": f"User {name}"} for name in "abc"],
+            }
         ],
         library_mappings=[
-            dict(
-                canonical="shows",
-                aliases=[dict(server=name, library=f"Shows {name}") for name in "abc"],
-            )
+            {
+                "canonical": "shows",
+                "aliases": [{"server": name, "library": f"Shows {name}"} for name in "abc"],
+            }
         ],
     )
     servers = make_servers(settings)
@@ -752,7 +752,7 @@ def test_relay_preserves_episode_origin_and_resolves_final_hop_aliases():
     for source, updates in plan[target].items():
         Jellyfin.update_watched(target, updates, source)
     target.update_user_watched.assert_called_once()
-    username, user_id, data, library_name, library_id, dryrun = (
+    username, _user_id, data, library_name, _library_id, _dryrun = (
         target.update_user_watched.call_args.args
     )
     assert (username, library_name) == ("User c", "Shows c")

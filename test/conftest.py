@@ -15,7 +15,7 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 
-from src.settings import AppSettings  # noqa: E402
+from src.settings import AppSettings
 
 
 def settings_override(**overrides) -> AppSettings:

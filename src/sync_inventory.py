@@ -15,7 +15,6 @@ from src.settings import AppSettings
 from src.users import combine_user_lists
 from src.watched import UserData
 
-
 type Server = Plex | Jellyfin | Emby
 type ServerUser = MyPlexAccount | MyPlexUser | tuple[str, str]
 
@@ -52,7 +51,7 @@ def generate_sync_inventory(
                     libraries = server.get_user_libraries(cast(tuple[str, str], user))
                 else:
                     raise TypeError("User representation does not match server")
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Isolate adapter failures and log only their type.
                 # Adapter errors may contain credentials; log only the error type.
                 logger.warning(
                     "Skipping library discovery for user {} on {} ({})",
@@ -207,7 +206,7 @@ def fetch_watched_inventory(
                     )
                 else:
                     raise TypeError("User representation does not match server")
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Isolate adapter failures and log only their type.
                 logger.warning(
                     "Skipping watched fetch for {} ({})",
                     entry.username,

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from conftest import settings_override
@@ -17,10 +17,10 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.users import combine_user_lists  # noqa: E402
-from src.jellyfin_emby import JellyfinEmby  # noqa: E402
-from src.plex import Plex  # noqa: E402
-from src.watched import (  # noqa: E402
+from src.jellyfin_emby import JellyfinEmby
+from src.plex import Plex
+from src.users import combine_user_lists
+from src.watched import (
     LibraryData,
     MediaIdentifiers,
     MediaItem,
@@ -259,7 +259,7 @@ def test_adapters_write_cleanup_pending_fanout_targets():
         status=WatchedStatus(
             completed=True,
             time=0,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
     watched = {
@@ -424,7 +424,7 @@ def test_jellyfin_receipt_contains_only_confirmed_item_writes(tmp_path):
             status=WatchedStatus(
                 completed=completed,
                 time=300_000 if not completed else 0,
-                viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
             ),
         )
 
@@ -542,7 +542,7 @@ def test_destination_receipts_do_not_remap_crossed_identities():
         status=WatchedStatus(
             completed=True,
             time=0,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
     cache = {

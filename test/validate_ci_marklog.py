@@ -9,7 +9,6 @@ from loguru import logger
 class MarkLogError(Exception):
     """Custom exception for mark.log validation failures."""
 
-    pass
 
 
 def parse_args():
@@ -45,8 +44,8 @@ def read_marklog():
         with open(marklog, "r") as f:
             lines = [line.strip() for line in f if line.strip()]
         return lines
-    except Exception as e:
-        raise MarkLogError(f"Error reading {marklog}: {e}")
+    except (OSError, UnicodeError) as e:
+        raise MarkLogError(f"Error reading {marklog}: {e}") from e
 
 
 def check_marklog(lines, expected_values):

@@ -7,9 +7,9 @@ from loguru import logger
 from src.connection import generate_server_connections
 from src.functions import configure_logger
 from src.settings import AppSettings, load_settings
-from src.users import generate_all_server_users
 from src.sync_inventory import fetch_watched_inventory, generate_sync_inventory
 from src.sync_plan import generate_watched_plan
+from src.users import generate_all_server_users
 
 
 def main_loop(settings: AppSettings, average_time: float) -> None:
@@ -93,7 +93,7 @@ def main() -> None:
             logger.info(f"Looping in {settings.sleep_duration}")
             sleep(settings.sleep_duration)
 
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - Retry ordinary sync failures; handle KeyboardInterrupt separately.
             if isinstance(error, list):
                 for message in error:
                     logger.error(message)

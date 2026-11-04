@@ -2,8 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
 from conftest import settings_override
+
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
@@ -13,16 +13,16 @@ from src.users import generate_all_server_users
 @pytest.mark.parametrize('reverse', [False, True])
 def test_selects_both_ends_of_one_way_fanout(reverse):
     settings = settings_override(
-        plex=[dict(name='plex-main', baseurl='http://plex', token='x',
-                   sync_to=['jellyfin-main'] if not reverse else [])],
-        jellyfin=[dict(name='jellyfin-main', baseurl='http://jellyfin', token='x',
-                      sync_to=['plex-main'] if reverse else [])],
-        user_mappings=[dict(canonical='family', aliases=[
-            dict(server='plex-main', username='Family'),
-            dict(server='jellyfin-main', username='Alice'),
-            dict(server='jellyfin-main', username='Bob'),
-            dict(server='jellyfin-main', username='Absent'),
-        ])],
+        plex=[{'name': 'plex-main', 'baseurl': 'http://plex', 'token': 'x',
+                   'sync_to': ['jellyfin-main'] if not reverse else []}],
+        jellyfin=[{'name': 'jellyfin-main', 'baseurl': 'http://jellyfin', 'token': 'x',
+                      'sync_to': ['plex-main'] if reverse else []}],
+        user_mappings=[{'canonical': 'family', 'aliases': [
+            {'server': 'plex-main', 'username': 'Family'},
+            {'server': 'jellyfin-main', 'username': 'Alice'},
+            {'server': 'jellyfin-main', 'username': 'Bob'},
+            {'server': 'jellyfin-main', 'username': 'Absent'},
+        ]}],
         blacklist_users=['blocked'],
     )
     plex = object.__new__(Plex)

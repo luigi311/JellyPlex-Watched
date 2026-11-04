@@ -2,9 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from conftest import settings_override
 from plexapi.myplex import MyPlexUser
 
-from conftest import settings_override
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
@@ -16,40 +16,40 @@ from src.users import generate_all_server_users
 def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
     settings = settings_override(
         plex=[
-            dict(
-                name="plex-main",
-                baseurl="http://plex",
-                token="x",
-                sync_to=[] if reverse else ["jellyfin-main"],
-            )
+            {
+                "name": "plex-main",
+                "baseurl": "http://plex",
+                "token": "x",
+                "sync_to": [] if reverse else ["jellyfin-main"],
+            }
         ],
         jellyfin=[
-            dict(
-                name="jellyfin-main",
-                baseurl="http://jf",
-                token="x",
-                sync_to=["plex-main"] if reverse else [],
-            )
+            {
+                "name": "jellyfin-main",
+                "baseurl": "http://jf",
+                "token": "x",
+                "sync_to": ["plex-main"] if reverse else [],
+            }
         ],
         user_mappings=[
-            dict(
-                canonical="family",
-                aliases=[
-                    dict(server="plex-main", username="Family"),
-                    dict(server="jellyfin-main", username="Alice"),
-                    dict(server="jellyfin-main", username="Bob"),
+            {
+                "canonical": "family",
+                "aliases": [
+                    {"server": "plex-main", "username": "Family"},
+                    {"server": "jellyfin-main", "username": "Alice"},
+                    {"server": "jellyfin-main", "username": "Bob"},
                 ],
-            )
+            }
         ],
         library_mappings=[
-            dict(
-                canonical="shows",
-                aliases=[
-                    dict(server="plex-main", library="TV"),
-                    dict(server="jellyfin-main", library="Shows"),
-                    dict(server="jellyfin-main", library="Archive"),
+            {
+                "canonical": "shows",
+                "aliases": [
+                    {"server": "plex-main", "library": "TV"},
+                    {"server": "jellyfin-main", "library": "Shows"},
+                    {"server": "jellyfin-main", "library": "Archive"},
                 ],
-            )
+            }
         ],
         blacklist_libraries=["Blocked"],
     )
@@ -88,9 +88,9 @@ def test_inventory_retains_accessible_fanout_and_fetches_once(reverse):
 @pytest.mark.parametrize("same_direction", [False, True])
 def test_user_and_library_rules_can_enable_directions_independently(same_direction):
     settings = settings_override(
-        plex=[dict(name="plex-main", baseurl="http://plex", token="x", sync_to=[])],
+        plex=[{"name": "plex-main", "baseurl": "http://plex", "token": "x", "sync_to": []}],
         jellyfin=[
-            dict(name="jellyfin-main", baseurl="http://jf", token="x", sync_to=[])
+            {"name": "jellyfin-main", "baseurl": "http://jf", "token": "x", "sync_to": []}
         ],
         user_sync_rules=[
             {"users": ["alice"], "from": "plex-main", "to": "jellyfin-main"}

@@ -1,19 +1,19 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
+from conftest import settings_override
 from plexapi.myplex import MyPlexUser
 
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
 from src.sync_inventory import UserLibraries, fetch_watched_inventory
-from conftest import settings_override
 from src.watched import (
     LibraryData,
-    UserData,
-    MediaItem,
     MediaIdentifiers,
+    MediaItem,
+    UserData,
     WatchedStatus,
     cleanup_watched,
 )
@@ -123,7 +123,7 @@ def test_unknown_destination_is_skipped_but_empty_history_is_updated(failure):
         status=WatchedStatus(
             completed=True,
             time=0,
-            viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
     source = {

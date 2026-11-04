@@ -23,7 +23,6 @@ from src.watched import (
     media_identifier_keys,
 )
 
-
 # Destination server -> final incoming server name -> winning updates.
 # Indirect updates retain their origin and authorized route in relay_path.
 type WatchedPlan = dict[Server, dict[str, list[WatchedUpdate]]]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from math import floor
 from typing import Any, Literal
 
@@ -24,11 +24,11 @@ from src.watched import (
     Series,
     UserData,
     WatchedStatus,
-    check_same_identifiers,
-    expand_watched_updates,
     WatchedUpdate,
     WatchedWriteOutcome,
     WriteOutcomeStatus,
+    check_same_identifiers,
+    expand_watched_updates,
     resulting_media_item,
 )
 
@@ -49,28 +49,26 @@ def extract_identifiers_from_item(
     if generate_guids:
         guids = {k.lower(): v for k, v in item.get("ProviderIds", {}).items()}
 
-    locations: tuple[str, ...] = tuple()
+    locations: tuple[str, ...] = ()
     full_path: str = ""
     if generate_locations:
         if item.get("Path"):
             full_path = item["Path"]
-            locations = tuple([filename_from_any_path(full_path)])
+            locations = (filename_from_any_path(full_path),)
         elif item.get("MediaSources"):
             full_paths = [x["Path"] for x in item["MediaSources"] if x.get("Path")]
             locations = tuple([filename_from_any_path(x) for x in full_paths])
             full_path = " ".join(full_paths)
 
-    if generate_guids:
-        if not guids:
-            logger.debug(
-                f"{server_type}: {title if title else id} has no guids{f', locations: {full_path}' if full_path else ''}",
-            )
+    if generate_guids and not guids:
+        logger.debug(
+            f"{server_type}: {title if title else id} has no guids{f', locations: {full_path}' if full_path else ''}",
+        )
 
-    if generate_locations:
-        if not locations:
-            logger.debug(
-                f"{server_type}: {title if title else id} has no locations{f', guids: {guids}' if guids else ''}",
-            )
+    if generate_locations and not locations:
+        logger.debug(
+            f"{server_type}: {title if title else id} has no locations{f', guids: {guids}' if guids else ''}",
+        )
 
     return MediaIdentifiers(
         title=title,
@@ -90,9 +88,9 @@ def get_mediaitem(
     user_data = item.get("UserData", {})
     last_played_date = user_data.get("LastPlayedDate")
 
-    viewed_date = datetime.today()
+    viewed_date = datetime.now(UTC)
     if last_played_date:
-        viewed_date = datetime.fromisoformat(last_played_date.replace("Z", "+00:00"))
+        viewed_date = datetime.fromisoformat(last_played_date)
 
     return MediaItem(
         identifiers=extract_identifiers_from_item(
@@ -118,12 +116,12 @@ class JellyfinEmby:
         self.server_settings = server_settings
 
         if server_type not in ["Jellyfin", "Emby"]:
-            raise Exception(f"Server type {server_type} not supported")
+            raise ValueError(f"Server type {server_type} not supported")
         self.server_type: str = server_type
         self.headers: dict[str, str] = headers
 
         if not server_settings.baseurl:
-            raise Exception(f"{self.server_type} base_url not set")
+            raise ValueError(f"{self.server_type} base_url not set")
 
         self.session = requests.Session()
         self.users: dict[str, str] = self.get_users()
@@ -150,8 +148,9 @@ class JellyfinEmby:
                     timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
-                    raise Exception(
-                        f"Query failed with status {response.status_code} {response.reason}"
+                    raise requests.HTTPError(
+                        f"Query failed with status {response.status_code} {response.reason}",
+                        response=response,
                     )
                 if response.status_code == 204:
                     results = None
@@ -166,17 +165,17 @@ class JellyfinEmby:
                     timeout=self.app_settings.request_timeout,
                 )
                 if response.status_code not in [200, 204]:
-                    raise Exception(
-                        f"Query failed with status {response.status_code} {response.reason}"
+                    raise requests.HTTPError(
+                        f"Query failed with status {response.status_code} {response.reason}",
+                        response=response,
                     )
                 if response.status_code == 204:
                     results = None
                 else:
                     results = response.json()
 
-            if results:
-                if not isinstance(results, list) and not isinstance(results, dict):
-                    raise Exception("Query result is not of type list or dict")
+            if results and not isinstance(results, (list, dict)):
+                raise TypeError("Query result is not of type list or dict")
 
             # append identifiers to results
             if identifiers and isinstance(results, dict):
@@ -188,7 +187,7 @@ class JellyfinEmby:
             logger.error(
                 f"{self.server_type}: Query {query_type} {query}\nResults {results}\n{e}",
             )
-            raise Exception(e)
+            raise
 
     def info(
         self, name_only: bool = False, version_only: bool = False
@@ -210,7 +209,7 @@ class JellyfinEmby:
 
         except Exception as e:
             logger.error(f"{self.server_type}: Get server name failed {e}")
-            raise Exception(e)
+            raise
 
     def get_users(self) -> dict[str, str]:
         try:
@@ -226,14 +225,14 @@ class JellyfinEmby:
             return users
         except Exception as e:
             logger.error(f"{self.server_type}: Get users failed {e}")
-            raise Exception(e)
+            raise
 
     def get_libraries(self) -> dict[str, str]:
         libraries: dict[str, str] = {}
         for user in self.users.items():
             try:
                 libraries.update(self.get_user_libraries(user))
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Keep SDK discovery failures isolated to one user.
                 logger.warning(
                     "Skipping library discovery for user {} ({})",
                     user[0], type(error).__name__,
@@ -276,12 +275,12 @@ class JellyfinEmby:
                     )
                     continue
 
-                all_types = set(
-                    [x.get("Type") for x in library_items.get("Items", [])]
-                )
-                types = set([x for x in all_types if x in ["Movie", "Episode"]])
+                all_types = {
+                    x.get("Type") for x in library_items.get("Items", [])
+                }
+                types = {x for x in all_types if x in ["Movie", "Episode"]}
 
-                if not len(types) == 1:
+                if len(types) != 1:
                     logger.debug(
                         f"{self.server_type}: Skipping Library {library_title} didn't find just a single type, found {all_types}",
                     )
@@ -442,9 +441,9 @@ class JellyfinEmby:
                         k.lower(): v for k, v in show.get("ProviderIds", {}).items()
                     }
                     show_locations = (
-                        tuple([filename_from_any_path(show["Path"])])
+                        (filename_from_any_path(show["Path"]),)
                         if show.get("Path")
-                        else tuple()
+                        else ()
                     )
 
                     show_episodes = self.query(
@@ -499,7 +498,7 @@ class JellyfinEmby:
                         )
 
             return watched
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - A failed library fetch must remain unknown.
             logger.error(
                 f"{self.server_type}: Failed to get watched for {user_name} in library {library_title}, Error: {e}",
             )
@@ -580,7 +579,7 @@ class JellyfinEmby:
                     )
 
             return users_watched
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Keep SDK fetch failures isolated from other users and servers.
             logger.error(f"{self.server_type}: Failed to get watched, Error: {e}")
             return {}
 
@@ -646,7 +645,7 @@ class JellyfinEmby:
                     + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Movie&CollapseBoxSetItems=false",
                     "get",
                 )
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                 logger.debug(
                     f"{self.server_type}: Failed to get movies for {user_name} {library_name}: {error}"
                 )
@@ -695,7 +694,7 @@ class JellyfinEmby:
                                         "post",
                                         json=user_data_payload,
                                     )
-                                except Exception as error:
+                                except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                     logger.error(
                                         f"{self.server_type}: Failed to mark {jellyfin_video.get('Name')} as watched, Error: {error}"
                                     )
@@ -743,7 +742,7 @@ class JellyfinEmby:
                                         "post",
                                         json=user_data_payload,
                                     )
-                                except Exception as error:
+                                except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                     logger.error(
                                         f"{self.server_type}: Failed to update {jellyfin_video.get('Name')} timeline, Error: {error}"
                                     )
@@ -796,7 +795,7 @@ class JellyfinEmby:
                     + "&Fields=ItemCounts,ProviderIds,Path&IncludeItemTypes=Series",
                     "get",
                 )
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                 logger.debug(
                     f"{self.server_type}: Failed to get shows for {user_name} {library_name}: {error}"
                 )
@@ -840,7 +839,7 @@ class JellyfinEmby:
                                 + f"?userId={user_id}&Fields=ItemCounts,ProviderIds,Path",
                                 "get",
                             )
-                        except Exception as error:
+                        except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                             logger.debug(
                                 f"{self.server_type}: Failed to get episodes for {user_name} {library_name} {jellyfin_show.get('Name')}: {error}"
                             )
@@ -912,7 +911,7 @@ class JellyfinEmby:
                                                 "post",
                                                 json=user_data_payload,
                                             )
-                                        except Exception as error:
+                                        except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                             logger.error(
                                                 f"{self.server_type}: Failed to mark {episode_name} as watched, Error: {error}"
                                             )
@@ -970,7 +969,7 @@ class JellyfinEmby:
                                                 "post",
                                                 json=user_data_payload,
                                             )
-                                        except Exception as error:
+                                        except Exception as error:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                             logger.error(
                                                 f"{self.server_type}: Failed to update {episode_name} timeline, Error: {error}"
                                             )
@@ -1192,7 +1191,7 @@ class JellyfinEmby:
                         )
                         if outcomes:
                             write_outcomes.extend(outcomes)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - Keep an SDK failure isolated to this destination scope.
                         logger.error(
                             f"{self.server_type}: Error updating watched for {user_name} in {resolved_library_name}, {e}",
                         )

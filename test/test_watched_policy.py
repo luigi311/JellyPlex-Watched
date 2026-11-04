@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from conftest import settings_override
+
 from src.watched import (
     LibraryData,
     MediaIdentifiers,
@@ -27,13 +27,13 @@ def test_fanin_authorizes_each_source_before_coalescing(scope, reverse):
         {"server": "third", scope if scope == "library" else "username": "Merged"},
     ]
     settings = settings_override(
-        plex=[dict(name="plex-main", baseurl="http://plex", token="x", sync_to=[])],
+        plex=[{"name": "plex-main", "baseurl": "http://plex", "token": "x", "sync_to": []}],
         jellyfin=[
-            dict(name="jellyfin-main", baseurl="http://jf", token="x", sync_to=[]),
-            dict(name="third", baseurl="http://third", token="x", sync_to=[]),
+            {"name": "jellyfin-main", "baseurl": "http://jf", "token": "x", "sync_to": []},
+            {"name": "third", "baseurl": "http://third", "token": "x", "sync_to": []},
         ],
         **{
-            f"{scope}_mappings": [dict(canonical="combined", aliases=mapping)],
+            f"{scope}_mappings": [{"canonical": "combined", "aliases": mapping}],
             f"{scope}_sync_rules": [
                 {
                     ("libraries" if scope == "library" else "users"): ["Allowed"],
@@ -62,7 +62,7 @@ def test_fanin_authorizes_each_source_before_coalescing(scope, reverse):
                     status=WatchedStatus(
                         completed=True,
                         time=0,
-                        viewed_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        viewed_date=datetime(2026, 1, 1, tzinfo=UTC),
                     ),
                 )
             ],

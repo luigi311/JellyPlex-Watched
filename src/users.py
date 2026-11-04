@@ -67,7 +67,7 @@ def generate_user_list(server: Plex | Jellyfin | Emby) -> list[str]:
             )
 
     elif isinstance(server, (Jellyfin, Emby)):
-        server_users = [normalize_name(key) for key in server.users.keys()]
+        server_users = [normalize_name(key) for key in server.users]
 
     return server_users
 

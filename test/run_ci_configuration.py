@@ -11,9 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.legacy_settings import LEGACY_ENV_VARS  # noqa: E402
-from src.settings import AppSettings  # noqa: E402
-
+from src.legacy_settings import LEGACY_ENV_VARS
+from src.settings import AppSettings
 
 _CHECK_FLAGS = {
     "plex": "--plex",

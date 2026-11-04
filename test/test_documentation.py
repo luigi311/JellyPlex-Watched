@@ -13,7 +13,6 @@ from dotenv import dotenv_values
 from src.legacy_settings import LEGACY_ENV_VARS, legacy_env_to_field_dict
 from src.settings import AppSettings, load_settings
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

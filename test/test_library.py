@@ -17,8 +17,8 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
-from src.library import combine_library_lists, generate_server_libraries  # noqa: E402
-from src.plex import Plex  # noqa: E402
+from src.library import combine_library_lists, generate_server_libraries
+from src.plex import Plex
 
 
 def test_combine_library_lists_implicit_same_name():

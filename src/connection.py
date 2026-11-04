@@ -39,6 +39,6 @@ def generate_server_connections(settings: AppSettings) -> list[Plex | Jellyfin |
             servers.append(emby_server)
         else:
             msg = f"Invalid server type: {type(server)}"
-            raise Exception(msg)
+            raise TypeError(msg)
 
     return servers
