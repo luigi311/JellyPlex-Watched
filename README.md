@@ -81,10 +81,16 @@ When a legacy `.env` exists and no YAML file is present, a starter YAML file
 is generated without modifying `.env`. Generation is optional: if it cannot
 be written, the application continues loading the legacy configuration.
 
-The generated YAML remains a lower-priority configuration source. Removing
-or blanking a legacy setting does not erase its saved YAML value; this also
-applies to mappings and removed servers. If you continue managing only `.env`,
-delete the generated YAML after such removals and restart to regenerate it
+The generated YAML remains a lower-priority configuration source. Removed or
+blank legacy filters and mappings can still use their saved YAML values. A
+saved server list can also remain active when all legacy definitions for that
+server type are removed. Keeping `PLEX_BASEURL` while blanking or removing
+`PLEX_TOKEN`, without complete account credentials, instead leaves an
+incomplete legacy entry that fails validation; it does not inherit the YAML
+token.
+
+If you continue managing only `.env`, delete the generated YAML after removing
+filters, mappings, or complete server definitions and restart to regenerate it
 from the current `.env`. Preserve any manual YAML-only changes before doing
 so. Process-environment-only deployments without a dotenv file do not
 auto-generate YAML.

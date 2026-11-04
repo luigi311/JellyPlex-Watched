@@ -1593,10 +1593,14 @@ _MIGRATION_HEADER = """\
 # format. New features (user_sync_rules, named server references,
 # more granular controls) are only available via this YAML file.
 #
-# Blank or removed .env settings do not erase values saved in this file,
-# including mappings and server entries. If you manage only .env, delete
-# this generated file after such removals and restart to rebuild it from
-# the current .env. Preserve any manual YAML-only changes before deleting.
+# Blank or removed filters and mappings can still use their saved values.
+# A saved server list can remain when all legacy definitions of that type
+# are removed. Keeping PLEX_BASEURL with a blank or missing PLEX_TOKEN and
+# no complete account credentials instead fails validation; the YAML token
+# is not inherited. If you manage only .env, delete this generated file
+# after removing filters, mappings, or complete server definitions, then
+# restart to rebuild it from the current .env. Preserve any manual YAML-only
+# changes before deleting.
 #
 # NOTE on user_mappings / library_mappings:
 #   The legacy USER_MAPPING / LIBRARY_MAPPING format didn't record which
