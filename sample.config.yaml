@@ -38,7 +38,8 @@ generate_locations: true # match items across servers via file paths
 # --- filtering (global defaults, overridden by matching scope rules) --------
 # Whitelist beats blacklist: if a whitelist is non-empty, only listed
 # entries pass and the matching blacklist is ignored. Can be list or
-# new line entries. Library types use the values reported by each adapter:
+# new line entries. Name filters match a canonical identity or any mapped
+# alias, in either direction. Library types use the values reported by each adapter:
 # Plex uses movie/show; Jellyfin and Emby use movies/tvshows.
 # Without a library override, configured type filters require known types
 # for both source and destination libraries before writing history.

@@ -1326,7 +1326,8 @@ class AppSettings(BaseModel):
         Decide whether a library can participate in directional discovery.
         A matching library rule overrides name and type
         filters for the mapped pair. Otherwise normal filters apply to the
-        source name and both endpoint types, and server-level sync_to or a
+        source library's canonical identity and aliases, and both endpoint
+        types. Server-level sync_to or a
         user rule must enable the direction. Use should_sync_scope to authorize
         a concrete user/library pair before planning or writing.
         Normal type filtering requires known types for both endpoints.
@@ -1337,8 +1338,18 @@ class AppSettings(BaseModel):
         if self._matches_library_rule(library, from_server, to_server):
             return True
 
+        library_lc = normalize_name(library)
+        canonical = self._library_index.get((from_server, library_lc))
+        identity = {library_lc}
+        if canonical is not None:
+            identity.add(canonical)
+            identity.update(
+                normalize_name(alias.library)
+                for alias in self._library_aliases_by_canonical.get(canonical, [])
+            )
+
         if not self._is_allowed_by_name_filter(
-            {normalize_name(library)},
+            identity,
             self._whitelist_libraries_lc,
             self._blacklist_libraries_lc,
         ):

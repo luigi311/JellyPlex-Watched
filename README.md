@@ -222,8 +222,9 @@ Rules for other directions do not restrict this one. A wildcard rule uses
 runtime identities and overrides the corresponding filters for all matches.
 
 Without a matching exception, a non-empty whitelist takes precedence over its
-blacklist. Otherwise blacklist matches are rejected. User filters resolve the
-source server's canonical identity and aliases. Without a matching library
+blacklist. Otherwise blacklist matches are rejected. User and library name
+filters resolve the source server's canonical identity and all its aliases,
+so a filter naming one mapped alias applies in both directions. Without a matching library
 exception, configured type filters require both endpoint types to be known and
 allowed before writing history. Mappings still resolve actual accounts and
 libraries; unmapped identities use same-name matching only when

@@ -804,6 +804,36 @@ def test_legacy_case_equal_mapping_aliases_load_and_migrate(
         assert lookup("jellyfin-main", "robert") == "bob"
 
 
+@pytest.mark.parametrize("filter_kind", ["BLACKLIST", "WHITELIST"])
+@pytest.mark.parametrize("filter_name", ["Movies", "Films"])
+def test_legacy_mapped_library_filters_survive_migration(
+    tmp_path: Path,
+    controlled_environment: None,
+    filter_kind: str,
+    filter_name: str,
+) -> None:
+    env = {
+        **LEGACY_PLEX_ACCOUNT_ENV,
+        "LIBRARY_MAPPING": '{"Movies":"Films"}',
+        f"{filter_kind}_LIBRARY": filter_name,
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    for loaded in (settings, migrated):
+        for library, source, target in (
+            ("Movies", "plex-main", "jellyfin-main"),
+            ("Films", "jellyfin-main", "plex-main"),
+        ):
+            assert loaded.should_sync_scope(
+                "alice", library, source, target
+            ) is (filter_kind == "WHITELIST")
+
+
 @pytest.mark.parametrize(
     "mapping_key",
     ["USER_MAPPING", "LIBRARY_MAPPING"],
