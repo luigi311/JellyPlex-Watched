@@ -247,7 +247,9 @@ class _ServerBase(BaseModel):
         ...,
         description="User-defined identifier, unique across all servers.",
     )
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+    baseurl: str | None = Field(
+        ..., description="Server base URL, e.g. http://plex.lan:32400"
+    )
     sync_to: list[str] = Field(
         default_factory=list,
         description=(
@@ -308,10 +310,12 @@ class PlexSettings(_ServerBase):
 
 
 class JellyfinSettings(_ServerBase):
+    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
     token: SecretStr = Field(...)
 
 
 class EmbySettings(_ServerBase):
+    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
     token: SecretStr = Field(...)
 
 

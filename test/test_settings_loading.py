@@ -22,7 +22,10 @@ from src.plex import Plex
 from src.runtime_paths import main as runtime_paths_main
 from src.settings import (
     AppSettings,
+    EmbySettings,
+    JellyfinSettings,
     PlexSettings,
+    _ServerBase,
     _SettingsLoader,
     _dump_for_yaml,
     _migrate_env_to_yaml,
@@ -1247,6 +1250,42 @@ def test_legacy_plex_account_and_token_slots_keep_their_indexes() -> None:
     assert settings.plex[1].baseurl is None
     assert settings.plex[1].token is None
     assert settings.plex[1].username == "plex-user"
+
+
+def test_common_server_contract_accepts_url_less_plex_accounts() -> None:
+    settings = settings_override(
+        plex=[
+            {
+                "name": "plex-main",
+                "username": "plex-user",
+                "password": "plex-password",
+                "servername": "Plex Server",
+                "sync_to": ["jellyfin-main"],
+            }
+        ]
+    )
+
+    server = _ServerBase.model_validate(settings.all_servers[0].model_dump())
+
+    assert server.baseurl is None
+
+
+@pytest.mark.parametrize("server_model", [JellyfinSettings, EmbySettings])
+@pytest.mark.parametrize("url_fields", [{}, {"baseurl": None}])
+def test_token_server_baseurl_remains_required(server_model, url_fields) -> None:
+    with pytest.raises(ValidationError, match="baseurl"):
+        server_model.model_validate(
+            {"name": "server", "token": "synthetic-token", **url_fields}
+        )
+
+
+@pytest.mark.parametrize("server_model", [JellyfinSettings, EmbySettings])
+def test_token_server_baseurl_still_strips_trailing_slashes(server_model) -> None:
+    server = server_model.model_validate(
+        {"name": "server", "baseurl": "http://server/", "token": "synthetic-token"}
+    )
+
+    assert server.baseurl == "http://server"
 
 
 @pytest.mark.parametrize("baseurl", [None, ""])
