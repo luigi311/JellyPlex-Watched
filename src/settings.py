@@ -247,7 +247,9 @@ class _ServerBase(BaseModel):
         ...,
         description="User-defined identifier, unique across all servers.",
     )
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+    baseurl: str | None = Field(
+        ..., description="Server base URL, e.g. http://plex.lan:32400"
+    )
     sync_to: list[str] = Field(
         default_factory=list,
         description=(
@@ -260,8 +262,8 @@ class _ServerBase(BaseModel):
 
     @field_validator("baseurl")
     @classmethod
-    def _strip_trailing_slash(cls, v: str) -> str:
-        return v.rstrip("/")
+    def _strip_trailing_slash(cls, v: str | None) -> str | None:
+        return v.rstrip("/") if v is not None else None
 
 
 class PlexSettings(_ServerBase):
@@ -270,6 +272,10 @@ class PlexSettings(_ServerBase):
     servername triple. Validators ensure exactly one path is fully populated.
     """
 
+    baseurl: str | None = Field(
+        default=None,
+        description="Required for token authentication; optional for account discovery.",
+    )
     token: SecretStr | None = None
     username: str | None = None
     password: SecretStr | None = None
@@ -296,14 +302,20 @@ class PlexSettings(_ServerBase):
                 f"Plex server '{self.name}' needs either a 'token' or "
                 "the 'username'/'password'/'servername' triple."
             )
+        if has_token and not self.baseurl:
+            raise ValueError(
+                f"Plex server '{self.name}' needs a 'baseurl' for token authentication."
+            )
         return self
 
 
 class JellyfinSettings(_ServerBase):
+    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
     token: SecretStr = Field(...)
 
 
 class EmbySettings(_ServerBase):
+    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
     token: SecretStr = Field(...)
 
 
@@ -701,7 +713,7 @@ class AppSettings(BaseModel):
     dryrun: bool = True
     debug_level: Literal["INFO", "DEBUG", "TRACE"] = "INFO"
     run_only_once: bool = False
-    sleep_duration: int = 3600
+    sleep_duration: Annotated[float, Field(ge=0, allow_inf_nan=False)] = 3600
     log_file: Path = Path("log.log")
     mark_file: Path = Path("mark.log")
     request_timeout: int = 300
@@ -1318,7 +1330,8 @@ class AppSettings(BaseModel):
         Decide whether a library can participate in directional discovery.
         A matching library rule overrides name and type
         filters for the mapped pair. Otherwise normal filters apply to the
-        source name and both endpoint types, and server-level sync_to or a
+        source library's canonical identity and aliases, and both endpoint
+        types. Server-level sync_to or a
         user rule must enable the direction. Use should_sync_scope to authorize
         a concrete user/library pair before planning or writing.
         Normal type filtering requires known types for both endpoints.
@@ -1329,8 +1342,18 @@ class AppSettings(BaseModel):
         if self._matches_library_rule(library, from_server, to_server):
             return True
 
+        library_lc = normalize_name(library)
+        canonical = self._library_index.get((from_server, library_lc))
+        identity = {library_lc}
+        if canonical is not None:
+            identity.add(canonical)
+            identity.update(
+                normalize_name(alias.library)
+                for alias in self._library_aliases_by_canonical.get(canonical, [])
+            )
+
         if not self._is_allowed_by_name_filter(
-            {normalize_name(library)},
+            identity,
             self._whitelist_libraries_lc,
             self._blacklist_libraries_lc,
         ):

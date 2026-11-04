@@ -4,6 +4,7 @@ import os
 import stat
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -17,8 +18,14 @@ from src.legacy_settings import (
     legacy_env_to_field_dict,
     resolve_legacy_env,
 )
+from src.plex import Plex
+from src.runtime_paths import main as runtime_paths_main
 from src.settings import (
     AppSettings,
+    EmbySettings,
+    JellyfinSettings,
+    PlexSettings,
+    _ServerBase,
     _SettingsLoader,
     _dump_for_yaml,
     _migrate_env_to_yaml,
@@ -186,6 +193,14 @@ LEGACY_MULTI_SERVER_ENV = {
     "USER_MAPPING": '{"alice": "alice-jellyfin"}',
     "LIBRARY_MAPPING": '{"TV Shows": "Shows"}',
     "SYNC_FROM_PLEX_TO_JELLYFIN": "true",
+    "SYNC_FROM_PLEX_TO_PLEX": "false",
+    "SYNC_FROM_PLEX_TO_EMBY": "false",
+    "SYNC_FROM_JELLYFIN_TO_PLEX": "false",
+    "SYNC_FROM_JELLYFIN_TO_JELLYFIN": "false",
+    "SYNC_FROM_JELLYFIN_TO_EMBY": "false",
+    "SYNC_FROM_EMBY_TO_PLEX": "false",
+    "SYNC_FROM_EMBY_TO_JELLYFIN": "false",
+    "SYNC_FROM_EMBY_TO_EMBY": "false",
 }
 
 LEGACY_PLEX_ACCOUNT_ENV = {
@@ -587,14 +602,82 @@ def test_legacy_fixture_covers_all_server_types_and_multiple_entries(
     assert settings.whitelist_libraries == ["Movies"]
 
 
+@pytest.mark.parametrize(
+    "flag", sorted(name for name in LEGACY_ENV_VARS if name.startswith("SYNC_FROM_"))
+)
+@pytest.mark.parametrize("raw", ["true", "false", "", None])
+def test_legacy_sync_flags_preserve_other_direction_defaults(
+    flag: str, raw: str | None
+) -> None:
+    env = {
+        key: value
+        for key, value in LEGACY_MULTI_SERVER_ENV.items()
+        if key.endswith(("_BASEURL", "_TOKEN"))
+    }
+    translated = legacy_env_to_field_dict({**env, flag: raw})
+    settings = settings_override(**translated)
+    _, _, from_type, _, to_type = flag.lower().split("_")
+
+    for source in settings.all_servers:
+        for target in settings.all_servers:
+            if source.name == target.name:
+                continue
+            disabled = (
+                raw == "false"
+                and source.name.startswith(f"{from_type}-")
+                and target.name.startswith(f"{to_type}-")
+            )
+            assert settings.should_sync_server(source.name, target.name) is not disabled
+
+
+@pytest.mark.parametrize("process_flag", [False, True])
+@pytest.mark.parametrize("auto_migrate", [False, True])
+def test_legacy_partial_sync_flags_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    process_flag: bool,
+    auto_migrate: bool,
+) -> None:
+    env = {
+        "PLEX_BASEURL": "http://plex",
+        "PLEX_TOKEN": "plex-token",
+        "JELLYFIN_BASEURL": "http://jellyfin",
+        "JELLYFIN_TOKEN": "jellyfin-token",
+    }
+    flag = "SYNC_FROM_PLEX_TO_JELLYFIN"
+    if process_flag:
+        monkeypatch.setenv(flag, "false")
+    else:
+        env[flag] = "false"
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env),
+        yaml_file=yaml_path,
+        auto_migrate=auto_migrate,
+    )
+
+    assert not settings.should_sync_server("plex-main", "jellyfin-main")
+    assert settings.should_sync_server("jellyfin-main", "plex-main")
+    if auto_migrate:
+        monkeypatch.delenv(flag, raising=False)
+        migrated = load_settings(
+            env_file=tmp_path / "absent.env",
+            yaml_file=yaml_path,
+            auto_migrate=False,
+        )
+        assert not migrated.should_sync_server("plex-main", "jellyfin-main")
+        assert migrated.should_sync_server("jellyfin-main", "plex-main")
+
+
 def test_legacy_indexed_credentials_preserve_empty_slots() -> None:
     translated = legacy_env_to_field_dict(
         {
             "PLEX_BASEURL": "http://plex-1,http://plex-2,http://plex-3",
             "PLEX_TOKEN": "plex-token-1,,plex-token-3",
-            "PLEX_USERNAME": "plex-user-1,plex-user-2,plex-user-3",
-            "PLEX_PASSWORD": "plex-password-1,plex-password-2,plex-password-3",
-            "PLEX_SERVERNAME": "Plex 1,Plex 2,Plex 3",
+            "PLEX_USERNAME": ",plex-user-2,",
+            "PLEX_PASSWORD": ",plex-password-2,",
+            "PLEX_SERVERNAME": ",Plex 2,",
             "JELLYFIN_BASEURL": "http://jellyfin-1,http://jellyfin-2,http://jellyfin-3",
             "JELLYFIN_TOKEN": "jellyfin-token-1,,jellyfin-token-3",
         }
@@ -688,6 +771,71 @@ def test_legacy_credential_warnings_render_skipped_server() -> None:
         for message in messages
     )
     assert all("%s" not in message and "%d" not in message for message in messages)
+
+
+@pytest.mark.parametrize("mapping_key", ["USER_MAPPING", "LIBRARY_MAPPING"])
+@pytest.mark.parametrize("pair", [("Alice", "alice"), ("Straße", "STRASSE")])
+def test_legacy_case_equal_mapping_aliases_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    mapping_key: str,
+    pair: tuple[str, str],
+) -> None:
+    left, right = pair
+    env = {
+        **LEGACY_PLEX_ACCOUNT_ENV,
+        mapping_key: f'{{"{left}":"{right}","Bob":"robert"}}',
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    for loaded in (settings, migrated):
+        mappings = (
+            loaded.user_mappings if mapping_key == "USER_MAPPING"
+            else loaded.library_mappings
+        )
+        assert len(mappings) == 2
+        assert len(mappings[0].aliases) == 2
+        lookup = (
+            loaded.lookup_user if mapping_key == "USER_MAPPING"
+            else loaded.lookup_library
+        )
+        assert lookup("plex-main", right) == left.casefold()
+        assert lookup("jellyfin-main", "robert") == "bob"
+
+
+@pytest.mark.parametrize("filter_kind", ["BLACKLIST", "WHITELIST"])
+@pytest.mark.parametrize("filter_name", ["Movies", "Films"])
+def test_legacy_mapped_library_filters_survive_migration(
+    tmp_path: Path,
+    controlled_environment: None,
+    filter_kind: str,
+    filter_name: str,
+) -> None:
+    env = {
+        **LEGACY_PLEX_ACCOUNT_ENV,
+        "LIBRARY_MAPPING": '{"Movies":"Films"}',
+        f"{filter_kind}_LIBRARY": filter_name,
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    for loaded in (settings, migrated):
+        for library, source, target in (
+            ("Movies", "plex-main", "jellyfin-main"),
+            ("Films", "jellyfin-main", "plex-main"),
+        ):
+            assert loaded.should_sync_scope(
+                "alice", library, source, target
+            ) is (filter_kind == "WHITELIST")
 
 
 @pytest.mark.parametrize(
@@ -977,6 +1125,231 @@ def test_legacy_fixture_covers_plex_username_password_auth(
     assert settings.plex[0].password is not None
     assert settings.plex[0].password.get_secret_value() == "plex-password"
     assert settings.plex[0].servername == "Plex Account Server"
+
+
+@pytest.mark.parametrize("auto_migrate", [False, True])
+def test_legacy_plex_account_discovery_without_baseurl(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    auto_migrate: bool,
+) -> None:
+    env = {
+        key: value
+        for key, value in LEGACY_PLEX_ACCOUNT_ENV.items()
+        if key != "PLEX_BASEURL"
+    }
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env),
+        yaml_file=yaml_path,
+        auto_migrate=auto_migrate,
+    )
+    assert settings.plex[0].baseurl is None
+    assert settings.should_sync_server("plex-main", "jellyfin-main")
+    if auto_migrate:
+        settings = load_settings(
+            env_file=tmp_path / "missing.env",
+            yaml_file=yaml_path,
+            auto_migrate=False,
+        )
+        assert settings.plex[0].baseurl is None
+
+    server = Mock(_baseurl="http://discovered-plex")
+    server.myPlexAccount.return_value.users.return_value = []
+    account = Mock()
+    account.resource.return_value.connect.return_value = server
+    login = Mock(return_value=account)
+    monkeypatch.setattr("src.plex.MyPlexAccount", login)
+    direct_login = Mock(side_effect=AssertionError("Expected account discovery"))
+    monkeypatch.setattr("src.plex.PlexServer", direct_login)
+
+    plex = Plex(settings, settings.plex[0])
+
+    login.assert_called_once_with("plex-user", "plex-password")
+    account.resource.assert_called_once_with("Plex Account Server")
+    assert plex.base_url == "http://discovered-plex"
+
+
+@pytest.mark.parametrize("process_values", [False, True])
+@pytest.mark.parametrize("include_jellyfin", [False, True])
+def test_legacy_independent_plex_auth_lists_load_and_migrate(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    process_values: bool,
+    include_jellyfin: bool,
+) -> None:
+    env = {
+        "PLEX_BASEURL": "http://direct-plex",
+        "PLEX_TOKEN": "direct-token",
+        "PLEX_USERNAME": "plex-user",
+        "PLEX_PASSWORD": "plex-password",
+        "PLEX_SERVERNAME": "Discovered Server",
+    }
+    if include_jellyfin:
+        env.update(JELLYFIN_BASEURL="http://jellyfin", JELLYFIN_TOKEN="jellyfin-token")
+    if process_values:
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, {} if process_values else env),
+        yaml_file=yaml_path,
+    )
+    for name in env:
+        monkeypatch.delenv(name, raising=False)
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    assert _effective_settings(settings) == _effective_settings(migrated)
+    for loaded in (settings, migrated):
+        assert [server.name for server in loaded.plex] == ["plex-1", "plex-2"]
+        assert loaded.plex[0].token is not None
+        assert loaded.plex[0].token.get_secret_value() == "direct-token"
+        assert loaded.plex[1].baseurl is None
+        assert loaded.plex[1].username == "plex-user"
+        assert loaded.should_sync_server("plex-1", "plex-2")
+        assert loaded.should_sync_server("plex-2", "plex-1")
+
+    direct_server = Mock(_baseurl="http://direct-plex")
+    account_server = Mock(_baseurl="http://discovered-plex")
+    for server in (direct_server, account_server):
+        server.myPlexAccount.return_value.users.return_value = []
+    direct_login = Mock(return_value=direct_server)
+    monkeypatch.setattr("src.plex.PlexServer", direct_login)
+    account = Mock()
+    account.resource.return_value.connect.return_value = account_server
+    account_login = Mock(return_value=account)
+    monkeypatch.setattr("src.plex.MyPlexAccount", account_login)
+
+    connections = [Plex(settings, config) for config in settings.plex]
+
+    assert [server.base_url for server in connections] == [
+        "http://direct-plex", "http://discovered-plex"
+    ]
+    direct_login.assert_called_once_with("http://direct-plex", "direct-token", session=None)
+    account_login.assert_called_once_with("plex-user", "plex-password")
+    account.resource.assert_called_once_with("Discovered Server")
+
+
+def test_legacy_plex_account_and_token_slots_keep_their_indexes() -> None:
+    translated = legacy_env_to_field_dict(
+        {
+            "PLEX_BASEURL": "http://direct-plex,",
+            "PLEX_TOKEN": "direct-token,",
+            "PLEX_USERNAME": ",plex-user",
+            "PLEX_PASSWORD": ",plex-password",
+            "PLEX_SERVERNAME": ",Discovered Server",
+        }
+    )
+    settings = settings_override(jellyfin=[], **translated)
+    assert [server.name for server in settings.plex] == ["plex-1", "plex-2"]
+    assert settings.plex[0].baseurl == "http://direct-plex"
+    assert settings.plex[0].token is not None
+    assert settings.plex[1].baseurl is None
+    assert settings.plex[1].token is None
+    assert settings.plex[1].username == "plex-user"
+
+
+def test_common_server_contract_accepts_url_less_plex_accounts() -> None:
+    settings = settings_override(
+        plex=[
+            {
+                "name": "plex-main",
+                "username": "plex-user",
+                "password": "plex-password",
+                "servername": "Plex Server",
+                "sync_to": ["jellyfin-main"],
+            }
+        ]
+    )
+
+    server = _ServerBase.model_validate(settings.all_servers[0].model_dump())
+
+    assert server.baseurl is None
+
+
+@pytest.mark.parametrize("server_model", [JellyfinSettings, EmbySettings])
+@pytest.mark.parametrize("url_fields", [{}, {"baseurl": None}])
+def test_token_server_baseurl_remains_required(server_model, url_fields) -> None:
+    with pytest.raises(ValidationError, match="baseurl"):
+        server_model.model_validate(
+            {"name": "server", "token": "synthetic-token", **url_fields}
+        )
+
+
+@pytest.mark.parametrize("server_model", [JellyfinSettings, EmbySettings])
+def test_token_server_baseurl_still_strips_trailing_slashes(server_model) -> None:
+    server = server_model.model_validate(
+        {"name": "server", "baseurl": "http://server/", "token": "synthetic-token"}
+    )
+
+    assert server.baseurl == "http://server"
+
+
+@pytest.mark.parametrize("baseurl", [None, ""])
+def test_plex_token_auth_requires_baseurl(baseurl: str | None) -> None:
+    with pytest.raises(ValidationError, match="baseurl"):
+        PlexSettings(name="plex-main", baseurl=baseurl, token=SecretStr("synthetic-token"))
+
+
+@pytest.mark.parametrize("raw", ["30.0", "0.5"])
+@pytest.mark.parametrize("process_value", [False, True])
+def test_legacy_decimal_sleep_duration_survives_migration(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+    process_value: bool,
+) -> None:
+    env = dict(LEGACY_PLEX_ACCOUNT_ENV)
+    if process_value:
+        monkeypatch.setenv("SLEEP_DURATION", raw)
+    else:
+        env["SLEEP_DURATION"] = raw
+    yaml_path = tmp_path / "config.yaml"
+    settings = load_settings(
+        env_file=_write_env(tmp_path, env), yaml_file=yaml_path
+    )
+    assert settings.sleep_duration == float(raw)
+    monkeypatch.delenv("SLEEP_DURATION", raising=False)
+    migrated = load_settings(
+        env_file=tmp_path / "absent.env", yaml_file=yaml_path, auto_migrate=False
+    )
+    assert migrated.sleep_duration == float(raw)
+
+
+@pytest.mark.parametrize("raw", ["invalid", "nan", "inf", "-1"])
+def test_invalid_legacy_sleep_duration_is_rejected(raw: str) -> None:
+    with pytest.raises((ValueError, ValidationError)):
+        settings_override(**legacy_env_to_field_dict({"SLEEP_DURATION": raw}))
+
+
+@pytest.mark.parametrize("field_name", ["REQUEST_TIMEOUT", "MAX_THREADS"])
+def test_invalid_legacy_integer_is_rejected(field_name: str) -> None:
+    with pytest.raises(SettingsError, match=field_name) as error:
+        legacy_env_to_field_dict({field_name: "synthetic-invalid-value"})
+    assert "synthetic-invalid-value" not in str(error.value)
+
+
+@pytest.mark.parametrize("field_name", ["DRYRUN", "REQUEST_TIMEOUT", "SLEEP_DURATION"])
+def test_runtime_preflight_identifies_invalid_legacy_configuration(
+    tmp_path: Path,
+    controlled_environment: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    field_name: str,
+) -> None:
+    monkeypatch.setenv("ENV_FILE", str(tmp_path / "absent.env"))
+    monkeypatch.setenv("YAML_FILE", str(_write_yaml(tmp_path, _base_yaml())))
+    monkeypatch.setenv(field_name, "synthetic-invalid-value")
+
+    assert runtime_paths_main() == 1
+    message = capsys.readouterr().err
+    assert "configuration source error" in message
+    assert "runtime file path" not in message
+    assert "synthetic-invalid-value" not in message
 
 
 @pytest.mark.parametrize(

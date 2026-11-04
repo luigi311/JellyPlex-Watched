@@ -141,6 +141,11 @@ file. Legacy loading remains supported. Prefixing new variables and changing
 legacy process/file precedence do not deprecate or remove the legacy runtime
 path.
 
+Legacy `SYNC_FROM_*_TO_*` flags default to enabled independently. Setting one
+flag leaves omitted, empty, and valueless flags enabled; explicitly set each
+direction you want to disable to `false`. YAML `sync_to` lists remain explicit:
+an omitted or empty list enables no outgoing directions for that server.
+
 Legacy `USER_MAPPING` and `LIBRARY_MAPPING` entries are expanded onto every
 configured server because the old format does not identify the owning server.
 Generated migration entries carry `legacy: true`; if both names from one pair
@@ -148,7 +153,36 @@ are discovered on a server, that mapping is skipped and a warning identifies
 the configuration to review. Replace the entry with server-scoped YAML aliases
 before syncing those accounts or libraries.
 
+Legacy decimal `SLEEP_DURATION` values such as `30.0` or `0.5` retain their
+interval in seconds. YAML `sleep_duration` and `JPW_SLEEP_DURATION` also accept
+finite, non-negative fractional seconds; invalid durations fail validation.
+Malformed legacy `REQUEST_TIMEOUT` and `MAX_THREADS` values are rejected
+instead of silently using defaults.
+
+Dry-run now defaults to `true` for all installations, including a legacy file
+without `DRYRUN`. Set `DRYRUN=false` or `dryrun: false` to apply watched updates.
+
+`DEBUG` is a supported boolean alias added with the settings migration. If
+your shell uses it for another tool (for example `DEBUG=app:*`), unset it or
+set process `DEBUG_LEVEL=INFO` explicitly. A process `DEBUG` takes precedence
+over a dotenv `DEBUG_LEVEL`, and invalid boolean values fail configuration
+loading rather than being ignored.
+
+Legacy mapping pairs that differ only by case produce one alias per server.
+
 ### Credentials and named overrides
+
+Plex token authentication requires a `baseurl`. Account authentication uses
+the `username`, `password`, and `servername` triple and discovers the server
+through the Plex account, so `baseurl` may be omitted. Legacy account variables
+`PLEX_USERNAME`, `PLEX_PASSWORD`, and `PLEX_SERVERNAME` work without
+`PLEX_BASEURL` as well.
+
+Legacy URL/token lists and username/password/server-name lists are independent.
+If both authentication modes are configured, both sets of Plex connections are
+created; no padding is required between the two modes. With multiple servers,
+generated names are numbered `plex-1`, `plex-2`, and so on. Review generated
+names before referring to them in YAML mappings, rules, or token overrides.
 
 `JPW_SERVER_TOKENS` is a JSON object whose keys are exact configured server
 names and whose values are non-empty replacement credentials. It patches the
@@ -166,6 +200,8 @@ A legacy `PLEX_TOKEN` without `PLEX_BASEURL` is a token-only override only when
 exactly one Plex server is already configured by a higher-priority source. A
 complete legacy base URL/token configuration retains its indexed server-list
 behavior.
+If no Plex server is configured, remove a stale `PLEX_TOKEN`; it now reports
+a configuration error instead of being ignored.
 
 ### Rules and filters
 
@@ -203,8 +239,9 @@ Rules for other directions do not restrict this one. A wildcard rule uses
 runtime identities and overrides the corresponding filters for all matches.
 
 Without a matching exception, a non-empty whitelist takes precedence over its
-blacklist. Otherwise blacklist matches are rejected. User filters resolve the
-source server's canonical identity and aliases. Without a matching library
+blacklist. Otherwise blacklist matches are rejected. User and library name
+filters resolve the source server's canonical identity and all its aliases,
+so a filter naming one mapped alias applies in both directions. Without a matching library
 exception, configured type filters require both endpoint types to be known and
 allowed before writing history. Mappings still resolve actual accounts and
 libraries; unmapped identities use same-name matching only when

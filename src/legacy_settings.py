@@ -13,7 +13,9 @@ from typing import Any
 from dotenv import dotenv_values
 from loguru import logger
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsError
+
+from src.functions import normalize_name
 
 LegacyEnvPath = Path | str | Sequence[Path | str] | None
 
@@ -131,16 +133,25 @@ def _env_as_bool(v: str | None, field_name: str) -> bool | None:
         return True
     if normalized in _FALSE_BOOLEAN_VALUES:
         return False
-    raise ValueError(f"invalid boolean value for {field_name}")
+    raise SettingsError(f"invalid boolean value for {field_name}")
 
 
-def _env_as_int(v: str | None) -> int | None:
+def _env_as_int(v: str | None, field_name: str) -> int | None:
     if v is None or v == "":
         return None
     try:
         return int(v)
     except ValueError:
+        raise SettingsError(f"invalid integer value for {field_name}") from None
+
+
+def _env_as_float(v: str | None, field_name: str) -> float | None:
+    if v is None or v == "":
         return None
+    try:
+        return float(v)
+    except ValueError:
+        raise SettingsError(f"invalid numeric value for {field_name}") from None
 
 
 def _env_as_list(v: str | None) -> list[str]:
@@ -217,38 +228,59 @@ def _build_plex_servers(env: dict[str, str | None]) -> list[dict[str, Any]]:
     """
     Build Plex server entries from comma-separated legacy vars.
 
-    Servers are paired by index across PLEX_BASEURL / PLEX_TOKEN /
-    PLEX_USERNAME / PLEX_PASSWORD / PLEX_SERVERNAME. Each baseurl produces
-    one entry; auth fields are taken from the same index when present.
+    PLEX_BASEURL / PLEX_TOKEN and the PLEX_USERNAME / PLEX_PASSWORD /
+    PLEX_SERVERNAME triple are independent indexed lists. Configuring both
+    authentication modes creates both sets of servers.
     """
     baseurls = _env_as_indexed_list(env.get("PLEX_BASEURL"))
-    server_count = sum(bool(baseurl) for baseurl in baseurls)
-    if not server_count:
-        return []
-
     tokens = _env_as_indexed_list(env.get("PLEX_TOKEN"))
     usernames = _env_as_indexed_list(env.get("PLEX_USERNAME"))
     passwords = _env_as_indexed_list(env.get("PLEX_PASSWORD"))
     servernames = _env_as_indexed_list(env.get("PLEX_SERVERNAME"))
     ssl_bypass = _env_as_bool(env.get("SSL_BYPASS"), "SSL_BYPASS")
+    account_fields = (usernames, passwords, servernames)
+    account_indexes = [
+        i
+        for i in range(max(map(len, account_fields)))
+        if any(i < len(values) and values[i] for values in account_fields)
+    ]
 
-    servers: list[dict[str, Any]] = []
+    indexed_servers: list[tuple[int, dict[str, Any]]] = []
     for i, baseurl in enumerate(baseurls):
         if not baseurl:
             continue
-        entry: dict[str, Any] = {
-            "name": f"plex-{i + 1}" if server_count > 1 else "plex-main",
-            "baseurl": baseurl,
-        }
-        if i < len(tokens) and tokens[i]:
+        has_token = i < len(tokens) and bool(tokens[i])
+        if not has_token and i in account_indexes:
+            continue
+        entry: dict[str, Any] = {"baseurl": baseurl}
+        if has_token:
             entry["token"] = tokens[i]
-        else:
-            if i < len(usernames) and usernames[i]:
-                entry["username"] = usernames[i]
-            if i < len(passwords) and passwords[i]:
-                entry["password"] = passwords[i]
-            if i < len(servernames) and servernames[i]:
-                entry["servername"] = servernames[i]
+        indexed_servers.append((i, entry))
+
+    for i in account_indexes:
+        entry = {}
+        baseurl = baseurls[i] if i < len(baseurls) else ""
+        if baseurl and not (i < len(tokens) and tokens[i]):
+            # Retain an account entry's optional URL when that slot does not
+            # belong to a separate direct-token connection.
+            entry["baseurl"] = baseurl
+        for field_name, values in zip(
+            ("username", "password", "servername"), account_fields
+        ):
+            if i < len(values) and values[i]:
+                entry[field_name] = values[i]
+        indexed_servers.append((i, entry))
+
+    indexes = [i for i, _ in indexed_servers]
+    overlapping_indexes = len(indexes) != len(set(indexes))
+    if not overlapping_indexes:
+        indexed_servers.sort(key=lambda item: item[0])
+    servers: list[dict[str, Any]] = []
+    for position, (i, entry) in enumerate(indexed_servers):
+        # Independent auth lists can share positions. Number the combined
+        # list in that case; otherwise preserve existing names and gaps.
+        number = position + 1 if overlapping_indexes else i + 1
+        entry["name"] = f"plex-{number}" if len(indexed_servers) > 1 else "plex-main"
         if ssl_bypass is not None:
             entry["ssl_bypass"] = ssl_bypass
         servers.append(entry)
@@ -323,7 +355,9 @@ def _build_sync_to(
 
     def is_set(src: str, dst: str) -> bool:
         flag = f"SYNC_FROM_{src.upper()}_TO_{dst.upper()}"
-        return bool(_env_as_bool(env.get(flag), flag))
+        # Legacy directions defaulted to enabled independently. Setting one
+        # flag must not disable every other, omitted direction.
+        return _env_as_bool(env.get(flag), flag) is not False
 
     result: dict[str, list[str]] = {}
     type_order = ["plex", "jellyfin", "emby"]
@@ -371,9 +405,12 @@ def _build_legacy_mappings(
 
     out: list[dict[str, Any]] = []
     for left, right in pairs.items():
+        alias_values = [left]
+        if normalize_name(left) != normalize_name(right):
+            alias_values.append(right)
         aliases: list[dict[str, Any]] = []
         for server in server_names:
-            for alias_value in (left, right):
+            for alias_value in alias_values:
                 aliases.append({"server": server, name_field: alias_value})
         out.append({"canonical": left, "aliases": aliases, "legacy": True})
     return out
@@ -396,11 +433,11 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
             out[dst_key] = parsed
 
     for src_key, dst_key, parser in [
-        ("SLEEP_DURATION", "sleep_duration", _env_as_int),
+        ("SLEEP_DURATION", "sleep_duration", _env_as_float),
         ("REQUEST_TIMEOUT", "request_timeout", _env_as_int),
         ("MAX_THREADS", "max_threads", _env_as_int),
     ]:
-        parsed = parser(env.get(src_key))
+        parsed = parser(env.get(src_key), src_key)
         if parsed is not None:
             out[dst_key] = parsed
 
@@ -440,15 +477,7 @@ def legacy_env_to_field_dict(env: dict[str, str | None]) -> dict[str, Any]:
     emby_names = [s["name"] for s in emby_servers]
     all_names = plex_names + jf_names + emby_names
 
-    sync_flags_present = any(
-        env.get(k) for k in LEGACY_ENV_VARS if k.startswith("SYNC_FROM_")
-    )
-    if sync_flags_present:
-        sync_to_by_server = _build_sync_to(env, plex_names, jf_names, emby_names)
-    else:
-        sync_to_by_server = {
-            src: [dst for dst in all_names if dst != src] for src in all_names
-        }
+    sync_to_by_server = _build_sync_to(env, plex_names, jf_names, emby_names)
 
     for server in plex_servers + jellyfin_servers + emby_servers:
         targets = sync_to_by_server.get(server["name"])

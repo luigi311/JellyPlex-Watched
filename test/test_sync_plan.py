@@ -95,6 +95,42 @@ def movies_for(plan, server):
     ]
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("filter_name", ["Movies", "Films", "cinema"])
+@pytest.mark.parametrize("filter_kind", ["blacklist", "whitelist"])
+def test_mapped_library_filters_apply_in_both_directions(
+    reverse, filter_name, filter_kind
+):
+    source, target = ("b", "a") if reverse else ("a", "b")
+    names = {"a": "Movies", "b": "Films"}
+    settings = make_settings(
+        {"a": ["b"], "b": ["a"]},
+        library_mappings=[
+            {
+                "canonical": "cinema",
+                "aliases": [
+                    {"server": name, "library": library}
+                    for name, library in names.items()
+                ],
+            }
+        ],
+        **{f"{filter_kind}_libraries": [filter_name]},
+    )
+    servers = make_servers(settings)
+    plan = generate_watched_plan(
+        {
+            servers[source]: history(movie(), library=names[source]),
+            servers[target]: history(library=names[target]),
+        },
+        settings,
+        0,
+    )
+    if filter_kind == "blacklist":
+        assert plan == {}
+    else:
+        assert movies_for(plan, servers[target]) == [movie()]
+
+
 @pytest.mark.parametrize("order", list(permutations("abc")))
 def test_global_movie_winners_are_unique_and_independent_of_server_order(order):
     settings = make_settings()
