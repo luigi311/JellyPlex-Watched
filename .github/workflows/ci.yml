@@ -43,8 +43,7 @@ jobs:
       - name: "Type-check configuration modules"
         run: uv run ty check src/settings.py src/legacy_settings.py src/runtime_paths.py
 
-      - name: "Full type check (known baseline; non-blocking)"
-        continue-on-error: true
+      - name: "Full type check"
         run: uv run ty check
 
   test:

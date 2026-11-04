@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from loguru import logger
 from plexapi.myplex import MyPlexAccount, MyPlexUser
 
@@ -9,7 +11,7 @@ from src.settings import AppSettings
 
 
 def generate_all_server_users(
-    servers: list[Plex | Jellyfin | Emby],
+    servers: Sequence[Plex | Jellyfin | Emby],
     settings: AppSettings,
 ) -> dict[Plex | Jellyfin | Emby, list[MyPlexAccount | MyPlexUser | tuple[str, str]]]:
     """Select existing users participating in at least one permitted sync.

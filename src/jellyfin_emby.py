@@ -125,11 +125,21 @@ class JellyfinEmby:
 
         self.session = requests.Session()
         self.users: dict[str, str] = self.get_users()
-        self.server_name: str = self.info(name_only=True)
-        self.server_version: Version = self.info(version_only=True)
+        server_name = self.info(name_only=True)
+        if not isinstance(server_name, str) or not server_name:
+            raise ValueError(f"{self.server_type}: missing or invalid server name")
+        server_version = self.info(version_only=True)
+        if not isinstance(server_version, Version):
+            raise TypeError(f"{self.server_type}: missing or invalid server version")
+        self.server_name: str = server_name
+        self.server_version: Version = server_version
         self.update_partial: bool = self.is_partial_update_supported(
             self.server_version
         )
+
+    def is_partial_update_supported(self, server_version: Version) -> bool:
+        """Subclasses define the versions supporting playback-position writes."""
+        raise NotImplementedError("Server adapters must define partial-update support")
 
     def query(
         self,
@@ -201,7 +211,12 @@ class JellyfinEmby:
                 if name_only:
                     return response.get("ServerName")
                 elif version_only:
-                    return parse(response.get("Version", ""))
+                    version = response.get("Version")
+                    if not isinstance(version, str) or not version:
+                        raise ValueError(
+                            f"{self.server_type}: missing or invalid server version"
+                        )
+                    return parse(version)
 
                 return f"{self.server_type} {response.get('ServerName')}: {response.get('Version')}"
             else:

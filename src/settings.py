@@ -241,14 +241,14 @@ def _patch_legacy_plex_token(data: dict[str, Any], tokens: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-class _ServerBase(BaseModel):
+class _ServerBase[BaseURL: str | None](BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
     name: str = Field(
         ...,
         description="User-defined identifier, unique across all servers.",
     )
-    baseurl: str | None = Field(
+    baseurl: BaseURL = Field(
         ..., description="Server base URL, e.g. http://plex.lan:32400"
     )
     sync_to: list[str] = Field(
@@ -267,7 +267,7 @@ class _ServerBase(BaseModel):
         return v.rstrip("/") if v is not None else None
 
 
-class PlexSettings(_ServerBase):
+class PlexSettings(_ServerBase[str | None]):
     """
     Plex authentication: either a token (preferred) OR a username/password/
     servername triple. Validators ensure exactly one path is fully populated.
@@ -310,14 +310,15 @@ class PlexSettings(_ServerBase):
         return self
 
 
-class JellyfinSettings(_ServerBase):
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+class JellyfinSettings(_ServerBase[str]):
     token: SecretStr = Field(...)
 
 
-class EmbySettings(_ServerBase):
-    baseurl: str = Field(..., description="Server base URL, e.g. http://plex.lan:32400")
+class EmbySettings(_ServerBase[str]):
     token: SecretStr = Field(...)
+
+
+type ServerSettings = PlexSettings | JellyfinSettings | EmbySettings
 
 
 # ---------------------------------------------------------------------------
@@ -702,13 +703,8 @@ def _env_source_options(source: EnvSettingsSource) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class AppSettings(BaseModel):
+class AppSettings(BaseModel, extra="forbid", hide_input_in_errors=True):
     """Validated configuration data independent of environment sources."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        hide_input_in_errors=True,
-    )
 
     # --- operational knobs --------------------------------------------------
     dryrun: bool = True
@@ -776,7 +772,7 @@ class AppSettings(BaseModel):
     # ------------------------------------------------------------------ #
 
     @cached_property
-    def _all_servers(self) -> list[_ServerBase]:
+    def _all_servers(self) -> list[ServerSettings]:
         return [*self.plex, *self.jellyfin, *self.emby]
 
     @cached_property
@@ -905,7 +901,7 @@ class AppSettings(BaseModel):
     # remain available only after successful model validation.
     # ------------------------------------------------------------------ #
 
-    def _collect_servers(self) -> list[_ServerBase]:
+    def _collect_servers(self) -> list[ServerSettings]:
         return [*self.plex, *self.jellyfin, *self.emby]
 
     def _collect_server_names(self) -> set[str]:
@@ -1133,7 +1129,7 @@ class AppSettings(BaseModel):
         return names.isdisjoint(blacklist)
 
     @property
-    def all_servers(self) -> tuple[_ServerBase, ...]:
+    def all_servers(self) -> tuple[ServerSettings, ...]:
         """
         Every configured server (plex + jellyfin + emby), in declaration
         order. Returned as a tuple so callers can't mutate the underlying

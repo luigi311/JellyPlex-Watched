@@ -355,7 +355,7 @@ class Plex:
             for user in users:
                 if self.admin_user == user:
                     user_plex = self.plex
-                else:
+                elif isinstance(user, MyPlexUser):
                     token = user.get_token(self.plex.machineIdentifier)
                     if token:
                         user_plex = self.login(self.base_url, token, None, None, None)
@@ -364,6 +364,9 @@ class Plex:
                             f"Plex: Failed to get token for {user.title}, skipping",
                         )
                         continue
+                else:
+                    logger.warning("Plex: Skipping non-admin account {}", user.title)
+                    continue
 
                 user_name = normalize_name(user.username if user.username else user.title)
 

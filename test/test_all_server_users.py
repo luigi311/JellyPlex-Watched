@@ -1,12 +1,13 @@
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from conftest import settings_override
+from plexapi.myplex import MyPlexUser
 
 from src.emby import Emby
 from src.jellyfin import Jellyfin
 from src.plex import Plex
+from src.settings import EmbySettings
 from src.users import generate_all_server_users
 
 
@@ -27,14 +28,16 @@ def test_selects_both_ends_of_one_way_fanout(reverse):
     )
     plex = object.__new__(Plex)
     plex.server_settings = settings.plex[0]
-    family = SimpleNamespace(username=None, title='FAMILY')
-    plex.users = [family, SimpleNamespace(username='unmatched'),
-                  SimpleNamespace(username='blocked')]
+    family = Mock(spec=MyPlexUser, username=None, title='FAMILY')
+    plex.users = [family, Mock(spec=MyPlexUser, username='unmatched'),
+                  Mock(spec=MyPlexUser, username='blocked')]
     jellyfin = object.__new__(Jellyfin)
     jellyfin.server_settings = settings.jellyfin[0]
     jellyfin.users = {'ALICE': 'a', 'Bob': 'b', 'blocked': 'c', 'unrelated': 'd'}
     emby = object.__new__(Emby)
-    emby.server_settings = SimpleNamespace(name='disconnected')
+    emby.server_settings = EmbySettings.model_validate(
+        {'name': 'disconnected', 'baseurl': 'http://disconnected', 'token': 'synthetic'}
+    )
     emby.users = {'FAMILY': 'e'}
     for server in [plex, jellyfin, emby]:
         server.get_users = Mock(side_effect=AssertionError('Users already fetched'))
