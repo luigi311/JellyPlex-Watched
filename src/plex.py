@@ -540,7 +540,6 @@ class Plex:
                             msg = f"Plex: {plex_movie.title} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user.title} in {library_name}"
                             if not dryrun:
                                 try:
-                                    plex_movie.markUnwatched()  # Unmark as watched first so completed status is set to false
                                     plex_movie.updateTimeline(stored_movie.status.time)
                                 except Exception as e:  # noqa: BLE001 - Keep SDK discovery and write failures local to this batch.
                                     logger.error(

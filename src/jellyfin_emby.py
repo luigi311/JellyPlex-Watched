@@ -79,6 +79,11 @@ def extract_identifiers_from_item(
     )
 
 
+# A played item with a resume point past one minute is being rewatched: treat it as
+# in progress, matching how Plex items with a viewOffset are read.
+REWATCH_THRESHOLD_TICKS = 60 * 10_000_000
+
+
 def get_mediaitem(
     server_type: str,
     item: dict[str, Any],
@@ -97,7 +102,8 @@ def get_mediaitem(
             server_type, item, generate_guids, generate_locations
         ),
         status=WatchedStatus(
-            completed=user_data.get("Played"),
+            completed=bool(user_data.get("Played"))
+            and user_data.get("PlaybackPositionTicks", 0) < REWATCH_THRESHOLD_TICKS,
             time=floor(user_data.get("PlaybackPositionTicks", 0) / 10000),
             viewed_date=viewed_date,
         ),
@@ -743,8 +749,6 @@ class JellyfinEmby:
                             msg = f"{self.server_type}: {jellyfin_video.get('Name')} as partially watched for {floor(stored_movie.status.time / 60_000)} minutes for {user_name} in {library_name}"
                             if not dryrun:
                                 user_data_payload = {
-                                    "PlayCount": 0,
-                                    "Played": False,
                                     "PlaybackPositionTicks": stored_movie.status.time
                                     * 10_000,
                                     "LastPlayedDate": viewed_date,
@@ -968,8 +972,6 @@ class JellyfinEmby:
                                     )
                                     if not dryrun:
                                         user_data_payload = {
-                                            "PlayCount": 0,
-                                            "Played": False,
                                             "PlaybackPositionTicks": stored_ep.status.time
                                             * 10_000,
                                             "LastPlayedDate": viewed_date,

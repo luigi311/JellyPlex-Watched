@@ -41,3 +41,28 @@ def test_jellyfin_emby_parses_utc_marker_without_replacing_it(server_type):
     )
 
     assert media.status.viewed_date == datetime(2026, 11, 4, 10, 20, 30, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("server_type", ["Jellyfin", "Emby"])
+def test_jellyfin_emby_played_item_with_resume_point_is_in_progress(server_type):
+    media = get_jellyfin_emby_mediaitem(
+        server_type,
+        {"Name": "Episode", "UserData": {"Played": True, "PlaybackPositionTicks": 25 * 60 * 10_000_000}},
+        False,
+        False,
+    )
+
+    assert media.status.completed is False
+    assert media.status.time == 25 * 60 * 1000
+
+
+@pytest.mark.parametrize("server_type", ["Jellyfin", "Emby"])
+def test_jellyfin_emby_played_item_with_short_position_stays_completed(server_type):
+    media = get_jellyfin_emby_mediaitem(
+        server_type,
+        {"Name": "Episode", "UserData": {"Played": True, "PlaybackPositionTicks": 30 * 10_000_000}},
+        False,
+        False,
+    )
+
+    assert media.status.completed is True
