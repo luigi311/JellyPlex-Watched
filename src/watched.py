@@ -567,6 +567,12 @@ def merge_server_watched(
     return merged_watched
 
 
+# Metadata agents write these when they have no real ID (Sonarr NFOs use tvdb "0").
+# Treating them as identity evidence merges unrelated items, such as every
+# episode of a series, into one identity group.
+PLACEHOLDER_PROVIDER_IDS = frozenset({"0", "-1"})
+
+
 def media_identifier_keys(item: MediaIdentifiers) -> frozenset[tuple[str, str]]:
     """Return namespaced matching keys; titles are never identity evidence."""
     keys = {("location", location) for location in item.locations}
@@ -575,7 +581,7 @@ def media_identifier_keys(item: MediaIdentifiers) -> frozenset[tuple[str, str]]:
         ("tvdb", item.tvdb_id),
         ("tmdb", item.tmdb_id),
     ):
-        if value:
+        if value and str(value).strip() not in PLACEHOLDER_PROVIDER_IDS:
             keys.add((provider, value))
     return frozenset(keys) | item.matching_aliases
 
